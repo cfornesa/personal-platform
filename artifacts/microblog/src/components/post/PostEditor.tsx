@@ -21,6 +21,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 import { useEnabledPlatformConnections } from "@/hooks/use-enabled-platform-connections";
 import { RichPostEditor } from "./RichPostEditor";
+import { getUploadErrorMessage } from "./upload-error";
 import { DayPicker } from "react-day-picker";
 import { addHours, addMinutes, format, parseISO } from "date-fns";
 import { Clock, FileText, PenSquare, Send, Trash2, X } from "lucide-react";
@@ -164,8 +165,12 @@ export function PostEditor({
 
   const uploadMedia = useUploadMedia({
     mutation: {
-      onError: () => {
-        toast({ title: "Failed to upload image", variant: "destructive" });
+      onError: (error) => {
+        toast({
+          title: "Failed to upload image",
+          description: getUploadErrorMessage(error),
+          variant: "destructive",
+        });
       },
     },
   });
@@ -183,9 +188,11 @@ export function PostEditor({
     categoryIds: number[];
     platformIds: number[];
     substackSendNewsletter: boolean;
+    featuredImageUrl: string | null;
+    socialPostDrafts: { bluesky?: string; linkedin?: string; facebook?: string; instagram?: string } | null;
   };
 
-  function handleSubmit({ platformIds, substackSendNewsletter, title, ...rest }: SubmitPayload) {
+  function handleSubmit({ platformIds, substackSendNewsletter, title, featuredImageUrl, socialPostDrafts, ...rest }: SubmitPayload) {
     if (mode === "schedule") {
       if (!scheduledDay) { setScheduleError("Please select a date."); return; }
       const scheduledAt = buildScheduledAt(scheduledDay, scheduledTime);
@@ -204,6 +211,8 @@ export function PostEditor({
             platformIds: platformIds.length > 0 ? platformIds : undefined,
             status: "scheduled" as UpdatePostBodyStatus,
             scheduledAt: scheduledAt.toISOString(),
+            featuredImageUrl,
+            socialPostDrafts,
           } as UpdatePostBody,
         });
       } else {
@@ -215,6 +224,8 @@ export function PostEditor({
             substackSendNewsletter,
             status: "scheduled" as const,
             scheduledAt: scheduledAt.toISOString(),
+            featuredImageUrl: featuredImageUrl ?? undefined,
+            socialPostDrafts: socialPostDrafts ?? undefined,
           },
         });
       }
@@ -227,6 +238,8 @@ export function PostEditor({
             title: title || undefined,
             platformIds: platformIds.length > 0 ? platformIds : undefined,
             status: "draft" as UpdatePostBodyStatus,
+            featuredImageUrl,
+            socialPostDrafts,
           } as UpdatePostBody,
         });
       } else {
@@ -237,6 +250,8 @@ export function PostEditor({
             platformIds,
             substackSendNewsletter,
             status: "draft" as const,
+            featuredImageUrl: featuredImageUrl ?? undefined,
+            socialPostDrafts: socialPostDrafts ?? undefined,
           },
         });
       }
@@ -252,6 +267,8 @@ export function PostEditor({
             status: initialPost!.status !== "published"
               ? ("published" as UpdatePostBodyStatus)
               : undefined,
+            featuredImageUrl,
+            socialPostDrafts,
           } as UpdatePostBody,
         });
       } else {
@@ -261,6 +278,8 @@ export function PostEditor({
             title: title || undefined,
             platformIds,
             substackSendNewsletter,
+            featuredImageUrl: featuredImageUrl ?? undefined,
+            socialPostDrafts: socialPostDrafts ?? undefined,
           },
         });
       }
@@ -344,6 +363,8 @@ export function PostEditor({
       initialTitle={initialPost?.title ?? undefined}
       initialCategoryIds={initialPost?.categories?.map((c) => c.id) ?? []}
       initialPlatformIds={initialPost?.pendingPlatformIds ?? []}
+      initialFeaturedImageUrl={initialPost?.featuredImageUrl}
+      initialSocialPostDrafts={initialPost?.socialPostDrafts}
       placeholder={isEditMode ? "Edit post content…" : "Publish a post with formatting, images, or embeds..."}
       submitLabel={submitLabel}
       cancelLabel="Cancel"

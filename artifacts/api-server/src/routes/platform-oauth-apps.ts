@@ -9,7 +9,7 @@ const router: IRouter = Router();
 
 // Platforms that use server-side OAuth apps (CLIENT_ID + CLIENT_SECRET).
 // Medium is excluded — it uses self-integration tokens, not OAuth apps.
-const OAUTH_APP_PLATFORMS = new Set(["wordpress_com", "blogger"]);
+const OAUTH_APP_PLATFORMS = new Set(["wordpress_com", "blogger", "linkedin", "facebook"]);
 
 function serializeApp(row: { platform: string; encryptedClientId: string | null; encryptedClientSecret: string | null; blogUrl?: string | null }) {
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSourceFooter, buildSyndicatedContent, shouldAppendSourceFooter } from "./content";
+import { buildSocialPostText, buildSourceFooter, buildSyndicatedContent, ensureCanonicalUrl, shouldAppendSourceFooter } from "./content";
 
 describe("syndication content helpers", () => {
   it("builds escaped footer markup with the configured site title", () => {
@@ -54,5 +54,23 @@ describe("syndication content helpers", () => {
   it("only appends footers for native posts", () => {
     expect(shouldAppendSourceFooter({ sourceFeedId: null })).toBe(true);
     expect(shouldAppendSourceFooter({ sourceFeedId: 12 })).toBe(false);
+  });
+
+  it("keeps custom social captions tied back to the canonical URL", () => {
+    expect(ensureCanonicalUrl("Custom caption", "https://example.com/posts/42", "linkedin"))
+      .toBe("Custom caption\n\nhttps://example.com/posts/42");
+    expect(ensureCanonicalUrl("Already https://example.com/posts/42", "https://example.com/posts/42", "bluesky"))
+      .toBe("Already https://example.com/posts/42");
+  });
+
+  it("includes the canonical URL in generated Instagram captions", () => {
+    const text = buildSocialPostText(
+      "instagram",
+      { title: "Hello", content: "<p>World</p>", contentFormat: "html" },
+      [],
+      "https://example.com/posts/42",
+    );
+
+    expect(text).toContain("https://example.com/posts/42");
   });
 });

@@ -79,6 +79,16 @@ export const PostStatus = {
   scheduled: 'scheduled',
 } as const;
 
+/**
+ * Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.
+ */
+export type PostSocialPostDrafts = {
+  bluesky?: string;
+  linkedin?: string;
+  facebook?: string;
+  instagram?: string;
+} | null;
+
 export type PostSyndicationBadgePlatform = typeof PostSyndicationBadgePlatform[keyof typeof PostSyndicationBadgePlatform];
 
 
@@ -88,6 +98,10 @@ export const PostSyndicationBadgePlatform = {
   medium: 'medium',
   blogger: 'blogger',
   substack: 'substack',
+  bluesky: 'bluesky',
+  linkedin: 'linkedin',
+  facebook: 'facebook',
+  instagram: 'instagram',
 } as const;
 
 /**
@@ -131,6 +145,10 @@ export interface Post {
   pendingPlatformIds?: number[] | null;
   /** Platforms this post was successfully cross-posted to (POSSE). Omitted when none. */
   syndications?: PostSyndicationBadge[];
+  /** Optional featured image URL used for og:image and social media posts. */
+  featuredImageUrl?: string | null;
+  /** Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set. */
+  socialPostDrafts?: PostSocialPostDrafts;
   createdAt: string;
 }
 
@@ -225,6 +243,16 @@ export const CreatePostBodyStatus = {
   scheduled: 'scheduled',
 } as const;
 
+/**
+ * Per-platform social post captions to use when auto-posting to Bluesky, LinkedIn, Facebook, or Instagram.
+ */
+export type CreatePostBodySocialPostDrafts = {
+  bluesky?: string;
+  linkedin?: string;
+  facebook?: string;
+  instagram?: string;
+} | null;
+
 export interface CreatePostBody {
   /**
      * Optional post title. Omit or send empty string for title-less microblog posts.
@@ -259,6 +287,10 @@ export interface CreatePostBody {
   status?: CreatePostBodyStatus;
   /** Required when status='scheduled'. Must be at least 1 hour in the future (ISO 8601). */
   scheduledAt?: string;
+  /** Optional featured image URL for og:image and social media posts. */
+  featuredImageUrl?: string | null;
+  /** Per-platform social post captions to use when auto-posting to Bluesky, LinkedIn, Facebook, or Instagram. */
+  socialPostDrafts?: CreatePostBodySocialPostDrafts;
 }
 
 export type UpdatePostBodyContentFormat = typeof UpdatePostBodyContentFormat[keyof typeof UpdatePostBodyContentFormat];
@@ -284,6 +316,16 @@ export const UpdatePostBodyStatus = {
   draft: 'draft',
   scheduled: 'scheduled',
 } as const;
+
+/**
+ * Per-platform social post captions. Send null to clear.
+ */
+export type UpdatePostBodySocialPostDrafts = {
+  bluesky?: string;
+  linkedin?: string;
+  facebook?: string;
+  instagram?: string;
+} | null;
 
 export interface UpdatePostBody {
   /**
@@ -314,6 +356,10 @@ export interface UpdatePostBody {
   status?: UpdatePostBodyStatus;
   /** Required when transitioning to status='scheduled'. Send null to clear when moving to draft or published. */
   scheduledAt?: string | null;
+  /** Optional featured image URL. Send null to clear. */
+  featuredImageUrl?: string | null;
+  /** Per-platform social post captions. Send null to clear. */
+  socialPostDrafts?: UpdatePostBodySocialPostDrafts;
 }
 
 export interface CreateCommentBody {
@@ -1484,10 +1530,14 @@ export const PlatformConnectionPlatform = {
   medium: 'medium',
   blogger: 'blogger',
   substack: 'substack',
+  bluesky: 'bluesky',
+  linkedin: 'linkedin',
+  facebook: 'facebook',
+  instagram: 'instagram',
 } as const;
 
 /**
- * Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus).
+ * Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId).
  */
 export type PlatformConnectionMetadata = { [key: string]: unknown } | null;
 
@@ -1504,7 +1554,7 @@ export interface PlatformConnection {
   configured: boolean;
   /** When false, this connection is skipped during syndication dispatch. */
   enabled: boolean;
-  /** Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus). */
+  /** Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId). */
   metadata?: PlatformConnectionMetadata;
   expiresAt?: string | null;
   createdAt: string;
@@ -1594,6 +1644,8 @@ export type PlatformOAuthAppPlatform = typeof PlatformOAuthAppPlatform[keyof typ
 export const PlatformOAuthAppPlatform = {
   wordpress_com: 'wordpress_com',
   blogger: 'blogger',
+  linkedin: 'linkedin',
+  facebook: 'facebook',
 } as const;
 
 /**

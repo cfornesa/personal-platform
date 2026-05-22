@@ -54,6 +54,10 @@ type RichPostEditorProps = {
   aiVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
   /** Enabled platform connections to show in the "Share to:" selector. Omit to hide it. */
   platformConnections?: EnabledPlatformConnection[];
+  /** Initial featured image URL (for edit mode). */
+  initialFeaturedImageUrl?: string | null;
+  /** Initial per-platform social post drafts (for edit mode). */
+  initialSocialPostDrafts?: { bluesky?: string; linkedin?: string; facebook?: string; instagram?: string } | null;
   onCancel?: () => void;
   onSubmit: (payload: {
     title: string;
@@ -62,6 +66,8 @@ type RichPostEditorProps = {
     categoryIds: number[];
     platformIds: number[];
     substackSendNewsletter: boolean;
+    featuredImageUrl: string | null;
+    socialPostDrafts: { bluesky?: string; linkedin?: string; facebook?: string; instagram?: string } | null;
   }) => void;
   /**
    * Optional live-content listener. Fires on every editor update so a
@@ -160,6 +166,12 @@ function parseIframeEmbed(embedCode: string) {
   };
 }
 
+function extractFirstImageSrc(html: string): string | null {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const src = document.querySelector("img[src]")?.getAttribute("src")?.trim();
+  return src || null;
+}
+
 function buildPieceIframeAttrs(piece: {
   id: number;
   title: string;
@@ -235,6 +247,8 @@ export function RichPostEditor({
   showCategories = true,
   aiVendors = [],
   platformConnections,
+  initialFeaturedImageUrl,
+  initialSocialPostDrafts,
   onCancel,
   onSubmit,
   onContentChange,
@@ -242,7 +256,18 @@ export function RichPostEditor({
 }: RichPostEditorProps) {
   const { toast } = useToast();
   const fileInputId = useId();
+  const featuredFileInputId = useId();
   const [title, setTitle] = useState(initialTitle);
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string>(initialFeaturedImageUrl ?? "");
+  const [featuredImageSource, setFeaturedImageSource] = useState<"manual" | "auto" | null>(
+    initialFeaturedImageUrl?.trim() ? "manual" : null,
+  );
+  const [socialPostDrafts, setSocialPostDrafts] = useState<{ bluesky: string; linkedin: string; facebook: string; instagram: string }>({
+    bluesky: initialSocialPostDrafts?.bluesky ?? "",
+    linkedin: initialSocialPostDrafts?.linkedin ?? "",
+    facebook: initialSocialPostDrafts?.facebook ?? "",
+    instagram: initialSocialPostDrafts?.instagram ?? "",
+  });
   const [textLength, setTextLength] = useState(getEditorTextLength(initialContent));
   const [categoryIds, setCategoryIds] = useState<number[]>(initialCategoryIds);
   const [platformIds, setPlatformIds] = useState<number[]>(initialPlatformIds ?? []);
@@ -256,6 +281,7 @@ export function RichPostEditor({
   const [isPieceLibraryOpen, setIsPieceLibraryOpen] = useState(false);
   const [pieceGenerationState, setPieceGenerationState] = useState<ArtPieceGenerationState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const featuredFileInputRef = useRef<HTMLInputElement | null>(null);
   const pieceGenerationAbortRef = useRef<AbortController | null>(null);
   const processAiText = useProcessAiText({
     mutation: {
@@ -350,6 +376,31 @@ export function RichPostEditor({
 
     const url = await onUpload(file);
     editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    if (!featuredImageUrl.trim() && featuredImageSource !== "manual") {
+      setFeaturedImageUrl(url);
+      setFeaturedImageSource("auto");
+      toast({
+        title: "Featured image selected",
+        description: "The first uploaded content image is now the featured image.",
+      });
+    }
+    event.target.value = "";
+  }
+
+  async function handleFeaturedFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const url = await onUpload(file);
+    setFeaturedImageUrl(url);
+    setFeaturedImageSource("manual");
+
+    toast({
+      title: "Featured image selected",
+      description: "The uploaded image is now the featured image.",
+    });
     event.target.value = "";
   }
 
@@ -428,6 +479,9 @@ export function RichPostEditor({
       return;
     }
 
+    const trimmedImageUrl = featuredImageUrl.trim();
+    const submittedFeaturedImageUrl = trimmedImageUrl || extractFirstImageSrc(html);
+    const hasSocialDrafts = socialPostDrafts.bluesky.trim() || socialPostDrafts.linkedin.trim() || socialPostDrafts.facebook.trim() || socialPostDrafts.instagram.trim();
     onSubmit({
       title: title.trim(),
       content: html,
@@ -435,6 +489,15 @@ export function RichPostEditor({
       categoryIds,
       platformIds,
       substackSendNewsletter,
+      featuredImageUrl: submittedFeaturedImageUrl || null,
+      socialPostDrafts: hasSocialDrafts
+        ? {
+            bluesky: socialPostDrafts.bluesky.trim() || undefined,
+            linkedin: socialPostDrafts.linkedin.trim() || undefined,
+            facebook: socialPostDrafts.facebook.trim() || undefined,
+            instagram: socialPostDrafts.instagram.trim() || undefined,
+          }
+        : null,
     });
   }
 
@@ -639,6 +702,16 @@ export function RichPostEditor({
       : editor.isActive("heading", { level: 6 }) ? "H6"
       : "P";
 
+  const selectedSocialPlatforms = (platformConnections ?? []).filter(
+    (c) => platformIds.includes(c.id) && (c.platform === "bluesky" || c.platform === "linkedin" || c.platform === "facebook" || c.platform === "instagram"),
+  );
+  const featuredImageStatus =
+    featuredImageSource === "manual"
+      ? "Featured image manually selected."
+      : featuredImageSource === "auto"
+        ? "Featured image selected from first content upload."
+        : "The first uploaded content image will become the featured image.";
+
   return (
     <div className="space-y-3">
       <input
@@ -648,6 +721,60 @@ export function RichPostEditor({
         onChange={(e) => setTitle(e.target.value)}
         className="w-full border-b border-border bg-transparent text-lg font-semibold placeholder:text-muted-foreground/60 focus:outline-none pb-2"
       />
+      <div className="rounded-lg border border-border bg-muted/20 p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <span className="text-xs font-medium text-muted-foreground shrink-0">Featured image</span>
+          <input
+            type="url"
+            aria-label="Featured image URL"
+            placeholder="https://example.com/image.jpg (optional)"
+            value={featuredImageUrl}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setFeaturedImageUrl(nextValue);
+              setFeaturedImageSource(nextValue.trim() ? "manual" : null);
+            }}
+            className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => featuredFileInputRef.current?.click()}
+            disabled={isSubmitting}
+            aria-label="Upload featured image"
+            className="shrink-0"
+          >
+            <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+            Upload
+          </Button>
+          {featuredImageUrl ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFeaturedImageUrl("");
+                setFeaturedImageSource(null);
+              }}
+              disabled={isSubmitting}
+              className="shrink-0"
+            >
+              Clear
+            </Button>
+          ) : null}
+          {featuredImageUrl && (
+            <img
+              src={featuredImageUrl}
+              alt="Featured"
+              className="h-10 w-10 rounded object-cover border border-border shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              onLoad={(e) => { (e.target as HTMLImageElement).style.display = ""; }}
+            />
+          )}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">{featuredImageStatus}</p>
+      </div>
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="wysiwyg-toolbar flex flex-wrap items-center gap-1 border-b border-border/70 bg-muted/20 px-2 py-2">
           <div className="flex items-center gap-1 border-r border-border/70 pr-2">
@@ -1035,6 +1162,37 @@ export function RichPostEditor({
               </span>
             </label>
           ) : null}
+
+          {selectedSocialPlatforms.length > 0 && (
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
+              <p className="text-xs font-medium text-foreground">Social post text</p>
+              {selectedSocialPlatforms.map((conn) => {
+                const key = conn.platform as "bluesky" | "linkedin" | "facebook" | "instagram";
+                const limits = { bluesky: 300, linkedin: 3000, facebook: 63206, instagram: 2200 };
+                const labels = { bluesky: "Bluesky", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram" };
+                const val = socialPostDrafts[key];
+                const limit = limits[key];
+                return (
+                  <div key={conn.id} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{labels[key]}</span>
+                      <span className={`text-xs ${val.length > limit ? "text-destructive" : "text-muted-foreground"}`}>
+                        {val.length}/{limit}
+                      </span>
+                    </div>
+                    <textarea
+                      value={val}
+                      onChange={(e) => setSocialPostDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+                      placeholder={`What to post on ${labels[key]}…`}
+                      rows={3}
+                      maxLength={limit}
+                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none resize-none"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -1045,6 +1203,14 @@ export function RichPostEditor({
         accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
         className="hidden"
         onChange={handleFileChange}
+      />
+      <input
+        id={featuredFileInputId}
+        ref={featuredFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        className="hidden"
+        onChange={handleFeaturedFileChange}
       />
 
       <div className="flex items-center justify-between gap-3">

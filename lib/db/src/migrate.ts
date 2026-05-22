@@ -477,6 +477,14 @@ export async function ensureTables(): Promise<void> {
     "CREATE INDEX posts_status_created_idx ON posts (status, created_at)",
   );
 
+  // Featured image URL for social sharing and og:image. Nullable so existing
+  // posts are unaffected; social adapters require this to post images.
+  await ensureColumn("posts", "featured_image_url", "featured_image_url VARCHAR(2048) NULL");
+
+  // JSON-encoded per-platform social post text { bluesky?, linkedin?, facebook?, instagram? }.
+  // Stored separately from post content so the owner can tailor each caption.
+  await ensureColumn("posts", "social_post_drafts", "social_post_drafts TEXT NULL");
+
   await ensureColumn(
     "comments",
     "author_user_id",

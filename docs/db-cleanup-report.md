@@ -6,7 +6,7 @@ This file is now historical only.
 
 Do not use the old cleanup guidance in this document against the current shipped app.
 
-As of `2026-05-05` (updated `2026-05-15`), the live app and the deployed Replit runtime expect the following tables to exist:
+As of `2026-05-05`, the live app and the deployed Replit runtime expect the following tables to exist:
 
 - `users`, `accounts`, `sessions`, `verification_tokens`
 - `user_ai_vendor_settings`
@@ -14,8 +14,6 @@ As of `2026-05-05` (updated `2026-05-15`), the live app and the deployed Replit 
 - `feed_sources`, `feed_items_seen`
 - `categories`, `post_categories`
 - `pages`, `nav_links`, `site_settings`
-- `art_pieces`, `art_piece_versions`
-- `platform_connections`, `platform_oauth_apps`, `post_syndications`
 
 They also expect the richer `users` and `posts` column sets that support:
 
@@ -24,9 +22,6 @@ They also expect the richer `users` and `posts` column sets that support:
 - inbound feed ingestion and pending moderation
 - public search backed by `posts.content_text`
 - site settings, categories, pages, and nav management
-- interactive piece authoring (`art_pieces` + `art_piece_versions`)
-- POSSE outbound syndication to WordPress.com, WordPress self-hosted, Medium, Blogger, and Substack
-- post scheduling (`posts.scheduled_at`) and per-post syndication targeting (`posts.pending_platform_ids`)
 
 ## Why This Was Superseded
 
@@ -36,8 +31,9 @@ An earlier branch of project history produced cleanup guidance that treated seve
 
 For current operations, use these sources instead:
 
-- `lib/db/src/migrate.ts` — authoritative `ensureTables()` implementation
-- `lib/db/install.sql` — full install script generated from the schema
-- `replit.md` — developer overview including required env vars and commands
+- [lib/db/src/migrate.ts](/Users/Fornesus/Code/fornesus-platform/lib/db/src/migrate.ts:100)
+- [lib/db/install.sql](/Users/Fornesus/Code/fornesus-platform/lib/db/install.sql:1)
+- [README.md](/Users/Fornesus/Code/fornesus-platform/README.md:1)
+- [replit.md](/Users/Fornesus/Code/fornesus-platform/replit.md:1)
 
 If you need to reconcile a database, reconcile it forward to the current shipped schema rather than trimming it back to the older reduced schema described in the superseded report.

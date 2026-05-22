@@ -4579,7 +4579,7 @@ export function useGetMedia<TData = Awaited<ReturnType<typeof getMedia>>, TError
 
 
 /**
- * Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`) with a
+ * Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`, `linkedin`, `facebook`) with a
 `configured` flag. The actual CLIENT_ID and CLIENT_SECRET are never returned.
 
  * @summary List OAuth app credential status for all supported platforms (owner only)
@@ -4661,7 +4661,7 @@ export function useListPlatformOAuthApps<TData = Awaited<ReturnType<typeof listP
 /**
  * @summary Save or update OAuth app credentials for a platform (owner only)
  */
-export const getUpsertPlatformOAuthAppUrl = (platform: 'wordpress_com' | 'blogger',) => {
+export const getUpsertPlatformOAuthAppUrl = (platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook',) => {
 
 
 
@@ -4669,7 +4669,7 @@ export const getUpsertPlatformOAuthAppUrl = (platform: 'wordpress_com' | 'blogge
   return `/api/platform-oauth-apps/${platform}`
 }
 
-export const upsertPlatformOAuthApp = async (platform: 'wordpress_com' | 'blogger',
+export const upsertPlatformOAuthApp = async (platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook',
     upsertPlatformOAuthAppBody: UpsertPlatformOAuthAppBody, options?: RequestInit): Promise<PlatformOAuthApp> => {
 
   return customFetch<PlatformOAuthApp>(getUpsertPlatformOAuthAppUrl(platform),
@@ -4686,8 +4686,8 @@ export const upsertPlatformOAuthApp = async (platform: 'wordpress_com' | 'blogge
 
 
 export const getUpsertPlatformOAuthAppMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext> => {
 
 const mutationKey = ['upsertPlatformOAuthApp'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -4699,7 +4699,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, {platform: 'wordpress_com' | 'blogger';data: BodyType<UpsertPlatformOAuthAppBody>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, {platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook';data: BodyType<UpsertPlatformOAuthAppBody>}> = (props) => {
           const {platform,data} = props ?? {};
 
           return  upsertPlatformOAuthApp(platform,data,requestOptions)
@@ -4720,11 +4720,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Save or update OAuth app credentials for a platform (owner only)
  */
 export const useUpsertPlatformOAuthApp = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPlatformOAuthApp>>, TError,{platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook';data: BodyType<UpsertPlatformOAuthAppBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof upsertPlatformOAuthApp>>,
         TError,
-        {platform: 'wordpress_com' | 'blogger';data: BodyType<UpsertPlatformOAuthAppBody>},
+        {platform: 'wordpress_com' | 'blogger' | 'linkedin' | 'facebook';data: BodyType<UpsertPlatformOAuthAppBody>},
         TContext
       > => {
       return useMutation(getUpsertPlatformOAuthAppMutationOptions(options));
@@ -4808,8 +4808,8 @@ export function useListPlatformConnections<TData = Awaited<ReturnType<typeof lis
 
 
 /**
- * Used for credential-based platforms (`wordpress_self`). OAuth-based
-platforms (`wordpress_com`, `medium`, `blogger`) create their
+ * Used for credential-based platforms (`wordpress_self`, `medium`, `substack`). OAuth-based
+platforms (`wordpress_com`, `blogger`, `linkedin`, `facebook`) create their
 connection via the OAuth callback route at
 `/api/platform-oauth/{platform}/start`.
 

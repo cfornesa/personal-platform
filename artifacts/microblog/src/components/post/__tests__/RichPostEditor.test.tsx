@@ -61,7 +61,12 @@ vi.mock("@tiptap/react", () => ({
         setParagraph: () => ({ run: setParagraphRun }),
         extendMarkRange: () => ({ setLink: () => ({ run: setLinkRun }) }),
         unsetLink: () => ({ run: unsetLinkRun }),
-        setImage: () => ({ run: setImageRun }),
+        setImage: (attrs: { src: string; alt?: string }) => ({
+          run: () => {
+            editorState.html = `${editorState.html}<img src="${attrs.src}" alt="${attrs.alt ?? ""}">`;
+            setImageRun();
+          },
+        }),
         insertIframe,
         undo: () => ({ run: undoRun }),
         redo: () => ({ run: redoRun }),
@@ -213,6 +218,29 @@ function renderEditorWithPlatforms() {
     </QueryClientProvider>,
   );
   return { onSubmit };
+}
+
+function renderEditorForFeaturedImages(options: {
+  onUpload?: (file: File) => Promise<string>;
+  onSubmit?: ReturnType<typeof vi.fn>;
+  initialFeaturedImageUrl?: string | null;
+} = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const onSubmit = options.onSubmit ?? vi.fn();
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <RichPostEditor
+        initialContent={editorState.html}
+        submitLabel="Post"
+        onUpload={options.onUpload ?? (async () => "/api/media/image.jpg")}
+        onSubmit={onSubmit}
+        initialFeaturedImageUrl={options.initialFeaturedImageUrl}
+      />
+    </QueryClientProvider>,
+  );
+  return { ...result, onSubmit };
 }
 
 describe("RichPostEditor AI action", () => {
@@ -432,6 +460,9 @@ describe("RichPostEditor AI action", () => {
     const user = userEvent.setup();
     const { onSubmit } = renderEditorWithPlatforms();
 
+    expect(screen.queryByRole("checkbox", { name: /Send as newsletter/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "substack" }));
+
     const checkbox = screen.getByRole("checkbox", { name: /Send as newsletter/i });
     expect(checkbox).toBeInTheDocument();
 
@@ -448,6 +479,72 @@ describe("RichPostEditor AI action", () => {
     await user.click(screen.getByRole("button", { name: /Post/i }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       substackSendNewsletter: false,
+    }));
+  });
+
+  it("auto-selects the first uploaded content image as the featured image", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn(async () => "/media/first-content.png");
+    const { container, onSubmit } = renderEditorForFeaturedImages({ onUpload });
+
+    const fileInput = container.querySelectorAll('input[type="file"]')[0] as HTMLInputElement;
+    await user.upload(fileInput, new File(["image"], "first-content.png", { type: "image/png" }));
+
+    expect(await screen.findByText("Featured image selected from first content upload.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Post/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      featuredImageUrl: "/media/first-content.png",
+    }));
+  });
+
+  it("uses a manually uploaded featured image ahead of later content images", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn()
+      .mockResolvedValueOnce("/media/manual-featured.png")
+      .mockResolvedValueOnce("/media/content-image.png");
+    const { container, onSubmit } = renderEditorForFeaturedImages({ onUpload });
+    const inputs = container.querySelectorAll('input[type="file"]');
+
+    await user.upload(inputs[1] as HTMLInputElement, new File(["image"], "manual-featured.png", { type: "image/png" }));
+    expect(await screen.findByText("Featured image manually selected.")).toBeInTheDocument();
+
+    await user.upload(inputs[0] as HTMLInputElement, new File(["image"], "content-image.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /Post/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      featuredImageUrl: "/media/manual-featured.png",
+    }));
+  });
+
+  it("falls back to the first image already in the content on submit", async () => {
+    const user = userEvent.setup();
+    editorState.html = '<p>Hello</p><img src="/media/pasted.png" alt="">';
+    editorState.text = "Hello";
+    const { onSubmit } = renderEditorForFeaturedImages();
+
+    await user.click(screen.getByRole("button", { name: /Post/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      featuredImageUrl: "/media/pasted.png",
+    }));
+  });
+
+  it("lets a cleared manual featured image return to automatic selection", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn(async () => "/media/content-after-clear.png");
+    const { container, onSubmit } = renderEditorForFeaturedImages({
+      onUpload,
+      initialFeaturedImageUrl: "/media/manual-existing.png",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    const fileInput = container.querySelectorAll('input[type="file"]')[0] as HTMLInputElement;
+    await user.upload(fileInput, new File(["image"], "content-after-clear.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /Post/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      featuredImageUrl: "/media/content-after-clear.png",
     }));
   });
 });

@@ -5,6 +5,37 @@ import type { PlatformConnection } from "@workspace/db";
 import { buildSyndicatedContent } from "./content";
 
 type WpSelfPostResponse = { id: number; link: string };
+type WpSelfMediaResponse = { id: number };
+
+async function uploadFeaturedMediaToWp(
+  siteUrl: string,
+  basicCredential: string,
+  imageUrl: string,
+): Promise<number | null> {
+  try {
+    const imageRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!imageRes.ok) return null;
+    const contentType = imageRes.headers.get("content-type") ?? "image/jpeg";
+    const buffer = await imageRes.arrayBuffer();
+    const filename = imageUrl.split("/").pop()?.split("?")[0] ?? "image.jpg";
+
+    const uploadRes = await fetch(`${siteUrl}/wp-json/wp/v2/media`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basicCredential}`,
+        "Content-Type": contentType,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+      body: buffer,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!uploadRes.ok) return null;
+    const data = (await uploadRes.json()) as WpSelfMediaResponse;
+    return data.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Self-hosted WordPress uses App Passwords (username:password), not OAuth tokens.
 // The "access token" field stores base64(username:appPassword) for Basic Auth.
@@ -21,6 +52,10 @@ export const wordpressSelfAdapter: PlatformAdapter = {
     // encryptedAccessToken stores base64(username:appPassword)
     const basicCredential = decryptSecret(connection.encryptedAccessToken!);
 
+    const featuredMediaId = payload.featuredImageUrl
+      ? await uploadFeaturedMediaToWp(siteUrl, basicCredential, payload.featuredImageUrl)
+      : null;
+
     const res = await fetch(`${siteUrl}/wp-json/wp/v2/posts`, {
       method: "POST",
       headers: {
@@ -31,6 +66,7 @@ export const wordpressSelfAdapter: PlatformAdapter = {
         title: payload.title,
         content: buildSyndicatedContent(payload),
         status: "publish",
+        ...(featuredMediaId ? { featured_media: featuredMediaId } : {}),
       }),
     });
 

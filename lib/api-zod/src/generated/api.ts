@@ -62,9 +62,16 @@ export const ListPostsResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -92,7 +99,14 @@ export const CreatePostBody = zod.object({
   "platformIds": zod.array(zod.number().min(1)).optional().describe('Optional list of `platform_connections.id` values to syndicate to\nafter the post is created (POSSE). Only connections owned by the\nauthenticated user and with `enabled=true` are dispatched.\nOmitting the field (or sending an empty array) skips syndication.\n'),
   "substackSendNewsletter": zod.boolean().optional().describe('Optional Substack-only delivery mode. When true and a selected\nSubstack connection is included in `platformIds`, the post is both\npublished on Substack and sent as a newsletter. Defaults to false.\n'),
   "status": zod.enum(['published', 'draft', 'scheduled']).default(createPostBodyStatusDefault).describe('\'published\' (default) = immediately visible on the public timeline.\n\'draft\' = saved but not published; platformIds stored as pendingPlatformIds.\n\'scheduled\' = auto-publish at scheduledAt; platformIds stored as pendingPlatformIds.\n'),
-  "scheduledAt": zod.coerce.date().optional().describe('Required when status=\'scheduled\'. Must be at least 1 hour in the future (ISO 8601).')
+  "scheduledAt": zod.coerce.date().optional().describe('Required when status=\'scheduled\'. Must be at least 1 hour in the future (ISO 8601).'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions to use when auto-posting to Bluesky, LinkedIn, Facebook, or Instagram.')
 })
 
 
@@ -130,9 +144,16 @@ export const GetDraftPostsResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number()
@@ -176,9 +197,16 @@ export const GetPostResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 }),
   "comments": zod.array(zod.object({
@@ -215,7 +243,14 @@ export const UpdatePostBody = zod.object({
   "categoryIds": zod.array(zod.number().min(1)).optional().describe('Replaces the post\'s category set. Sending an empty array clears all\ncategories; omitting the field leaves the existing set untouched.\nEvery id must be a positive integer; any unknown or malformed id\ncauses the request to fail with 400 and the post stays unchanged.\n'),
   "platformIds": zod.array(zod.number().min(1)).optional().describe('For draft\/scheduled posts: replaces the pending platform connection IDs\nto syndicate when the post is published. For already-published posts:\ntriggers immediate syndication (same as create). Omitting the field\nleaves the existing pendingPlatformIds untouched.\n'),
   "status": zod.enum(['published', 'draft', 'scheduled']).optional().describe('Transition the post\'s publication status. Allowed transitions:\ndraft→published (fires syndication), draft→scheduled,\nscheduled→published (fires syndication), scheduled→draft.\npublished→draft is logged but does not recall external syndications.\n'),
-  "scheduledAt": zod.coerce.date().nullish().describe('Required when transitioning to status=\'scheduled\'. Send null to clear when moving to draft or published.')
+  "scheduledAt": zod.coerce.date().nullish().describe('Required when transitioning to status=\'scheduled\'. Send null to clear when moving to draft or published.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL. Send null to clear.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions. Send null to clear.')
 })
 
 export const updatePostResponseTitleMax = 500;
@@ -247,9 +282,16 @@ export const UpdatePostResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -363,9 +405,16 @@ export const GetPostsByUserResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -1524,9 +1573,16 @@ export const GetCategoryPostsResponse = zod.object({
   "scheduledAt": zod.coerce.date().nullish().describe('ISO 8601 datetime when a \'scheduled\' post will be auto-published. Null for non-scheduled posts.'),
   "pendingPlatformIds": zod.array(zod.number().min(1)).nullish().describe('Platform connection IDs to syndicate when this draft\/scheduled post is published. Null after publishing.'),
   "syndications": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "externalUrl": zod.string().nullish().describe('The post\'s URL on the external platform, if available.')
 }).describe('Lightweight summary of a successful cross-post, embedded in post list responses.')).optional().describe('Platforms this post was successfully cross-posted to (POSSE). Omitted when none.'),
+  "featuredImageUrl": zod.string().nullish().describe('Optional featured image URL used for og:image and social media posts.'),
+  "socialPostDrafts": zod.object({
+  "bluesky": zod.string().optional(),
+  "linkedin": zod.string().optional(),
+  "facebook": zod.string().optional(),
+  "instagram": zod.string().optional()
+}).nullish().describe('Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -1832,14 +1888,14 @@ export const GetMediaParams = zod.object({
 
 
 /**
- * Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`) with a
+ * Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`, `linkedin`, `facebook`) with a
 `configured` flag. The actual CLIENT_ID and CLIENT_SECRET are never returned.
 
  * @summary List OAuth app credential status for all supported platforms (owner only)
  */
 export const ListPlatformOAuthAppsResponse = zod.object({
   "apps": zod.array(zod.object({
-  "platform": zod.enum(['wordpress_com', 'blogger']),
+  "platform": zod.enum(['wordpress_com', 'blogger', 'linkedin', 'facebook']),
   "configured": zod.boolean(),
   "blogUrl": zod.string().nullish().describe('Blog URL used to scope the OAuth token (e.g. https:\/\/yourblog.wordpress.com).')
 }).describe('Site-wide OAuth application credentials for a POSSE platform.\nCLIENT_ID and CLIENT_SECRET are stored encrypted and never returned;\n`configured: true` means both are saved and the OAuth flow can proceed.\n'))
@@ -1850,7 +1906,7 @@ export const ListPlatformOAuthAppsResponse = zod.object({
  * @summary Save or update OAuth app credentials for a platform (owner only)
  */
 export const UpsertPlatformOAuthAppParams = zod.object({
-  "platform": zod.enum(['wordpress_com', 'blogger'])
+  "platform": zod.enum(['wordpress_com', 'blogger', 'linkedin', 'facebook'])
 })
 
 export const upsertPlatformOAuthAppBodyClientIdMax = 512;
@@ -1868,7 +1924,7 @@ export const UpsertPlatformOAuthAppBody = zod.object({
 }).describe('CLIENT_ID and CLIENT_SECRET for an OAuth platform\'s developer app registration.')
 
 export const UpsertPlatformOAuthAppResponse = zod.object({
-  "platform": zod.enum(['wordpress_com', 'blogger']),
+  "platform": zod.enum(['wordpress_com', 'blogger', 'linkedin', 'facebook']),
   "configured": zod.boolean(),
   "blogUrl": zod.string().nullish().describe('Blog URL used to scope the OAuth token (e.g. https:\/\/yourblog.wordpress.com).')
 }).describe('Site-wide OAuth application credentials for a POSSE platform.\nCLIENT_ID and CLIENT_SECRET are stored encrypted and never returned;\n`configured: true` means both are saved and the OAuth flow can proceed.\n')
@@ -1880,10 +1936,10 @@ export const UpsertPlatformOAuthAppResponse = zod.object({
 export const ListPlatformConnectionsResponse = zod.object({
   "connections": zod.array(zod.object({
   "id": zod.number(),
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "configured": zod.boolean().describe('True when an encrypted access token is stored for this connection.'),
   "enabled": zod.boolean().describe('When false, this connection is skipped during syndication dispatch.'),
-  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus).'),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId).'),
   "expiresAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1892,8 +1948,8 @@ export const ListPlatformConnectionsResponse = zod.object({
 
 
 /**
- * Used for credential-based platforms (`wordpress_self`). OAuth-based
-platforms (`wordpress_com`, `medium`, `blogger`) create their
+ * Used for credential-based platforms (`wordpress_self`, `medium`, `substack`). OAuth-based
+platforms (`wordpress_com`, `blogger`, `linkedin`, `facebook`) create their
 connection via the OAuth callback route at
 `/api/platform-oauth/{platform}/start`.
 
@@ -1914,10 +1970,10 @@ export const CreatePlatformConnectionBody = zod.object({
 
 export const CreatePlatformConnectionResponse = zod.object({
   "id": zod.number(),
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "configured": zod.boolean().describe('True when an encrypted access token is stored for this connection.'),
   "enabled": zod.boolean().describe('When false, this connection is skipped during syndication dispatch.'),
-  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus).'),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId).'),
   "expiresAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1937,10 +1993,10 @@ export const UpdatePlatformConnectionBody = zod.object({
 
 export const UpdatePlatformConnectionResponse = zod.object({
   "id": zod.number(),
-  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack']),
+  "platform": zod.enum(['wordpress_com', 'wordpress_self', 'medium', 'blogger', 'substack', 'bluesky', 'linkedin', 'facebook', 'instagram']),
   "configured": zod.boolean().describe('True when an encrypted access token is stored for this connection.'),
   "enabled": zod.boolean().describe('When false, this connection is skipped during syndication dispatch.'),
-  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus).'),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId).'),
   "expiresAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

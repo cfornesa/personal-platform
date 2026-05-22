@@ -97,7 +97,17 @@ export function SharePostDialog({ post, children }: SharePostDialogProps) {
             Share Post
           </DialogTitle>
         </DialogHeader>
-        
+
+        {post.featuredImageUrl && (
+          <div className="relative h-32 w-full overflow-hidden border-b-[4px] border-black">
+            <img
+              src={post.featuredImageUrl}
+              alt="Featured"
+              className="h-full w-full object-cover"
+            />
+          </div>
+        )}
+
         <div className="p-6 bg-white">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {shareOptions.map((option) => (

@@ -35,6 +35,7 @@ import { CheckCircle2, XCircle, Inbox, ExternalLink, Rss, CheckCheck, Pencil } f
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { PostContent } from "@/components/post/PostContent";
 import { RichPostEditor } from "@/components/post/RichPostEditor";
+import { getUploadErrorMessage } from "@/components/post/upload-error";
 
 function formatPubDate(value: Date | string | null | undefined): string {
   if (!value) return "";
@@ -121,7 +122,11 @@ function PendingPostCard({ post, isMutating, aiVendors, onApprove, onReject }: P
 
   const uploadMedia = useUploadMedia({
     mutation: {
-      onError: () => toast({ title: "Failed to upload image", variant: "destructive" }),
+      onError: (error) => toast({
+        title: "Failed to upload image",
+        description: getUploadErrorMessage(error),
+        variant: "destructive",
+      }),
     },
   });
 

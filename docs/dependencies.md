@@ -72,10 +72,11 @@
 
 ## Local Media Uploads
 
-- **Purpose:** Store uploaded post media files on the app server for insertion into rich posts.
+- **Purpose:** Store uploaded post media files on the app server for insertion into rich posts and direct featured-image selection.
 - **Sends data off-domain:** No.
 - **What breaks if it changes or is removed:** The rich post editor can no longer accept direct media uploads until replaced with another storage mechanism.
 - **Self-hosting alternative:** This is already the self-hosted path. The main future alternative is managed object storage.
+- **Operational note:** Image uploads are capped at 8 MB per file. Oversized uploads return HTTP `413` with a clear editor message rather than a generic server error.
 
 ## File Type Detection
 
@@ -160,6 +161,33 @@
 - **What breaks if it changes or is removed:** Syndication to Substack stops working or requires adapter updates; posts already published there remain, local content and all other syndication targets are unaffected.
 - **Self-hosting alternative:** None. Substack is a closed hosted platform and this integration uses an unofficial API surface.
 - **Operational note:** This is an unofficial cookie-authenticated integration. The current adapter performs publication-scoped draft and publish writes against the publication hostname and bootstraps publication auth from the saved session before creating drafts. If Substack changes its internal API shape or invalidates the stored session, the app marks the connection as expired and the owner must update credentials in Admin → Platforms.
+
+## Bluesky AT Protocol (bsky.social)
+
+- **Purpose:** POSSE syndication — publishing owner-authored posts to a connected Bluesky account via the AT Protocol lexicons, with the canonical post URL rendered as an external card and the featured image uploaded as the card thumbnail when present. No OAuth app required; the user generates an App Password from their Bluesky account settings.
+- **Sends data off-domain:** Yes, to `bsky.social` when the owner publishes a post with Bluesky selected as a syndication target.
+- **Outbound payload note:** The post text uses the owner's editable social draft or is auto-generated from the post title, excerpt, and canonical URL, truncated to fit 300 graphemes. A URL facet is added so the link is clickable in Bluesky clients, and the external card points back to the canonical post URL.
+- **What breaks if it changes or is removed:** Syndication to Bluesky stops working or requires adapter updates; posts already published there remain, local content and all other syndication targets are unaffected.
+- **Self-hosting alternative:** The AT Protocol is open — a self-hosted PDS (Personal Data Server) is technically possible, but bsky.social is the standard entry point.
+- **Operational note:** No developer account or approval process required. Rate limits are generous (1,666 posts/hour). Users connect by entering their Bluesky handle and an App Password at Admin → Platforms.
+
+## LinkedIn REST API (Posts API v202605)
+
+- **Purpose:** POSSE syndication — publishing owner-authored posts to a connected LinkedIn personal profile via the Posts API (`/rest/posts`), using OAuth 2.0 with `w_member_social` scope.
+- **Sends data off-domain:** Yes, to `api.linkedin.com` when the owner publishes a post with LinkedIn selected as a syndication target.
+- **Outbound payload note:** The post commentary uses the owner's editable social draft or is auto-generated from the post title, excerpt, and canonical URL (up to 3,000 characters). LinkedIn receives article content with the canonical URL as `source`, plus title, description, and a featured-image thumbnail when present.
+- **What breaks if it changes or is removed:** Syndication to LinkedIn stops working or requires adapter updates; posts already published there remain, local content and all other syndication targets are unaffected.
+- **Self-hosting alternative:** None. LinkedIn is a closed platform.
+- **Operational note:** Requires a LinkedIn Developer app associated with an existing LinkedIn Page. That Page association owns/administers the developer app, but the current CreatrWeb adapter still publishes to the personal LinkedIn profile that authorizes OAuth (`urn:li:person:{personId}`), not to the Page. The app must have both **Share on LinkedIn** (`w_member_social`) and **Sign In with LinkedIn using OpenID Connect** (`openid`, `profile`, `email`) enabled; without OpenID Connect, LinkedIn returns `unauthorized_scope_error` for the `openid` scope. Access tokens expire after ~60 days; the user must reconnect when the token expires. LinkedIn's API rate limit is approximately 100 calls/day per member.
+
+## Meta Graph API (Facebook + Instagram)
+
+- **Purpose:** POSSE syndication — publishing owner-authored posts to a connected Facebook Page via `/{page-id}/feed` with the canonical URL as a link-card post, and to a linked Instagram Business/Creator account via the two-step Content Publishing API (`/{ig-user-id}/media` → `/{ig-user-id}/media_publish`). Both platforms share a single Meta Developer App and OAuth flow.
+- **Sends data off-domain:** Yes, to `graph.facebook.com` when the owner publishes a post with Facebook or Instagram selected as a syndication target.
+- **Outbound payload note:** Facebook posts include the owner's editable social draft or auto-generated text with the canonical URL and rely on the canonical post's Open Graph metadata for the link card. Instagram posts use a caption with the canonical URL; a featured image URL is required because Instagram does not support text-only feed posts or link cards in this API flow.
+- **What breaks if it changes or is removed:** Syndication to Facebook and/or Instagram stops working or requires adapter updates; posts already published there remain, local content and all other syndication targets are unaffected.
+- **Self-hosting alternative:** None. Both platforms are closed and gated behind Meta's Developer App Review process.
+- **Operational note:** Requires a Meta Developer App with App Review for production use (`pages_manage_posts`, `instagram_content_publish` permissions). Facebook Page Access Tokens do not expire as long as the user keeps the app authorized. Instagram requires a Business or Creator account linked to the authorized Facebook Page.
 
 ## turndown
 

@@ -42,11 +42,11 @@ type PlatformDef = {
   setupInstruction: string;
   setupHref: string;
   // OAuth platforms need CLIENT_ID/SECRET saved before the Connect button.
-  oauthAppPlatform?: "wordpress_com" | "blogger";
+  oauthAppPlatform?: "wordpress_com" | "blogger" | "linkedin" | "facebook";
   // OAuth redirect platforms: clicking Connect goes to this URL.
   oauthPath?: string;
   // Credential-entry platforms: open the credential dialog instead.
-  credentialKind?: "wordpress_self" | "substack";
+  credentialKind?: "wordpress_self" | "substack" | "bluesky";
 };
 
 const PLATFORMS: PlatformDef[] = [
@@ -83,6 +83,41 @@ const PLATFORMS: PlatformDef[] = [
     setupInstruction: "Copy your Substack connect.sid cookie and publication ID from your own account.",
     setupHref: "https://substack.com/",
     credentialKind: "substack",
+  },
+  {
+    id: "bluesky",
+    label: "Bluesky",
+    description: "Publish short POSSE posts to Bluesky with an AT Protocol App Password.",
+    setupInstruction: "Create an App Password in Bluesky Settings → App Passwords.",
+    setupHref: "https://bsky.app/settings/app-passwords",
+    credentialKind: "bluesky",
+  },
+  {
+    id: "linkedin",
+    label: "LinkedIn",
+    description: "Publish to your LinkedIn profile via OAuth and the LinkedIn Posts API.",
+    setupInstruction: "Create a LinkedIn Developer app associated with a LinkedIn Page, then enable Share on LinkedIn and Sign In with LinkedIn using OpenID Connect.",
+    setupHref: "https://www.linkedin.com/developers/apps/",
+    oauthAppPlatform: "linkedin",
+    oauthPath: "/api/platform-oauth/linkedin/start",
+  },
+  {
+    id: "facebook",
+    label: "Facebook Page",
+    description: "Publish to a managed Facebook Page via the Meta Graph API.",
+    setupInstruction: "Create a Meta Developer app with Facebook Login and Page publishing permissions.",
+    setupHref: "https://developers.facebook.com/apps/",
+    oauthAppPlatform: "facebook",
+    oauthPath: "/api/platform-oauth/facebook/start",
+  },
+  {
+    id: "instagram",
+    label: "Instagram",
+    description: "Publish image posts to an Instagram Business or Creator account linked to your Facebook Page.",
+    setupInstruction: "Use the same Meta app as Facebook; connect through the Facebook OAuth flow.",
+    setupHref: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/",
+    oauthAppPlatform: "facebook",
+    oauthPath: "/api/platform-oauth/facebook/start",
   },
 ];
 
@@ -146,7 +181,7 @@ function OAuthAppCredentialsDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  platform: "wordpress_com" | "blogger";
+  platform: "wordpress_com" | "blogger" | "linkedin" | "facebook";
   label: string;
   setupHref: string;
   oauthPath: string;
@@ -158,7 +193,9 @@ function OAuthAppCredentialsDialog({
   const [form, setForm] = useState({ clientId: "", clientSecret: "", blogUrl: initialBlogUrl ?? "" });
   const upsertApp = useUpsertPlatformOAuthApp();
   const { data: siteSettings } = useGetSiteSettings();
-  const callbackSuffix = `/api/platform-oauth/${platform === "wordpress_com" ? "wordpress-com" : "blogger"}/callback`;
+  const callbackSlug = platform === "wordpress_com" ? "wordpress-com" : platform;
+  const callbackSuffix = `/api/platform-oauth/${callbackSlug}/callback`;
+  const usesBlogUrl = platform === "wordpress_com" || platform === "blogger";
 
   // Use ALLOWED_ORIGINS from server config; fall back to the current browser origin.
   const origins: string[] =
@@ -178,7 +215,14 @@ function OAuthAppCredentialsDialog({
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     upsertApp.mutate(
-      { platform, data: { clientId: form.clientId, clientSecret: form.clientSecret, blogUrl: form.blogUrl || undefined } },
+      {
+        platform,
+        data: {
+          clientId: form.clientId,
+          clientSecret: form.clientSecret,
+          blogUrl: usesBlogUrl ? form.blogUrl || undefined : undefined,
+        },
+      },
       {
         onSuccess: () => {
           toast({ title: "App credentials saved", description: `Connecting to ${label}…` });
@@ -228,7 +272,7 @@ function OAuthAppCredentialsDialog({
                   </div>
                   <p>Leave JavaScript Origins blank. After creating the app, copy the Client ID and Client Secret below.</p>
                 </>
-              ) : (
+              ) : platform === "blogger" ? (
                 <>
                   <p>
                     Open{" "}
@@ -254,6 +298,55 @@ function OAuthAppCredentialsDialog({
                     <p>To remove the test-user restriction entirely, publish your app to <strong>Production</strong> mode on the consent screen. Production mode requires Google verification for sensitive scopes, but Blogger is a non-sensitive scope and can usually be published without a review.</p>
                   </div>
                   <p>Once all of the above are in place, paste the Client ID and Secret below.</p>
+                </>
+              ) : platform === "linkedin" ? (
+                <>
+                  <p>
+                    Open{" "}
+                    <a href={setupHref} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                      LinkedIn Developers <ExternalLink className="h-3 w-3" />
+                    </a>
+                    , create an app associated with a LinkedIn Page, and add these products:
+                  </p>
+                  <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-400 space-y-1.5">
+                    <p className="font-medium">LinkedIn app requirement</p>
+                    <p>LinkedIn requires Developer apps to be associated with an existing LinkedIn Page. This app association does not make CreatrWeb post to that Page; the current integration posts to the personal profile that completes OAuth.</p>
+                  </div>
+                  <ul className="list-disc space-y-1 pl-5">
+                    <li><strong>Share on LinkedIn</strong> for <code className="rounded bg-muted px-1 py-0.5 text-xs">w_member_social</code>.</li>
+                    <li><strong>Sign In with LinkedIn using OpenID Connect</strong> for <code className="rounded bg-muted px-1 py-0.5 text-xs">openid profile email</code>.</li>
+                  </ul>
+                  <div className="space-y-2">
+                    {origins.map((o) => (
+                      <div key={o} className="space-y-2">
+                        <UrlRow label="Authorized redirect URL" value={`${o}${callbackSuffix}`} />
+                      </div>
+                    ))}
+                  </div>
+                  <p>After enabling those products, paste the Client ID and Client Secret below. If OpenID Connect is missing, LinkedIn returns <code className="rounded bg-muted px-1 py-0.5 text-xs">unauthorized_scope_error</code> for the <code className="rounded bg-muted px-1 py-0.5 text-xs">openid</code> scope.</p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Open{" "}
+                    <a href={setupHref} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                      Meta for Developers <ExternalLink className="h-3 w-3" />
+                    </a>
+                    , create an app, and configure Facebook Login with these redirect URLs:
+                  </p>
+                  <div className="space-y-2">
+                    {origins.map((o) => (
+                      <div key={o} className="space-y-2">
+                        <UrlRow label="Valid OAuth Redirect URI" value={`${o}${callbackSuffix}`} />
+                      </div>
+                    ))}
+                  </div>
+                  <p>Facebook publishing requires a managed Page. Instagram publishing requires a Business or Creator account linked to that Page; one Meta OAuth flow can connect both.</p>
+                  <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-400">
+                    Production use requires Meta app review for Page publishing and Instagram content publishing permissions.
+                  </div>
                 </>
               )}
             </div>
@@ -288,6 +381,7 @@ function OAuthAppCredentialsDialog({
                 data-lpignore="true"
               />
             </div>
+            {usesBlogUrl ? (
             <div className="space-y-2">
               <Label htmlFor={`${platform}-blog-url`}>Your blog URL</Label>
               <Input
@@ -305,6 +399,7 @@ function OAuthAppCredentialsDialog({
                   : "Used to look up your Blogger blog ID directly, bypassing the account-level discovery that can fail in testing mode."}
               </p>
             </div>
+            ) : null}
           </form>
         </div>
         <DialogFooter>
@@ -520,6 +615,101 @@ function SubstackDialog({
   );
 }
 
+function BlueskyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ handle: "", appPassword: "" });
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/platform-oauth/bluesky/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          handle: form.handle,
+          appPassword: form.appPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Failed to connect Bluesky account.");
+      }
+
+      await queryClient.invalidateQueries({ queryKey: getListPlatformConnectionsQueryKey() });
+      toast({ title: "Connected", description: "Bluesky connected." });
+      setForm({ handle: "", appPassword: "" });
+      onClose();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to connect Bluesky account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Connect Bluesky</DialogTitle>
+          <DialogDescription asChild>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Create an App Password in Bluesky Settings, then enter your handle and that password here.
+                Do not use your main account password.
+              </p>
+              <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-400">
+                This sends selected posts to Bluesky through the AT Protocol. Each syndicated copy should still point back to the canonical post on this site.
+              </div>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="bluesky-handle">Handle</Label>
+            <Input
+              id="bluesky-handle"
+              placeholder="you.bsky.social"
+              value={form.handle}
+              onChange={(e) => setForm((f) => ({ ...f, handle: e.target.value }))}
+              required
+              autoComplete="username"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bluesky-app-password">App Password</Label>
+            <Input
+              id="bluesky-app-password"
+              type="password"
+              placeholder="xxxx-xxxx-xxxx-xxxx"
+              value={form.appPassword}
+              onChange={(e) => setForm((f) => ({ ...f, appPassword: e.target.value }))}
+              required
+              autoComplete="new-password"
+              data-1p-ignore="true"
+              data-lpignore="true"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving…" : "Save & connect"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Platform card ─────────────────────────────────────────────────────────────
 
 function PlatformCard({
@@ -664,6 +854,9 @@ function PlatformCard({
           initialPublicationHost={substackPublicationHost}
         />
       )}
+      {platform.credentialKind === "bluesky" && (
+        <BlueskyDialog open={showDialog} onClose={() => setShowDialog(false)} />
+      )}
     </>
   );
 }
@@ -692,7 +885,10 @@ export default function AdminPlatformsPage() {
   if (notifyParam && notifyParam !== shownParam) {
     setShownParam(notifyParam);
     if (connectedParam) {
-      const label = PLATFORMS.find((p) => p.id === connectedParam)?.label ?? connectedParam;
+      const label = connectedParam
+        .split(",")
+        .map((platformId) => PLATFORMS.find((p) => p.id === platformId)?.label ?? platformId)
+        .join(" + ");
       toast({ title: "Connected", description: `${label} connected successfully.` });
     } else if (errorParam) {
       const ERROR_MESSAGES: Record<string, string> = {
@@ -704,6 +900,17 @@ export default function AdminPlatformsPage() {
         blogger_not_configured: "Blogger app credentials not configured.",
         blogger_failed: "Blogger connection failed. Check the server logs.",
         blogger_no_blog: "Connected to Google but no Blogger blog was found. Make sure your account has a Blogger blog and that your Google account is added as a test user in the OAuth consent screen, then try again.",
+        linkedin_denied: "LinkedIn authorization was cancelled.",
+        linkedin_authorization_failed: "LinkedIn did not issue an authorization code. Check that the app has both Share on LinkedIn and Sign In with LinkedIn using OpenID Connect enabled, then check server logs for LinkedIn's exact error.",
+        linkedin_not_configured: "LinkedIn app credentials not configured.",
+        linkedin_token_failed: "LinkedIn token exchange failed. Check the server logs.",
+        linkedin_no_profile: "Connected to LinkedIn but could not read the member profile identifier.",
+        linkedin_failed: "LinkedIn connection failed. Check the server logs.",
+        facebook_denied: "Meta authorization was cancelled.",
+        facebook_not_configured: "Meta app credentials not configured.",
+        facebook_token_failed: "Meta token exchange failed. Check the server logs.",
+        facebook_no_pages: "Connected to Meta but no managed Facebook Pages were available for publishing.",
+        facebook_failed: "Meta connection failed. Check the server logs.",
       };
       const msg = ERROR_MESSAGES[errorParam] ?? "The platform denied the request or an error occurred.";
       toast({ title: "Connection failed", description: msg, variant: "destructive" });

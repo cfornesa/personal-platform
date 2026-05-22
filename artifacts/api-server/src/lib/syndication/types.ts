@@ -28,6 +28,10 @@ export type SyndicationPayload = {
   sourceFooterHtml: string;
   /** Plain-text footer for plain syndicated copies and markdown conversion. */
   sourceFooterText: string;
+  /** Optional featured image URL from the post — used as a card thumbnail or image post depending on platform. */
+  featuredImageUrl?: string | null;
+  /** Per-platform social post draft text saved with the post. */
+  socialPostDrafts?: { bluesky?: string; linkedin?: string; facebook?: string; instagram?: string } | null;
 };
 
 export type SyndicationDispatchOptions = {

@@ -31,6 +31,7 @@ import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 import { useEnabledPlatformConnections } from "@/hooks/use-enabled-platform-connections";
 import { PostContent } from "./PostContent";
 import { RichPostEditor } from "./RichPostEditor";
+import { getUploadErrorMessage } from "./upload-error";
 import { SharePostDialog } from "./SharePostDialog";
 import { PostCategoryChips } from "./PostCategoryChips";
 
@@ -164,8 +165,12 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
 
   const uploadMedia = useUploadMedia({
     mutation: {
-      onError: () => {
-        toast({ title: "Failed to upload image", variant: "destructive" });
+      onError: (error) => {
+        toast({
+          title: "Failed to upload image",
+          description: getUploadErrorMessage(error),
+          variant: "destructive",
+        });
       },
     },
   });
@@ -375,6 +380,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
               initialContent={draftContent}
               initialTitle={(displayPost as Post & { title?: string | null }).title ?? ""}
               initialCategoryIds={(displayPost as Post & { categories?: { id: number }[] }).categories?.map((c) => c.id) ?? []}
+              initialFeaturedImageUrl={(displayPost as Post & { featuredImageUrl?: string | null }).featuredImageUrl ?? ""}
               submitLabel="Save"
               cancelLabel="Cancel"
               isSubmitting={updatePost.isPending || uploadMedia.isPending}
@@ -400,6 +406,13 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
           </div>
         ) : (
           <>
+            {(displayPost as Post & { featuredImageUrl?: string | null }).featuredImageUrl ? (
+              <img
+                src={(displayPost as Post & { featuredImageUrl?: string | null }).featuredImageUrl!}
+                alt=""
+                className="w-full rounded-xl border border-border object-cover mb-2"
+              />
+            ) : null}
             {(displayPost as Post & { title?: string | null }).title ? (
               <h2 className="text-lg font-semibold leading-snug mb-1">
                 {(displayPost as Post & { title?: string | null }).title}

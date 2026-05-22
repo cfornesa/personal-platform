@@ -24,7 +24,11 @@ import { wordpressSelfAdapter } from "./wordpress-self";
 import { mediumAdapter } from "./medium";
 import { bloggerAdapter } from "./blogger";
 import { substackAdapter } from "./substack";
-import { buildSourceFooter, shouldAppendSourceFooter } from "./content";
+import { blueskyAdapter } from "./bluesky";
+import { linkedinAdapter } from "./linkedin";
+import { facebookAdapter } from "./facebook";
+import { instagramAdapter } from "./instagram";
+import { buildSourceFooter, rewriteRelativeImageUrls, shouldAppendSourceFooter } from "./content";
 
 const ADAPTERS: Record<string, PlatformAdapter> = {
   wordpress_com: wordpressComAdapter,
@@ -32,6 +36,10 @@ const ADAPTERS: Record<string, PlatformAdapter> = {
   medium: mediumAdapter,
   blogger: bloggerAdapter,
   substack: substackAdapter,
+  bluesky: blueskyAdapter,
+  linkedin: linkedinAdapter,
+  facebook: facebookAdapter,
+  instagram: instagramAdapter,
 };
 
 export function getAdapter(platform: string): PlatformAdapter {
@@ -59,13 +67,40 @@ async function buildPayload(post: Post, origin: string): Promise<SyndicationPayl
     ? buildSourceFooter(await loadSiteTitle(), canonicalUrl)
     : { html: "", text: "" };
 
+  const extPost = post as Post & {
+    title?: string | null;
+    featuredImageUrl?: string | null;
+    socialPostDrafts?: string | Record<string, string> | null;
+  };
+
+  let socialPostDrafts: SyndicationPayload["socialPostDrafts"] = null;
+  if (extPost.socialPostDrafts) {
+    if (typeof extPost.socialPostDrafts === "string") {
+      try { socialPostDrafts = JSON.parse(extPost.socialPostDrafts); } catch { /* ignore */ }
+    } else {
+      socialPostDrafts = extPost.socialPostDrafts as SyndicationPayload["socialPostDrafts"];
+    }
+  }
+
+  const rawFeaturedImageUrl = extPost.featuredImageUrl?.trim() || null;
+  const featuredImageUrl = rawFeaturedImageUrl && rawFeaturedImageUrl.startsWith("/")
+    ? `${origin}${rawFeaturedImageUrl}`
+    : rawFeaturedImageUrl;
+
+  const contentFormat = post.contentFormat === "plain" ? "plain" : "html" as const;
+  const contentHtml = contentFormat === "html"
+    ? rewriteRelativeImageUrls(post.content, origin)
+    : post.content;
+
   return {
-    title: (post as Post & { title?: string | null }).title?.trim() ?? "",
-    contentHtml: post.content,
-    contentFormat: post.contentFormat === "plain" ? "plain" : "html",
+    title: extPost.title?.trim() ?? "",
+    contentHtml,
+    contentFormat,
     canonicalUrl,
     sourceFooterHtml: sourceFooter.html,
     sourceFooterText: sourceFooter.text,
+    featuredImageUrl,
+    socialPostDrafts,
   };
 }
 

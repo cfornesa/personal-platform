@@ -519,7 +519,7 @@ export const substackAdapter: PlatformAdapter = {
     }
 
     const title = payload.title.trim() || "Untitled";
-    const draftBody = buildSubstackDraftBodyDocument(buildSyndicatedContent(payload));
+    const draftBody = buildSubstackDraftBodyDocument(buildSyndicatedContent(payload, { prependFeaturedImage: true }));
     const publicationOrigin = `https://${publicationHost}`;
     const publicationReferer = `${publicationOrigin}/publish/post`;
 

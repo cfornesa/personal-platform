@@ -115,9 +115,10 @@ npm run promote-owner --workspace=@workspace/scripts -- --id your-user-id
 
 - Signed-in members can comment and edit their own comments.
 - The promoted owner can create, edit, and delete posts; manage categories, platforms, and feeds; and access all `/admin/*` routes.
-- The owner's post composer uses the rich editor with sanitized HTML storage, compact WYSIWYG controls, heading levels `H1`–`H6`, local image uploads, YouTube URL insertion, and owner-trusted `https:` iframe embeds.
+- The owner's post composer uses the rich editor with sanitized HTML storage, compact WYSIWYG controls, heading levels `H1`–`H6`, local image uploads, direct featured-image uploads, YouTube URL insertion, and owner-trusted `https:` iframe embeds.
+- The first uploaded content image becomes the featured image automatically unless the owner has manually selected a featured image; oversized uploads return a clear 413 error instead of a generic server failure.
 - Platform connections configured in `/admin/platforms` appear in the post composer's syndication target selector.
-- When the owner syndicates a post authored on this application, the external copy includes a visible canonical source line: `Original source at {Site Title}: {Canonical URL}`. Targets that support native canonical/source metadata also receive that canonical URL in structured form.
+- When the owner syndicates a post authored on this application, the external copy keeps the canonical URL attached. Article-style targets include a visible source line: `Original source at {Site Title}: {Canonical URL}`. Social targets use platform-native behavior: Bluesky, LinkedIn, and Facebook prefer canonical link cards; Instagram uses an image post with the canonical URL in the caption.
 
 ## Public Feed Endpoints
 

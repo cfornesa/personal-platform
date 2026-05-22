@@ -1,26 +1,48 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { requireAuth, requireOwner } from "../middlewares/auth";
 import { createRateLimitMiddleware } from "../lib/ratelimit";
 import { ensureMediaRoot, getMediaPath, storeUploadedImage } from "../lib/media";
 
 const router: IRouter = Router();
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_UPLOAD_MB = MAX_UPLOAD_BYTES / 1024 / 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 8 * 1024 * 1024,
+    fileSize: MAX_UPLOAD_BYTES,
     files: 1,
   },
 });
+
+function uploadSingleFile(req: Request, res: Response, next: NextFunction) {
+  upload.single("file")(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: `Image uploads must be ${MAX_UPLOAD_MB} MB or smaller` });
+        return;
+      }
+      res.status(400).json({ error: error.message || "Invalid upload" });
+      return;
+    }
+
+    next(error);
+  });
+}
 
 router.post(
   "/media",
   createRateLimitMiddleware({ windowMs: 60_000, max: 20 }),
   requireAuth,
   requireOwner,
-  upload.single("file"),
+  uploadSingleFile,
   async (req: Request, res: Response) => {
     try {
       if (!req.file?.buffer) {

@@ -126,6 +126,8 @@ router.get("/posts/drafts", requireAuth, requireOwner, async (req: Request, res:
         status: postsTable.status,
         scheduledAt: postsTable.scheduledAt,
         pendingPlatformIds: postsTable.pendingPlatformIds,
+        featuredImageUrl: postsTable.featuredImageUrl,
+        socialPostDrafts: postsTable.socialPostDrafts,
         sourceFeedId: postsTable.sourceFeedId,
         sourceFeedName: feedSourcesTable.name,
         sourceCanonicalUrl: postsTable.sourceCanonicalUrl,
@@ -145,6 +147,7 @@ router.get("/posts/drafts", requireAuth, requireOwner, async (req: Request, res:
         ...p,
         scheduledAt: toUtcIso(p.scheduledAt),
         pendingPlatformIds: p.pendingPlatformIds ? (JSON.parse(p.pendingPlatformIds) as number[]) : null,
+        socialPostDrafts: p.socialPostDrafts ? JSON.parse(p.socialPostDrafts) : null,
         syndications: [],
       })),
       total: hydrated.length,
@@ -171,6 +174,7 @@ router.get("/posts/user/:userId", async (req: Request, res: Response) => {
         title: postsTable.title,
         content: postsTable.content,
         contentFormat: postsTable.contentFormat,
+        featuredImageUrl: postsTable.featuredImageUrl,
         sourceFeedId: postsTable.sourceFeedId,
         sourceFeedName: feedSourcesTable.name,
         sourceCanonicalUrl: postsTable.sourceCanonicalUrl,
@@ -502,6 +506,8 @@ router.get("/posts", async (req: Request, res: Response) => {
           status: postsTable.status,
           scheduledAt: postsTable.scheduledAt,
           pendingPlatformIds: postsTable.pendingPlatformIds,
+          featuredImageUrl: postsTable.featuredImageUrl,
+          socialPostDrafts: postsTable.socialPostDrafts,
           sourceFeedId: postsTable.sourceFeedId,
           sourceFeedName: feedSourcesTable.name,
           sourceCanonicalUrl: postsTable.sourceCanonicalUrl,
@@ -522,6 +528,9 @@ router.get("/posts", async (req: Request, res: Response) => {
           scheduledAt: toUtcIso((p as { scheduledAt?: string | null }).scheduledAt),
           pendingPlatformIds: (p as { pendingPlatformIds?: string | null }).pendingPlatformIds
             ? (JSON.parse((p as { pendingPlatformIds: string }).pendingPlatformIds) as number[])
+            : null,
+          socialPostDrafts: (p as { socialPostDrafts?: string | null }).socialPostDrafts
+            ? JSON.parse((p as { socialPostDrafts: string }).socialPostDrafts)
             : null,
         })),
         total: withSyndications.length,
@@ -585,6 +594,7 @@ router.get("/posts", async (req: Request, res: Response) => {
         title: postsTable.title,
         content: postsTable.content,
         contentFormat: postsTable.contentFormat,
+        featuredImageUrl: postsTable.featuredImageUrl,
         sourceFeedId: postsTable.sourceFeedId,
         sourceFeedName: feedSourcesTable.name,
         sourceCanonicalUrl: postsTable.sourceCanonicalUrl,
@@ -676,6 +686,10 @@ router.post("/posts", requireAuth, requireOwner, async (req: Request, res: Respo
           pendingPlatformIds: postStatus !== "published" && rawPlatformIds.length > 0
             ? JSON.stringify(rawPlatformIds)
             : null,
+          featuredImageUrl: (body as { featuredImageUrl?: string | null }).featuredImageUrl ?? null,
+          socialPostDrafts: (body as { socialPostDrafts?: object | null }).socialPostDrafts
+            ? JSON.stringify((body as { socialPostDrafts: object }).socialPostDrafts)
+            : null,
           createdAt: formatMysqlDateTime(),
         })
         .$returningId();
@@ -707,6 +721,9 @@ router.post("/posts", requireAuth, requireOwner, async (req: Request, res: Respo
       pendingPlatformIds: post[0].pendingPlatformIds
         ? (JSON.parse(post[0].pendingPlatformIds) as number[])
         : null,
+      socialPostDrafts: post[0].socialPostDrafts
+        ? JSON.parse(post[0].socialPostDrafts)
+        : null,
       commentCount: 0,
       categories: categoriesMap.get(insertedId) ?? [],
       syndications: [],
@@ -733,6 +750,8 @@ router.get("/posts/:id", async (req: Request, res: Response) => {
         status: postsTable.status,
         scheduledAt: postsTable.scheduledAt,
         pendingPlatformIds: postsTable.pendingPlatformIds,
+        featuredImageUrl: postsTable.featuredImageUrl,
+        socialPostDrafts: postsTable.socialPostDrafts,
         sourceFeedId: postsTable.sourceFeedId,
         sourceFeedName: feedSourcesTable.name,
         sourceCanonicalUrl: postsTable.sourceCanonicalUrl,
@@ -770,6 +789,9 @@ router.get("/posts/:id", async (req: Request, res: Response) => {
         scheduledAt: toUtcIso((withSyndication as { scheduledAt?: string | null }).scheduledAt),
         pendingPlatformIds: (withSyndication as { pendingPlatformIds?: string | null }).pendingPlatformIds
           ? (JSON.parse((withSyndication as { pendingPlatformIds: string }).pendingPlatformIds) as number[])
+          : null,
+        socialPostDrafts: (withSyndication as { socialPostDrafts?: string | null }).socialPostDrafts
+          ? JSON.parse((withSyndication as { socialPostDrafts: string }).socialPostDrafts)
           : null,
       },
       comments,
@@ -868,11 +890,23 @@ router.patch("/posts/:id", requireAuth, requireOwner, async (req: Request, res: 
       ? { title: (body as { title?: string }).title?.trim() || null }
       : {};
 
+    const imagePatch = "featuredImageUrl" in body
+      ? { featuredImageUrl: (body as { featuredImageUrl?: string | null }).featuredImageUrl ?? null }
+      : {};
+
+    const socialDraftsPatch = "socialPostDrafts" in body
+      ? { socialPostDrafts: (body as { socialPostDrafts?: object | null }).socialPostDrafts
+            ? JSON.stringify((body as { socialPostDrafts: object }).socialPostDrafts)
+            : null }
+      : {};
+
     await db.transaction(async (tx) => {
       await tx
         .update(postsTable)
         .set({
           ...titlePatch,
+          ...imagePatch,
+          ...socialDraftsPatch,
           ...statusPatch,
           content: normalizedContent,
           contentText: computeContentText(normalizedContent, body.contentFormat),
@@ -933,6 +967,9 @@ router.patch("/posts/:id", requireAuth, requireOwner, async (req: Request, res: 
       commentCount: commentCountResult[0]?.count ?? 0,
       pendingPlatformIds: updatedPost[0].pendingPlatformIds
         ? (JSON.parse(updatedPost[0].pendingPlatformIds) as number[])
+        : null,
+      socialPostDrafts: updatedPost[0].socialPostDrafts
+        ? JSON.parse(updatedPost[0].socialPostDrafts)
         : null,
     });
   } catch (err) {

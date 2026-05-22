@@ -1526,7 +1526,7 @@ paths:
       tags: [syndication]
       summary: List OAuth app credential status for all supported platforms (owner only)
       description: |
-        Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`) with a
+        Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`, `linkedin`, `facebook`) with a
         `configured` flag. The actual CLIENT_ID and CLIENT_SECRET are never returned.
       responses:
         "200":
@@ -1551,7 +1551,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [wordpress_com, blogger]
+            enum: [wordpress_com, blogger, linkedin, facebook]
       requestBody:
         required: true
         content:
@@ -1593,8 +1593,8 @@ paths:
       tags: [syndication]
       summary: Create or update a credential-based platform connection (owner only)
       description: |
-        Used for credential-based platforms (`wordpress_self`). OAuth-based
-        platforms (`wordpress_com`, `medium`, `blogger`) create their
+        Used for credential-based platforms (`wordpress_self`, `medium`, `substack`). OAuth-based
+        platforms (`wordpress_com`, `blogger`, `linkedin`, `facebook`) create their
         connection via the OAuth callback route at
         `/api/platform-oauth/{platform}/start`.
       requestBody:
@@ -1869,6 +1869,23 @@ components:
           description: Platforms this post was successfully cross-posted to (POSSE). Omitted when none.
           items:
             $ref: "#/components/schemas/PostSyndicationBadge"
+        featuredImageUrl:
+          type: string
+          nullable: true
+          description: Optional featured image URL used for og:image and social media posts.
+        socialPostDrafts:
+          type: object
+          nullable: true
+          description: Per-platform social post captions (bluesky, linkedin, facebook, instagram). Null when not set.
+          properties:
+            bluesky:
+              type: string
+            linkedin:
+              type: string
+            facebook:
+              type: string
+            instagram:
+              type: string
         createdAt:
           type: string
           format: date-time
@@ -2077,6 +2094,23 @@ components:
           type: string
           format: date-time
           description: Required when status='scheduled'. Must be at least 1 hour in the future (ISO 8601).
+        featuredImageUrl:
+          type: string
+          nullable: true
+          description: Optional featured image URL for og:image and social media posts.
+        socialPostDrafts:
+          type: object
+          nullable: true
+          description: Per-platform social post captions to use when auto-posting to Bluesky, LinkedIn, Facebook, or Instagram.
+          properties:
+            bluesky:
+              type: string
+            linkedin:
+              type: string
+            facebook:
+              type: string
+            instagram:
+              type: string
       required:
         - content
         - contentFormat
@@ -2127,6 +2161,23 @@ components:
           format: date-time
           nullable: true
           description: Required when transitioning to status='scheduled'. Send null to clear when moving to draft or published.
+        featuredImageUrl:
+          type: string
+          nullable: true
+          description: Optional featured image URL. Send null to clear.
+        socialPostDrafts:
+          type: object
+          nullable: true
+          description: Per-platform social post captions. Send null to clear.
+          properties:
+            bluesky:
+              type: string
+            linkedin:
+              type: string
+            facebook:
+              type: string
+            instagram:
+              type: string
       required:
         - content
         - contentFormat
@@ -3691,7 +3742,7 @@ components:
           type: integer
         platform:
           type: string
-          enum: [wordpress_com, wordpress_self, medium, blogger, substack]
+          enum: [wordpress_com, wordpress_self, medium, blogger, substack, bluesky, linkedin, facebook, instagram]
         configured:
           type: boolean
           description: True when an encrypted access token is stored for this connection.
@@ -3702,7 +3753,7 @@ components:
           type: object
           additionalProperties: true
           nullable: true
-          description: Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus).
+          description: Platform-specific metadata (e.g. blogId, authorId, siteUrl, publicationId, authStatus, handle, personId, pageId, igUserId).
         expiresAt:
           type: string
           format: date-time
@@ -3828,7 +3879,7 @@ components:
       properties:
         platform:
           type: string
-          enum: [wordpress_com, wordpress_self, medium, blogger, substack]
+          enum: [wordpress_com, wordpress_self, medium, blogger, substack, bluesky, linkedin, facebook, instagram]
         externalUrl:
           type: string
           nullable: true
@@ -3845,7 +3896,7 @@ components:
       properties:
         platform:
           type: string
-          enum: [wordpress_com, blogger]
+          enum: [wordpress_com, blogger, linkedin, facebook]
         configured:
           type: boolean
         blogUrl:

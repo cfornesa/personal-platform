@@ -44,6 +44,7 @@ export const wordpressComAdapter: PlatformAdapter = {
           content: buildSyndicatedContent(payload),
           status: "publish",
           format: "standard",
+          ...(payload.featuredImageUrl ? { featured_image: payload.featuredImageUrl } : {}),
         }),
       },
     );

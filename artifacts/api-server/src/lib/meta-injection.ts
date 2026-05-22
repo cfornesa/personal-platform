@@ -492,7 +492,8 @@ export async function injectPostMetadata(htmlPath: string, postId: string): Prom
       ? post[0].content.replace(/<[^>]*>?/gm, "").substring(0, 200) + "..."
       : post[0].content.substring(0, 200) + (post[0].content.length > 200 ? "..." : "");
 
-    const ogImageUrl = `${siteUrl}/api/og/posts/${postId}`;
+    const generatedOgImageUrl = `${siteUrl}/api/og/posts/${postId}`;
+    const ogImageUrl = post[0].featuredImageUrl || generatedOgImageUrl;
     const postUrl = `${siteUrl}/posts/${postId}`;
 
     const metaTags = `

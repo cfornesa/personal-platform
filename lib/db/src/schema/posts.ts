@@ -55,6 +55,8 @@ export const postsTable = mysqlTable(
     // when the post transitions to 'published' (draft→published or
     // scheduler fires). Cleared after syndication is dispatched.
     pendingPlatformIds: text("pending_platform_ids"),
+    featuredImageUrl: varchar("featured_image_url", { length: 2048 }),
+    socialPostDrafts: text("social_post_drafts"),
     createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
   },
   (t) => ({

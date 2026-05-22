@@ -9,7 +9,7 @@ export const platformConnectionsTable = mysqlTable(
     userId: varchar("user_id", { length: 191 })
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    // confirmed enum: wordpress_com | wordpress_self | medium | blogger | substack
+    // confirmed enum: wordpress_com | wordpress_self | medium | blogger | substack | bluesky | linkedin | facebook | instagram
     platform: varchar("platform", { length: 32 }).notNull(),
     // AES-256-GCM payload: "<iv_b64>.<tag_b64>.<ciphertext_b64>"
     encryptedAccessToken: text("encrypted_access_token"),

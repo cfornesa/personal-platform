@@ -29,7 +29,7 @@ export const bloggerAdapter: PlatformAdapter = {
         body: JSON.stringify({
           kind: "blogger#post",
           title: payload.title,
-          content: buildSyndicatedContent(payload),
+          content: buildSyndicatedContent(payload, { prependFeaturedImage: true }),
         }),
       },
     );
