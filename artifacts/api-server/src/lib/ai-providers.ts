@@ -15,6 +15,18 @@ type ProcessTextInput = {
   signal?: AbortSignal;
 };
 
+type ProcessImageInput = ProcessTextInput & {
+  imageBase64: string;
+  imageMimeType: string;
+};
+
+export class AiVisionNotSupportedError extends Error {
+  constructor(message = "This AI model does not support image analysis.") {
+    super(message);
+    this.name = "AiVisionNotSupportedError";
+  }
+}
+
 type TransportAttempt = {
   kind: "openai-responses" | "chat-completions" | "anthropic-messages" | "google-generate-content";
   url: string;
@@ -114,6 +126,179 @@ export async function processTextWithProvider(input: ProcessTextInput): Promise<
       upstreamStatus: lastFailure?.ok ? undefined : lastFailure?.upstreamStatus,
     },
   );
+}
+
+const VISION_NOT_SUPPORTED_PATTERNS = [
+  "vision",
+  "image",
+  "multimodal",
+  "does not support",
+  "not supported",
+  "unsupported",
+  "cannot process",
+  "can't process",
+];
+
+function isVisionNotSupportedMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return VISION_NOT_SUPPORTED_PATTERNS.some((p) => lower.includes(p));
+}
+
+export async function processImageWithProvider(input: ProcessImageInput): Promise<string> {
+  const normalizedInput = {
+    ...input,
+    model: normalizeModelForProvider(input.vendor, input.model),
+  };
+  const attempts = getTransportAttempts(normalizedInput);
+  let lastFailure: TransportResult | null = null;
+
+  for (const attempt of attempts) {
+    const result = await runImageAttempt(attempt, normalizedInput);
+    if (result.ok) {
+      return result.text;
+    }
+
+    if (!result.ok && isVisionNotSupportedMessage(result.message)) {
+      throw new AiVisionNotSupportedError();
+    }
+
+    lastFailure = result;
+
+    if (!shouldTryNextAttempt(result.upstreamStatus ?? 0)) {
+      break;
+    }
+  }
+
+  logger.warn(
+    {
+      vendor: input.vendor,
+      model: normalizedInput.model,
+      transportKind: lastFailure?.ok ? undefined : lastFailure?.transportKind,
+      failureClass: lastFailure?.ok ? undefined : lastFailure?.failureClass,
+    },
+    "AI image provider request failed",
+  );
+
+  throw new AiProviderError(
+    lastFailure?.message || "AI provider request failed",
+    {
+      statusCode: mapFailureToApiStatus(lastFailure),
+      retryable: lastFailure?.ok ? false : lastFailure?.retryable,
+      failureClass: lastFailure?.ok ? "network" : lastFailure?.failureClass,
+      transportKind: lastFailure?.ok ? undefined : lastFailure?.transportKind,
+      endpointFamily: lastFailure?.ok ? undefined : lastFailure?.endpointFamily,
+      url: lastFailure?.ok ? undefined : lastFailure?.url,
+      upstreamStatus: lastFailure?.ok ? undefined : lastFailure?.upstreamStatus,
+    },
+  );
+}
+
+async function runImageAttempt(attempt: TransportAttempt, input: ProcessImageInput): Promise<TransportResult> {
+  const dataUrl = `data:${input.imageMimeType};base64,${input.imageBase64}`;
+
+  switch (attempt.kind) {
+    case "anthropic-messages":
+      return postJson(attempt.url, {
+        transportKind: "anthropic-messages",
+        endpointFamily: "messages",
+        signal: input.signal,
+        headers: {
+          "x-api-key": input.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: {
+          model: input.model,
+          max_tokens: 256,
+          system: input.systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: input.imageMimeType, data: input.imageBase64 },
+                },
+                { type: "text", text: input.plainText },
+              ],
+            },
+          ],
+        },
+      }).then((r) => r.ok ? { ok: true as const, text: extractAnthropicText(r.json) ?? "" } : r);
+
+    case "chat-completions":
+      return postJson(attempt.url, {
+        transportKind: "chat-completions",
+        endpointFamily: "chat_completions",
+        signal: input.signal,
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          ...(input.vendor === "openrouter"
+            ? {
+                ...(process.env.PUBLIC_SITE_URL?.trim() ? { "HTTP-Referer": process.env.PUBLIC_SITE_URL.trim() } : {}),
+                ...(process.env.SITE_TITLE?.trim() ? { "X-OpenRouter-Title": process.env.SITE_TITLE.trim() } : {}),
+              }
+            : {}),
+        },
+        body: {
+          model: input.model,
+          max_tokens: 256,
+          messages: [
+            { role: "system", content: input.systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: dataUrl } },
+                { type: "text", text: input.plainText },
+              ],
+            },
+          ],
+        },
+      }).then((r) => r.ok ? { ok: true as const, text: extractChatCompletionText(r.json) ?? "" } : r);
+
+    case "google-generate-content": {
+      const modelPath = input.model.startsWith("models/") ? input.model : `models/${input.model}`;
+      const endpoint = `${attempt.url}/${modelPath.replace(/^models\//, "")}:generateContent?key=${encodeURIComponent(input.apiKey)}`;
+      return postJson(endpoint, {
+        transportKind: "google-generate-content",
+        endpointFamily: "generate_content",
+        signal: input.signal,
+        body: {
+          systemInstruction: { parts: [{ text: input.systemPrompt }] },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { inlineData: { mimeType: input.imageMimeType, data: input.imageBase64 } },
+                { text: input.plainText },
+              ],
+            },
+          ],
+          generationConfig: { maxOutputTokens: 256 },
+        },
+      }).then((r) => r.ok ? { ok: true as const, text: extractGoogleText(r.json) ?? "" } : r);
+    }
+
+    case "openai-responses":
+      return postJson(attempt.url, {
+        transportKind: "openai-responses",
+        endpointFamily: "responses",
+        signal: input.signal,
+        headers: { Authorization: `Bearer ${input.apiKey}` },
+        body: {
+          model: input.model,
+          instructions: input.systemPrompt,
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_image", image_url: dataUrl },
+                { type: "input_text", text: input.plainText },
+              ],
+            },
+          ],
+        },
+      }).then((r) => r.ok ? { ok: true as const, text: extractOpenAiResponsesText(r.json) ?? "" } : r);
+  }
 }
 
 function getTransportAttempts(input: ProcessTextInput): TransportAttempt[] {

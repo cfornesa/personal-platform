@@ -960,4 +960,49 @@ export async function ensureTables(): Promise<void> {
     "blog_url",
     "blog_url VARCHAR(500) NULL",
   );
+
+  // Media asset registry. Every file written to /data/uploads gets a row
+  // here so the library UI can list, preview, and hard-delete uploads without
+  // scanning the filesystem. Uploaded_at is indexed for the default
+  // newest-first sort order used by the library picker.
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      url VARCHAR(2048) NOT NULL,
+      filename VARCHAR(255) NOT NULL,
+      mime_type VARCHAR(64) NOT NULL,
+      uploaded_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX media_assets_uploaded_at_idx (uploaded_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await ensureColumn(
+    "media_assets",
+    "title",
+    "title VARCHAR(255) NULL",
+  );
+
+  await ensureColumn(
+    "media_assets",
+    "alt_text",
+    "alt_text VARCHAR(500) NULL",
+  );
+
+  await ensureColumn(
+    "media_assets",
+    "file_data",
+    "file_data MEDIUMBLOB NULL",
+  );
+
+  await ensureColumn(
+    "users",
+    "preferred_vendor_text_improve",
+    "preferred_vendor_text_improve VARCHAR(64) NULL",
+  );
+
+  await ensureColumn(
+    "users",
+    "preferred_vendor_alt_text",
+    "preferred_vendor_alt_text VARCHAR(64) NULL",
+  );
 }

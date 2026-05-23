@@ -22,6 +22,8 @@ export type SafeAiSettingsResponse = {
   availableVendors: readonly { id: AiVendor; label: string }[];
   settings: SafeAiVendorSetting[];
   preferredArtPieceVendor: AiVendor | null;
+  preferredVendorTextImprove: AiVendor | null;
+  preferredVendorAltText: AiVendor | null;
 };
 
 export type NormalizedAiVendorSettingsInput = {
@@ -100,19 +102,20 @@ export function validateAiVendorSettingsInput(input: {
   return null;
 }
 
+function normalizePreferredVendor(value?: string | null): AiVendor | null {
+  return typeof value === "string" && isAiVendor(value) ? value : null;
+}
+
 export function toSafeAiSettingsResponse(
   rows: Array<Pick<UserAiVendorSettings, "vendor" | "enabled" | "model" | "encryptedApiKey">>,
   preferredArtPieceVendor?: string | null,
+  preferredVendorTextImprove?: string | null,
+  preferredVendorAltText?: string | null,
 ): SafeAiSettingsResponse {
   const byVendor = new Map<string, Pick<UserAiVendorSettings, "vendor" | "enabled" | "model" | "encryptedApiKey">>();
   for (const row of rows) {
     byVendor.set(row.vendor, row);
   }
-
-  const normalizedPreferredArtPieceVendor =
-    typeof preferredArtPieceVendor === "string" && isAiVendor(preferredArtPieceVendor)
-      ? preferredArtPieceVendor
-      : null;
 
   return {
     availableVendors: AI_VENDOR_OPTIONS,
@@ -130,7 +133,9 @@ export function toSafeAiSettingsResponse(
         model,
       };
     }),
-    preferredArtPieceVendor: normalizedPreferredArtPieceVendor,
+    preferredArtPieceVendor: normalizePreferredVendor(preferredArtPieceVendor),
+    preferredVendorTextImprove: normalizePreferredVendor(preferredVendorTextImprove),
+    preferredVendorAltText: normalizePreferredVendor(preferredVendorAltText),
   };
 }
 

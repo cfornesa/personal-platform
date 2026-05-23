@@ -4,16 +4,21 @@ import {
   useGetMyAiSettings,
   useUpdateMyAiSettings,
   type UpdateMyAiSettingsBody,
+  type UpdateMyAiSettingsBodyPreferredArtPieceVendor,
+  type UpdateMyAiSettingsBodyPreferredVendorTextImprove,
+  type UpdateMyAiSettingsBodyPreferredVendorAltText,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useToast } from "@/hooks/use-toast";
+
+const TASK_PREF_NONE = "__none__";
 
 type VendorDraftState = Record<string, { enabled: boolean; model: string; apiKey: string }>;
 
@@ -37,6 +42,9 @@ export default function AdminAiPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [drafts, setDrafts] = useState<VendorDraftState>({});
+  const [prefTextImprove, setPrefTextImprove] = useState<string>(TASK_PREF_NONE);
+  const [prefAltText, setPrefAltText] = useState<string>(TASK_PREF_NONE);
+  const [prefArtPiece, setPrefArtPiece] = useState<string>(TASK_PREF_NONE);
   const [error, setError] = useState<string | null>(null);
 
   const aiSettings = useGetMyAiSettings({
@@ -47,8 +55,11 @@ export default function AdminAiPage() {
   });
 
   useEffect(() => {
-    if (aiSettings.data?.settings) {
+    if (aiSettings.data) {
       setDrafts(createDraftState(aiSettings.data.settings));
+      setPrefTextImprove(aiSettings.data.preferredVendorTextImprove ?? TASK_PREF_NONE);
+      setPrefAltText(aiSettings.data.preferredVendorAltText ?? TASK_PREF_NONE);
+      setPrefArtPiece(aiSettings.data.preferredArtPieceVendor ?? TASK_PREF_NONE);
       setError(null);
     }
   }, [aiSettings.data]);
@@ -103,6 +114,9 @@ export default function AdminAiPage() {
           apiKey: draft.apiKey.trim() || undefined,
         };
       }),
+      preferredVendorTextImprove: (prefTextImprove === TASK_PREF_NONE ? null : prefTextImprove) as UpdateMyAiSettingsBodyPreferredVendorTextImprove,
+      preferredVendorAltText: (prefAltText === TASK_PREF_NONE ? null : prefAltText) as UpdateMyAiSettingsBodyPreferredVendorAltText,
+      preferredArtPieceVendor: (prefArtPiece === TASK_PREF_NONE ? null : prefArtPiece) as UpdateMyAiSettingsBodyPreferredArtPieceVendor,
     };
 
     updateAiSettings.mutate({ data: payload });
@@ -209,16 +223,57 @@ export default function AdminAiPage() {
               <p className="text-sm font-medium text-red-700 dark:text-red-300">{error}</p>
             ) : null}
           </CardContent>
-          <CardFooter className="flex justify-end border-t border-yellow-400/70 p-6">
-            <Button
-              type="submit"
-              disabled={updateAiSettings.isPending || aiSettings.isLoading}
-              className="rounded-none border-2 border-yellow-400 bg-zinc-950 text-yellow-300 shadow-[4px_4px_0_0_rgba(234,179,8,1)] hover:bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
-            >
-              {updateAiSettings.isPending ? "Saving AI Settings..." : "Save AI Settings"}
-            </Button>
-          </CardFooter>
         </Card>
+
+        {(() => {
+          const enabledVendors = settings.filter((s) => s.enabled && s.configured);
+          if (enabledVendors.length === 0) return null;
+          const taskPrefSelectClass =
+            "h-9 w-full rounded-none border-2 border-yellow-400 bg-zinc-100 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(234,179,8,1)] focus:outline-none dark:bg-zinc-950 dark:text-zinc-50";
+          const taskPrefs = [
+            { id: "textImprove", label: "Text improvement", value: prefTextImprove, onChange: setPrefTextImprove },
+            { id: "altText", label: "Visual descriptions", value: prefAltText, onChange: setPrefAltText },
+            { id: "artPiece", label: "Art pieces", value: prefArtPiece, onChange: setPrefArtPiece },
+          ];
+          return (
+            <Card className="border-2 border-yellow-400 bg-zinc-50 text-zinc-950 shadow-[6px_6px_0_0_rgba(0,0,0,0.95)] dark:bg-zinc-950 dark:text-zinc-50">
+              <CardHeader>
+                <CardTitle>Task Preferences</CardTitle>
+                <CardDescription className="text-zinc-700 dark:text-zinc-300">
+                  Set a default vendor per task so you are not prompted each time. Only enabled vendors appear here.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {taskPrefs.map(({ id, label, value, onChange }) => (
+                  <div key={id} className="grid gap-2 md:grid-cols-[180px_1fr]">
+                    <Label htmlFor={`task-pref-${id}`} className="flex items-center text-sm font-medium">{label}</Label>
+                    <select
+                      id={`task-pref-${id}`}
+                      value={value}
+                      onChange={(e) => onChange(e.target.value)}
+                      className={taskPrefSelectClass}
+                    >
+                      <option value={TASK_PREF_NONE}>None (ask each time)</option>
+                      {enabledVendors.map((v) => (
+                        <option key={v.vendor} value={v.vendor}>{v.vendorLabel}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })()}
+
+        <div className="flex justify-end">
+          <Button
+            type="submit"
+            disabled={updateAiSettings.isPending || aiSettings.isLoading}
+            className="rounded-none border-2 border-yellow-400 bg-zinc-950 text-yellow-300 shadow-[4px_4px_0_0_rgba(234,179,8,1)] hover:bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
+          >
+            {updateAiSettings.isPending ? "Saving AI Settings..." : "Save AI Settings"}
+          </Button>
+        </div>
       </form>
     </AdminLayout>
   );

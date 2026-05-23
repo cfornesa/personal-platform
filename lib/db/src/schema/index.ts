@@ -15,4 +15,5 @@ export * from "./platform-connections.ts";
 export * from "./post-syndications.ts";
 export * from "./platform-oauth-apps.ts";
 export * from "./art-pieces.ts";
+export * from "./media-assets.ts";
 export * from "../lib/reserved-slugs.ts";

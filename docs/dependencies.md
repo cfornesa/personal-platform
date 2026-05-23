@@ -70,13 +70,13 @@
 - **What breaks if it changes or is removed:** Feed ingestion stops being able to import remote feed items until a replacement parser/fetch pipeline is installed, but the rest of the app remains functional.
 - **Self-hosting alternative:** A custom in-repo feed fetcher and RSS/Atom parser maintained as part of the app.
 
-## Local Media Uploads
+## Local Media Library
 
-- **Purpose:** Store uploaded post media files on the app server for insertion into rich posts and direct featured-image selection.
-- **Sends data off-domain:** No.
-- **What breaks if it changes or is removed:** The rich post editor can no longer accept direct media uploads until replaced with another storage mechanism.
+- **Purpose:** Store uploaded and owner-imported post media in the MySQL-backed `media_assets` library for insertion into rich posts and direct featured-image selection.
+- **Sends data off-domain:** Only when the owner imports an image from a URL; the app server fetches that owner-provided remote image once, then stores a local copy.
+- **What breaks if it changes or is removed:** The rich post editor can no longer accept direct media uploads or import remote images into reusable local media until replaced with another storage mechanism.
 - **Self-hosting alternative:** This is already the self-hosted path. The main future alternative is managed object storage.
-- **Operational note:** Image uploads are capped at 8 MB per file. Oversized uploads return HTTP `413` with a clear editor message rather than a generic server error.
+- **Operational note:** Direct image uploads and URL imports are capped at 8 MB per file. Oversized uploads/imports return clear errors rather than a generic server failure.
 
 ## File Type Detection
 

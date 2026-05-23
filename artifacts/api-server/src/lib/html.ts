@@ -165,6 +165,7 @@ export function sanitizeRichHtml(input: string): string {
         "frameborder",
         "loading",
         "title",
+        "aria-label",
         "referrerpolicy",
         "sandbox",
       ],

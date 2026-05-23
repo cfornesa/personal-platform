@@ -24,12 +24,26 @@ import {
   validateAiVendorSettingsInput,
   type AiVendor,
 } from "../lib/ai-settings";
+import { fileTypeFromBuffer } from "file-type";
 import { stripHtmlToText } from "../lib/html";
-import { AiProviderError, processTextWithProvider } from "../lib/ai-providers";
+import { AiProviderError, AiVisionNotSupportedError, processImageWithProvider, processTextWithProvider } from "../lib/ai-providers";
+import { getMediaBuffer } from "../lib/media";
 
 const router: IRouter = Router();
 const AI_SYSTEM_PROMPT =
-  "Improve the quality and expand this text while maintaining the original author's voice.";
+  "Improve the quality and expand this text while maintaining the original author's voice. Respond with properly formatted HTML using tags like <h2>, <h3>, <p>, <strong>, <em>, <ul>, <li> as appropriate. Return only the HTML content, no surrounding explanation or markdown fences.";
+
+const AI_PLAIN_TEXT_SYSTEM_PROMPT =
+  "You are improving a description of a visual or interactive artwork. " +
+  "If the input contains JSON, comma-separated tags, or technical parameters " +
+  "(such as aspect_ratio, resolution, or style tags), extract the key visual " +
+  "concepts and rewrite them as a clear, natural English description of what " +
+  "the piece looks or feels like. If the input is already natural language prose, " +
+  "refine and polish it for clarity. " +
+  "Return only the plain text result with no HTML, markdown, JSON, or surrounding explanation.";
+
+const AI_ALT_TEXT_SYSTEM_PROMPT =
+  "Generate a concise, descriptive alt text (maximum 125 characters) for an image. Return only the alt text itself, with no punctuation prefix, quotes, or explanation.";
 const AI_NO_STORE_CACHE_CONTROL = "no-store, max-age=0";
 
 function setAiNoStoreHeaders(res: Response) {
@@ -54,8 +68,9 @@ router.get("/users/me/ai-settings", requireAuth, requireOwner, async (req: Reque
   try {
     setAiNoStoreHeaders(res);
     const rows = await loadUserAiSettings(req.currentUser!.id);
+    const user = req.currentUser!;
     const response = GetMyAiSettingsResponse.parse(
-      toSafeAiSettingsResponse(rows, req.currentUser?.preferredArtPieceVendor),
+      toSafeAiSettingsResponse(rows, user.preferredArtPieceVendor, user.preferredVendorTextImprove, user.preferredVendorAltText),
     );
     return res.json(response);
   } catch {
@@ -79,17 +94,42 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
     const existingRows = await loadUserAiSettings(currentUser.id);
     const existingByVendor = indexRowsByVendor(existingRows);
     let preferredArtPieceVendor = currentUser.preferredArtPieceVendor ?? null;
+    let preferredVendorTextImprove = currentUser.preferredVendorTextImprove ?? null;
+    let preferredVendorAltText = currentUser.preferredVendorAltText ?? null;
+
+    const userPrefsUpdate: Partial<{ preferredArtPieceVendor: string | null; preferredVendorTextImprove: string | null; preferredVendorAltText: string | null }> = {};
 
     if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredArtPieceVendor")) {
       const requested = parsed.data.preferredArtPieceVendor;
       if (typeof requested === "string" && !isAiVendor(requested)) {
         return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
       }
-
       preferredArtPieceVendor = requested ?? null;
+      userPrefsUpdate.preferredArtPieceVendor = preferredArtPieceVendor;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorTextImprove")) {
+      const requested = (parsed.data as { preferredVendorTextImprove?: string | null }).preferredVendorTextImprove;
+      if (typeof requested === "string" && !isAiVendor(requested)) {
+        return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
+      }
+      preferredVendorTextImprove = requested ?? null;
+      userPrefsUpdate.preferredVendorTextImprove = preferredVendorTextImprove;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorAltText")) {
+      const requested = (parsed.data as { preferredVendorAltText?: string | null }).preferredVendorAltText;
+      if (typeof requested === "string" && !isAiVendor(requested)) {
+        return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
+      }
+      preferredVendorAltText = requested ?? null;
+      userPrefsUpdate.preferredVendorAltText = preferredVendorAltText;
+    }
+
+    if (Object.keys(userPrefsUpdate).length > 0) {
       await db
         .update(usersTable)
-        .set({ preferredArtPieceVendor })
+        .set(userPrefsUpdate)
         .where(eq(usersTable.id, currentUser.id));
     }
 
@@ -139,7 +179,7 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
 
     const rows = await loadUserAiSettings(currentUser.id);
     const response = GetMyAiSettingsResponse.parse(
-      toSafeAiSettingsResponse(rows, preferredArtPieceVendor),
+      toSafeAiSettingsResponse(rows, preferredArtPieceVendor, preferredVendorTextImprove, preferredVendorAltText),
     );
     return res.json(response);
   } catch {
@@ -170,8 +210,9 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
       });
     }
 
-    const plainText = stripHtmlToText(parsed.data.content);
-    if (!plainText) {
+    const isPlainMode = parsed.data.mode === "text";
+    const inputText = isPlainMode ? parsed.data.content.trim() : stripHtmlToText(parsed.data.content);
+    if (!inputText) {
       return res.status(400).json({ error: "Content must contain visible text" });
     }
 
@@ -180,8 +221,8 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
       vendor: parsed.data.vendor as AiVendor,
       model,
       apiKey,
-      plainText,
-      systemPrompt: AI_SYSTEM_PROMPT,
+      plainText: inputText,
+      systemPrompt: isPlainMode ? AI_PLAIN_TEXT_SYSTEM_PROMPT : AI_SYSTEM_PROMPT,
     });
 
     const response = ProcessAiTextResponse.parse({
@@ -197,6 +238,86 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
       return res.status(error.statusCode).json({ error: error.message });
     }
 
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST /ai/describe-image
+router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request, res: Response) => {
+  try {
+    setAiNoStoreHeaders(res);
+
+    const { imageUrl, vendor, existingAltText } = req.body as {
+      imageUrl?: unknown;
+      vendor?: unknown;
+      existingAltText?: unknown;
+    };
+    if (typeof imageUrl !== "string" || !imageUrl.trim()) {
+      return res.status(400).json({ error: "imageUrl is required" });
+    }
+    if (typeof vendor !== "string" || !vendor.trim()) {
+      return res.status(400).json({ error: "vendor is required" });
+    }
+
+    const rows = await loadUserAiSettings(req.currentUser!.id);
+    const selected = rows.find((row) => row.vendor === vendor);
+    const model = normalizeOptionalString(selected?.model);
+    const encryptedApiKey = normalizeOptionalString(selected?.encryptedApiKey);
+
+    if (selected?.enabled !== 1 || !model || !encryptedApiKey) {
+      return res.status(409).json({
+        error: `${getAiVendorLabel(vendor) ?? "Selected AI vendor"} is not enabled and configured for this user`,
+      });
+    }
+
+    // Read image from filesystem (only local /api/media/ URLs are supported)
+    const trimmedUrl = imageUrl.trim();
+    const mediaPrefix = "/api/media/";
+    if (!trimmedUrl.startsWith(mediaPrefix)) {
+      return res.status(400).json({ error: "Only locally uploaded images (/api/media/...) can be described by AI." });
+    }
+    const filename = trimmedUrl.slice(mediaPrefix.length).split("?")[0] ?? "";
+    if (!filename || filename.includes("/") || filename.includes("..")) {
+      return res.status(400).json({ error: "Invalid image filename." });
+    }
+
+    const fileBuffer = await getMediaBuffer(filename);
+    if (!fileBuffer) {
+      return res.status(404).json({ error: "Image file not found on server." });
+    }
+
+    const fileType = await fileTypeFromBuffer(fileBuffer);
+    if (!fileType || !fileType.mime.startsWith("image/")) {
+      return res.status(400).json({ error: "File is not a supported image type." });
+    }
+
+    const imageBase64 = fileBuffer.toString("base64");
+    const imageMimeType = fileType.mime;
+
+    const contextNote =
+      typeof existingAltText === "string" && existingAltText.trim()
+        ? ` Current description: "${existingAltText.trim()}". Refine or replace it based on the actual image content.`
+        : "";
+
+    const apiKey = decryptAiApiKey(encryptedApiKey);
+    const altText = await processImageWithProvider({
+      vendor: vendor as AiVendor,
+      model,
+      apiKey,
+      imageBase64,
+      imageMimeType,
+      plainText: `Describe this image for use as alt text.${contextNote}`,
+      systemPrompt: AI_ALT_TEXT_SYSTEM_PROMPT,
+    });
+
+    return res.json({ altText: altText.trim().slice(0, 125) });
+  } catch (error) {
+    if (error instanceof AiVisionNotSupportedError) {
+      return res.status(422).json({ error: error.message, code: "vision_not_supported" });
+    }
+    if (error instanceof AiProviderError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Server error" });
   }
 });

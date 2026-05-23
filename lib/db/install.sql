@@ -175,6 +175,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `color_destructive`            VARCHAR(64),
   `color_destructive_foreground` VARCHAR(64),
   `preferred_art_piece_vendor`   VARCHAR(64),
+  `preferred_vendor_text_improve` VARCHAR(64),
+  `preferred_vendor_alt_text`    VARCHAR(64),
 
   UNIQUE KEY `users_email_unique`    (`email`),                     -- one account per OAuth email
   UNIQUE KEY `users_username_unique` (`username`)                   -- one /users/@<handle> per username
@@ -709,6 +711,18 @@ SELECT 'Categories', '/categories', 0, 1010, 'system', NULL, 1
 WHERE NOT EXISTS (
   SELECT 1 FROM `nav_links` WHERE `kind` = 'system' AND `url` = '/categories'
 );
+
+-- Media asset registry. Every uploaded file gets a row so the library UI
+-- can list, preview, and hard-delete uploads without scanning the filesystem.
+CREATE TABLE IF NOT EXISTS `media_assets` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `url` VARCHAR(2048) NOT NULL,
+  `filename` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(64) NOT NULL,
+  `alt_text` VARCHAR(500) NULL,
+  `uploaded_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `media_assets_uploaded_at_idx` (`uploaded_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 18. Hard-reset per-user theme on a single user (snaps them back to the
 --     site default everywhere). Replace `<<TARGET_EMAIL>>` first.

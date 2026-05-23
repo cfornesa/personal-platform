@@ -5,6 +5,7 @@ type IframeAttrs = {
   width?: string;
   height?: string;
   title?: string;
+  ariaLabel?: string;
   allow?: string;
   loading?: string;
   referrerpolicy?: string;
@@ -30,16 +31,17 @@ export const IframeEmbed = Node.create({
 
   addAttributes() {
     return {
-      src: { default: null },
-      width: { default: "100%" },
-      height: { default: "420" },
-      title: { default: "Embedded content" },
-      allow: { default: null },
-      loading: { default: "lazy" },
-      referrerpolicy: { default: null },
-      sandbox: { default: null },
-      frameborder: { default: "0" },
-      allowfullscreen: { default: "true" },
+      src: { default: null, parseHTML: (el) => el.getAttribute("src") },
+      width: { default: "100%", parseHTML: (el) => el.getAttribute("width") },
+      height: { default: "420", parseHTML: (el) => el.getAttribute("height") },
+      title: { default: "Embedded content", parseHTML: (el) => el.getAttribute("title") },
+      ariaLabel: { default: null, parseHTML: (el) => el.getAttribute("aria-label") },
+      allow: { default: null, parseHTML: (el) => el.getAttribute("allow") },
+      loading: { default: "lazy", parseHTML: (el) => el.getAttribute("loading") },
+      referrerpolicy: { default: null, parseHTML: (el) => el.getAttribute("referrerpolicy") },
+      sandbox: { default: null, parseHTML: (el) => el.getAttribute("sandbox") },
+      frameborder: { default: "0", parseHTML: (el) => el.getAttribute("frameborder") },
+      allowfullscreen: { default: "true", parseHTML: (el) => el.getAttribute("allowfullscreen") },
     };
   },
 
@@ -48,7 +50,8 @@ export const IframeEmbed = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["iframe", mergeAttributes(HTMLAttributes)];
+    const { ariaLabel, ...rest } = HTMLAttributes as Record<string, unknown>;
+    return ["iframe", mergeAttributes(rest, ariaLabel ? { "aria-label": ariaLabel } : {})];
   },
 
   addCommands() {

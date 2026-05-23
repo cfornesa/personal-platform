@@ -740,6 +740,10 @@
     color: hsl(var(--foreground));
   }
 
+  .wysiwyg-editor-content iframe {
+    pointer-events: none;
+  }
+
   .wysiwyg-editor-content h1,
   .wysiwyg-rendered-content h1,
   .wysiwyg-editor-content h2,

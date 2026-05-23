@@ -11,12 +11,13 @@ import {
   useDeleteArtPiece,
   useGetArtPiece,
   useListArtPieces,
+  useProcessAiText,
   useUpdateMyAiSettings,
   useUpdateArtPiece,
   type GeneratedArtPieceDraft,
   type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
-import { Code, Trash2 } from "lucide-react";
+import { Code, Sparkles, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { ArtPieceRenderer } from "@/components/post/ArtPieceRenderer";
@@ -129,7 +130,7 @@ canvas { display: block; }`,
 export default function AdminPiecesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, preferredArtPieceVendor } = useOwnerAiVendors();
+  const { aiVendors, preferredArtPieceVendor, preferredVendorAltText } = useOwnerAiVendors();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -145,6 +146,7 @@ export default function AdminPiecesPage() {
   const [draftOpen, setDraftOpen] = useState(false);
   const [generationState, setGenerationState] = useState<ArtPieceGenerationState | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
+  const [isImprovingText, setIsImprovingText] = useState(false);
 
   const pieces = useListArtPieces();
   const filtered = useMemo(() => {
@@ -344,6 +346,29 @@ canvas { display: block; }`;
       },
     },
   });
+
+  const processAiText = useProcessAiText();
+
+  async function handleImproveText() {
+    if (!prompt.trim()) {
+      toast({ title: "Text required", description: "Enter a prompt or description before using AI improvement.", variant: "destructive" });
+      return;
+    }
+    const descriptionVendor = preferredVendorAltText ?? aiVendors[0]?.id ?? null;
+    if (!descriptionVendor) {
+      toast({ title: "No AI vendor", description: "Configure a vendor in Admin → AI first.", variant: "destructive" });
+      return;
+    }
+    setIsImprovingText(true);
+    try {
+      const result = await processAiText.mutateAsync({ data: { content: prompt, vendor: descriptionVendor, mode: "text" } });
+      setPrompt(result.text);
+    } catch {
+      toast({ title: "AI failed", description: "Could not improve the text.", variant: "destructive" });
+    } finally {
+      setIsImprovingText(false);
+    }
+  }
 
   function handleVendorChange(nextVendor: ProcessAiTextBodyVendor) {
     setSelectedVendor(nextVendor);
@@ -628,6 +653,15 @@ canvas { display: block; }`;
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
+                    variant="outline"
+                    disabled={isImprovingText || !(preferredVendorAltText ?? aiVendors[0]?.id)}
+                    onClick={() => void handleImproveText()}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    {isImprovingText ? "Improving…" : "Improve prompt"}
+                  </Button>
+                  <Button
+                    type="button"
                     disabled={!selectedVendor || !prompt.trim() || generationState?.phase === "generating"}
                     onClick={() => void handleGenerate()}
                   >
@@ -716,9 +750,9 @@ canvas { display: block; }`;
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="piece-prompt">Prompt</Label>
+                        <Label htmlFor="piece-description">Description</Label>
                         <Textarea
-                          id="piece-prompt"
+                          id="piece-description"
                           value={prompt}
                           onChange={(event) => setPrompt(event.target.value)}
                           rows={4}
@@ -773,10 +807,20 @@ canvas { display: block; }`;
                     code={generatedCode}
                     htmlCode={htmlCode}
                     cssCode={cssCode}
+                    title={prompt || selected?.title}
                   />
                 ) : null}
 
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isImprovingText || !(preferredVendorAltText ?? aiVendors[0]?.id)}
+                    onClick={() => void handleImproveText()}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    {isImprovingText ? "Improving…" : "Improve description"}
+                  </Button>
                   <Button
                     type="button"
                     onClick={() => {

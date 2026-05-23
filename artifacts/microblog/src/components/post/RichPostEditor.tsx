@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -7,13 +7,27 @@ import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, Link2, MoreHorizontal, Pilcrow, Redo2, Sparkles, Undo2, Youtube } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Code2, ImagePlus, Link2, MoreHorizontal, Pilcrow, Redo2, Sparkles, Undo2, Youtube } from "lucide-react";
 import {
   ApiError,
   type ArtPieceEngine,
   generateArtPiece as requestGeneratedArtPiece,
   useCreateArtPiece,
+  useDescribeImage,
   useProcessAiText,
+  useUpdateArtPiece,
+  useUpdateMediaAltText,
+  type DescribeImageBodyVendor,
   type GeneratedArtPieceDraft,
   type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
@@ -26,6 +40,14 @@ import type { EnabledPlatformConnection } from "@/hooks/use-enabled-platform-con
 import { ArtPieceDraftDialog } from "./ArtPieceDraftDialog";
 import { ArtPieceGenerationDialog, type ArtPieceGenerationState } from "./ArtPieceGenerationDialog";
 import { ArtPieceLibraryDialog } from "./ArtPieceLibraryDialog";
+import { FeaturedImagePicker } from "@/components/media/FeaturedImagePicker";
+import { partitionEditorContent } from "@/lib/editor-utils";
+import { LinkDialog } from "./dialogs/LinkDialog";
+import { EmbedDialog } from "./dialogs/EmbedDialog";
+import { YouTubeDialog } from "./dialogs/YouTubeDialog";
+import { ImageInsertDialog } from "./dialogs/ImageInsertDialog";
+import { ImageEditDialog } from "./dialogs/ImageEditDialog";
+import { PieceEditDialog } from "./dialogs/PieceEditDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +74,10 @@ type RichPostEditorProps = {
    */
   showCategories?: boolean;
   aiVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
+  /** Pre-selected vendor for text improvement (skips dropdown). */
+  preferredVendorTextImprove?: ProcessAiTextBodyVendor | null;
+  /** Pre-selected vendor for image alt text generation. */
+  preferredVendorAltText?: ProcessAiTextBodyVendor | null;
   /** Enabled platform connections to show in the "Share to:" selector. Omit to hide it. */
   platformConnections?: EnabledPlatformConnection[];
   /** Initial featured image URL (for edit mode). */
@@ -145,36 +171,25 @@ function normalizePieceEmbedUrls(html: string) {
   return mutated ? document.body.innerHTML : html;
 }
 
-function parseIframeEmbed(embedCode: string) {
-  const document = new DOMParser().parseFromString(embedCode, "text/html");
-  const iframe = document.querySelector("iframe");
-  if (!iframe?.getAttribute("src")) {
-    return null;
-  }
-
-  return {
-    src: normalizePieceEmbedSrc(iframe.getAttribute("src") ?? ""),
-    width: iframe.getAttribute("width") ?? "100%",
-    height: iframe.getAttribute("height") ?? "420",
-    title: iframe.getAttribute("title") ?? "Embedded content",
-    allow: iframe.getAttribute("allow") ?? undefined,
-    loading: iframe.getAttribute("loading") ?? "lazy",
-    referrerpolicy: iframe.getAttribute("referrerpolicy") ?? undefined,
-    sandbox: iframe.getAttribute("sandbox") ?? undefined,
-    frameborder: iframe.getAttribute("frameborder") ?? "0",
-    allowfullscreen: iframe.hasAttribute("allowfullscreen") ? "true" : undefined,
-  };
-}
-
 function extractFirstImageSrc(html: string): string | null {
   const document = new DOMParser().parseFromString(html, "text/html");
   const src = document.querySelector("img[src]")?.getAttribute("src")?.trim();
   return src || null;
 }
 
+function isPieceEmbedSrc(src: string): boolean {
+  try {
+    const path = src.startsWith("http") ? new URL(src).pathname : src;
+    return path.startsWith("/embed/pieces/");
+  } catch {
+    return false;
+  }
+}
+
 function buildPieceIframeAttrs(piece: {
   id: number;
   title: string;
+  prompt: string;
   currentVersionId: number;
 }) {
   return {
@@ -182,6 +197,7 @@ function buildPieceIframeAttrs(piece: {
     width: "100%",
     height: "480",
     title: piece.title,
+    ariaLabel: piece.prompt || undefined,
     loading: "lazy",
     frameborder: "0",
     sandbox: "allow-scripts allow-same-origin",
@@ -189,51 +205,6 @@ function buildPieceIframeAttrs(piece: {
 }
 
 const MAX_PIECE_GENERATION_ATTEMPTS = 3;
-
-function parseYouTubeUrl(input: string) {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    return null;
-  }
-
-  let videoId = "";
-
-  if (url.hostname === "youtu.be") {
-    videoId = url.pathname.slice(1);
-  } else if (url.hostname.endsWith("youtube.com")) {
-    if (url.pathname === "/watch") {
-      videoId = url.searchParams.get("v") ?? "";
-    } else if (url.pathname.startsWith("/shorts/")) {
-      videoId = url.pathname.split("/")[2] ?? "";
-    } else if (url.pathname.startsWith("/embed/")) {
-      videoId = url.pathname.split("/")[2] ?? "";
-    }
-  }
-
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-    return null;
-  }
-
-  return {
-    src: `https://www.youtube.com/embed/${videoId}`,
-    width: "100%",
-    height: "420",
-    title: "YouTube video",
-    allow:
-      "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
-    loading: "lazy",
-    referrerpolicy: "strict-origin-when-cross-origin",
-    frameborder: "0",
-    allowfullscreen: "true" as const,
-  };
-}
 
 export function RichPostEditor({
   initialContent,
@@ -246,6 +217,8 @@ export function RichPostEditor({
   initialPlatformIds = [],
   showCategories = true,
   aiVendors = [],
+  preferredVendorTextImprove,
+  preferredVendorAltText,
   platformConnections,
   initialFeaturedImageUrl,
   initialSocialPostDrafts,
@@ -255,8 +228,6 @@ export function RichPostEditor({
   onUpload,
 }: RichPostEditorProps) {
   const { toast } = useToast();
-  const fileInputId = useId();
-  const featuredFileInputId = useId();
   const [title, setTitle] = useState(initialTitle);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string>(initialFeaturedImageUrl ?? "");
   const [featuredImageSource, setFeaturedImageSource] = useState<"manual" | "auto" | null>(
@@ -280,8 +251,24 @@ export function RichPostEditor({
   const [isPieceDraftOpen, setIsPieceDraftOpen] = useState(false);
   const [isPieceLibraryOpen, setIsPieceLibraryOpen] = useState(false);
   const [pieceGenerationState, setPieceGenerationState] = useState<ArtPieceGenerationState | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const featuredFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isFeaturedPickerOpen, setIsFeaturedPickerOpen] = useState(false);
+  const [isCancelWarningOpen, setIsCancelWarningOpen] = useState(false);
+  const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
+  const origPushStateRef = useRef(window.history.pushState.bind(window.history));
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
+  const [youTubeDialogOpen, setYouTubeDialogOpen] = useState(false);
+  const [isHtmlMode, setIsHtmlMode] = useState(false);
+  const [htmlSource, setHtmlSource] = useState("");
+  const [imageInsertDialogOpen, setImageInsertDialogOpen] = useState(false);
+  type ImageEditState = { src: string; alt: string; pos: number };
+  type PieceEditState = { src: string; ariaLabel: string; title: string; pos: number };
+  type EmbedEditState = { initialCode: string; pos: number };
+  type YouTubeEditState = { initialUrl: string; pos: number };
+  const [imageEditState, setImageEditState] = useState<ImageEditState | null>(null);
+  const [pieceEditState, setPieceEditState] = useState<PieceEditState | null>(null);
+  const [embedEditState, setEmbedEditState] = useState<EmbedEditState | null>(null);
+  const [youTubeEditState, setYouTubeEditState] = useState<YouTubeEditState | null>(null);
   const pieceGenerationAbortRef = useRef<AbortController | null>(null);
   const processAiText = useProcessAiText({
     mutation: {
@@ -299,6 +286,9 @@ export function RichPostEditor({
       },
     },
   });
+  const { mutateAsync: describeImageForBubble } = useDescribeImage();
+  const { mutateAsync: updateMediaAltText } = useUpdateMediaAltText();
+  const { mutateAsync: updateArtPieceForBubble } = useUpdateArtPiece();
 
   const editor = useEditor({
     extensions: [
@@ -354,6 +344,12 @@ export function RichPostEditor({
     }
   }, [aiVendors, selectedAiVendor]);
 
+  useEffect(() => {
+    if (preferredVendorTextImprove && aiVendors.some((v) => v.id === preferredVendorTextImprove)) {
+      setSelectedAiVendor(preferredVendorTextImprove);
+    }
+  }, [preferredVendorTextImprove]);
+
   const substackConnection = (platformConnections ?? []).find((connection) => connection.platform === "substack");
   const isSubstackSelected = substackConnection ? platformIds.includes(substackConnection.id) : false;
 
@@ -368,100 +364,115 @@ export function RichPostEditor({
     pieceGenerationAbortRef.current = null;
   }, []);
 
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !editor) {
+  const initialEditorContent = ensureParagraphHtml(initialContent);
+  const initialSocialNormalized = {
+    bluesky: initialSocialPostDrafts?.bluesky ?? "",
+    linkedin: initialSocialPostDrafts?.linkedin ?? "",
+    facebook: initialSocialPostDrafts?.facebook ?? "",
+    instagram: initialSocialPostDrafts?.instagram ?? "",
+  };
+  const isDirty =
+    title !== (initialTitle ?? "") ||
+    featuredImageUrl !== (initialFeaturedImageUrl ?? "") ||
+    JSON.stringify(categoryIds) !== JSON.stringify(initialCategoryIds ?? []) ||
+    JSON.stringify(socialPostDrafts) !== JSON.stringify(initialSocialNormalized) ||
+    (editor ? (isHtmlMode ? htmlSource !== initialEditorContent : editor.getHTML() !== initialEditorContent) : false);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    const orig = origPushStateRef.current;
+    if (!isDirty) {
+      window.history.pushState = orig;
       return;
     }
-
-    const url = await onUpload(file);
-    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
-    if (!featuredImageUrl.trim() && featuredImageSource !== "manual") {
-      setFeaturedImageUrl(url);
-      setFeaturedImageSource("auto");
-      toast({
-        title: "Featured image selected",
-        description: "The first uploaded content image is now the featured image.",
-      });
-    }
-    event.target.value = "";
-  }
-
-  async function handleFeaturedFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    const url = await onUpload(file);
-    setFeaturedImageUrl(url);
-    setFeaturedImageSource("manual");
-
-    toast({
-      title: "Featured image selected",
-      description: "The uploaded image is now the featured image.",
-    });
-    event.target.value = "";
-  }
+    window.history.pushState = function (data, title, url) {
+      const dest = typeof url === "string" ? url : String(url ?? "");
+      if (dest && dest !== window.location.pathname + window.location.search) {
+        setPendingNavUrl(dest);
+      } else {
+        orig(data, title, url);
+      }
+    };
+    return () => {
+      window.history.pushState = orig;
+    };
+  }, [isDirty]);
 
   function handleInsertLink() {
-    if (!editor) {
-      return;
-    }
-
-    const previousUrl = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("Enter the link URL", previousUrl ?? "https://");
-    if (url === null) {
-      return;
-    }
-    if (url.trim() === "") {
-      editor.chain().focus().unsetLink().run();
-      return;
-    }
-
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+    if (!editor) return;
+    setLinkDialogOpen(true);
   }
 
   function handleInsertEmbed() {
-    if (!editor) {
-      return;
-    }
-
-    const embedCode = window.prompt("Paste the iframe embed code");
-    if (!embedCode) {
-      return;
-    }
-
-    const iframe = parseIframeEmbed(embedCode);
-    if (!iframe) {
-      window.alert("That embed code does not contain a valid iframe.");
-      return;
-    }
-
-    editor.chain().focus().insertIframe(iframe).run();
+    if (!editor) return;
+    setEmbedDialogOpen(true);
   }
 
   function handleInsertYouTube() {
-    if (!editor) {
+    if (!editor) return;
+    setYouTubeDialogOpen(true);
+  }
+
+  function handleEditorContentClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!editor || isHtmlMode) return;
+    const target = event.target as Element;
+    if (!editor.view.dom.contains(target)) return;
+
+    if (target.closest("a")) {
+      setLinkDialogOpen(true);
       return;
     }
 
-    const videoUrl = window.prompt("Paste the YouTube video URL", "https://www.youtube.com/watch?v=");
-    if (!videoUrl) {
+    const imgEl = target.closest("img");
+    if (imgEl) {
+      const src = imgEl.getAttribute("src") ?? "";
+      const alt = imgEl.getAttribute("alt") ?? "";
+      const posResult = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      let pos = -1;
+      if (posResult) {
+        for (const p of [posResult.pos, posResult.pos - 1, posResult.inside]) {
+          if (p >= 0 && editor.state.doc.nodeAt(p)?.type.name === "image") { pos = p; break; }
+        }
+      }
+      setImageEditState({ src, alt, pos });
       return;
     }
 
-    const iframe = parseYouTubeUrl(videoUrl);
-    if (!iframe) {
-      toast({
-        title: "Invalid YouTube URL",
-        description: "Use a full youtube.com or youtu.be link.",
-        variant: "destructive",
+    const posResult = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+    if (!posResult) return;
+    let iframeNode: ReturnType<typeof editor.state.doc.nodeAt> = null;
+    let iframePos = -1;
+    for (const p of [posResult.pos, posResult.pos - 1, posResult.inside]) {
+      if (p >= 0) {
+        const candidate = editor.state.doc.nodeAt(p);
+        if (candidate?.type.name === "iframeEmbed") { iframeNode = candidate; iframePos = p; break; }
+      }
+    }
+    if (!iframeNode || iframePos === -1) return;
+    const src = String(iframeNode.attrs.src ?? "");
+    if (isPieceEmbedSrc(src)) {
+      setPieceEditState({
+        src,
+        ariaLabel: String(iframeNode.attrs.ariaLabel ?? ""),
+        title: String(iframeNode.attrs.title ?? ""),
+        pos: iframePos,
       });
-      return;
+    } else if (src.includes("youtube.com/embed/")) {
+      const videoId = src.match(/youtube\.com\/embed\/([^?&]+)/)?.[1] ?? "";
+      setYouTubeEditState({ initialUrl: `https://www.youtube.com/watch?v=${videoId}`, pos: iframePos });
+    } else {
+      const a = iframeNode.attrs as Record<string, string>;
+      const code = `<iframe src="${src}"${a.width ? ` width="${a.width}"` : ""}${a.height ? ` height="${a.height}"` : ""}${a.allow ? ` allow="${a.allow}"` : ""} frameborder="${a.frameborder ?? "0"}"${a.sandbox ? ` sandbox="${a.sandbox}"` : ""}></iframe>`;
+      setEmbedEditState({ initialCode: code, pos: iframePos });
     }
-
-    editor.chain().focus().insertIframe(iframe).run();
   }
 
   function handleSubmit() {
@@ -469,7 +480,8 @@ export function RichPostEditor({
       return;
     }
 
-    const html = normalizePieceEmbedUrls(editor.getHTML());
+    const rawHtml = isHtmlMode ? htmlSource : editor.getHTML();
+    const html = normalizePieceEmbedUrls(rawHtml);
     const meaningfulHtml = html
       .replace(/<p><\/p>/g, "")
       .replace(/<p>\s*<\/p>/g, "")
@@ -639,7 +651,12 @@ export function RichPostEditor({
       return;
     }
 
-    if (!selectedAiVendor) {
+    const effectiveVendor =
+      selectedAiMode === "text"
+        ? (preferredVendorTextImprove ?? (selectedAiVendor || null))
+        : selectedAiVendor || null;
+
+    if (!effectiveVendor) {
       return;
     }
 
@@ -655,11 +672,18 @@ export function RichPostEditor({
 
     if (selectedAiMode === "text") {
       try {
+        const { preservedHtml, textOnlyContent } = partitionEditorContent(currentHtml);
+
+        if (!textOnlyContent.trim()) {
+          return;
+        }
+
         const response = await processAiText.mutateAsync({
-          data: { content: currentHtml, vendor: selectedAiVendor },
+          data: { content: textOnlyContent, vendor: effectiveVendor as ProcessAiTextBodyVendor },
         });
 
-        editor.commands.setContent(ensureParagraphHtml(response.text), { emitUpdate: true });
+        const reconstructed = preservedHtml + response.text;
+        editor.commands.setContent(reconstructed || ensureParagraphHtml(""), { emitUpdate: true });
         toast({
           title: "Draft improved",
           description: "The editor content has been replaced with the AI-assisted rewrite.",
@@ -722,31 +746,18 @@ export function RichPostEditor({
         className="w-full border-b border-border bg-transparent text-lg font-semibold placeholder:text-muted-foreground/60 focus:outline-none pb-2"
       />
       <div className="rounded-lg border border-border bg-muted/20 p-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Featured image</span>
-          <input
-            type="url"
-            aria-label="Featured image URL"
-            placeholder="https://example.com/image.jpg (optional)"
-            value={featuredImageUrl}
-            onChange={(e) => {
-              const nextValue = e.target.value;
-              setFeaturedImageUrl(nextValue);
-              setFeaturedImageSource(nextValue.trim() ? "manual" : null);
-            }}
-            className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none"
-          />
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => featuredFileInputRef.current?.click()}
+            onClick={() => setIsFeaturedPickerOpen(true)}
             disabled={isSubmitting}
-            aria-label="Upload featured image"
             className="shrink-0"
           >
             <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
-            Upload
+            {featuredImageUrl ? "Change image" : "Set featured image"}
           </Button>
           {featuredImageUrl ? (
             <Button
@@ -775,6 +786,16 @@ export function RichPostEditor({
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{featuredImageStatus}</p>
       </div>
+      <FeaturedImagePicker
+        open={isFeaturedPickerOpen}
+        onOpenChange={setIsFeaturedPickerOpen}
+        currentUrl={featuredImageUrl || undefined}
+        altTextVendor={preferredVendorAltText ?? null}
+        onSelect={(url) => {
+          setFeaturedImageUrl(url);
+          setFeaturedImageSource("manual");
+        }}
+      />
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="wysiwyg-toolbar flex flex-wrap items-center gap-1 border-b border-border/70 bg-muted/20 px-2 py-2">
           <div className="flex items-center gap-1 border-r border-border/70 pr-2">
@@ -962,10 +983,10 @@ export function RichPostEditor({
               variant="outline"
               size="icon"
               className={toolbarIconButtonClass}
-              aria-label="Upload image"
+              aria-label="Insert image"
               onMouseDown={(event) => {
                 event.preventDefault();
-                fileInputRef.current?.click();
+                setImageInsertDialogOpen(true);
               }}
             >
               <ImagePlus className="h-4 w-4" />
@@ -1012,6 +1033,26 @@ export function RichPostEditor({
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            <Button
+              type="button"
+              variant={isHtmlMode ? "default" : "outline"}
+              size="icon"
+              className={toolbarIconButtonClass}
+              onClick={() => {
+                if (!isHtmlMode) {
+                  setHtmlSource(editor.getHTML());
+                  setIsHtmlMode(true);
+                } else {
+                  editor.commands.setContent(htmlSource, { emitUpdate: true });
+                  editor.commands.focus();
+                  setIsHtmlMode(false);
+                }
+              }}
+              aria-label={isHtmlMode ? "Switch to visual editor" : "Switch to HTML source"}
+              title={isHtmlMode ? "Visual editor" : "HTML source"}
+            >
+              <Code2 className="h-4 w-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -1045,8 +1086,8 @@ export function RichPostEditor({
                 <DropdownMenuItem onSelect={handleInsertLink}>
                   Insert link
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
-                  Upload image
+                <DropdownMenuItem onSelect={() => setImageInsertDialogOpen(true)}>
+                  Insert image
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={handleInsertYouTube}>
                   Insert YouTube video
@@ -1062,7 +1103,7 @@ export function RichPostEditor({
           </div>
         </div>
 
-        <div className="relative">
+        <div className="relative" onClick={handleEditorContentClick}>
           {editor.isEmpty ? (
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-5 py-4 text-muted-foreground/60">
               <div className="flex items-center gap-2 text-base">
@@ -1072,7 +1113,18 @@ export function RichPostEditor({
             </div>
           ) : null}
 
-          <EditorContent editor={editor} />
+          <div className={isHtmlMode ? "hidden" : undefined}>
+            <EditorContent editor={editor} />
+          </div>
+          {isHtmlMode ? (
+            <textarea
+              value={htmlSource}
+              onChange={(e) => setHtmlSource(e.target.value)}
+              className="min-h-[220px] w-full rounded-b-2xl border border-t-0 border-border bg-background px-4 py-4 font-mono text-sm leading-relaxed text-foreground focus:outline-none focus:ring-0"
+              aria-label="HTML source"
+              spellCheck={false}
+            />
+          ) : null}
 
           {aiVendors.length > 0 ? (
             <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-2">
@@ -1196,23 +1248,6 @@ export function RichPostEditor({
         </div>
       ) : null}
 
-      <input
-        id={fileInputId}
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-      <input
-        id={featuredFileInputId}
-        ref={featuredFileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-        className="hidden"
-        onChange={handleFeaturedFileChange}
-      />
-
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           HTML is sanitized on save. Rich posts support images and approved iframe embeds.
@@ -1220,7 +1255,12 @@ export function RichPostEditor({
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{textLength} chars</span>
           {onCancel ? (
-            <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { if (isDirty) { setIsCancelWarningOpen(true); } else { onCancel(); } }}
+              disabled={isSubmitting}
+            >
               {cancelLabel}
             </Button>
           ) : null}
@@ -1230,6 +1270,133 @@ export function RichPostEditor({
           </Button>
         </div>
       </div>
+
+      <ImageEditDialog
+        open={!!imageEditState}
+        onOpenChange={(open) => { if (!open) setImageEditState(null); }}
+        initialSrc={imageEditState?.src ?? ""}
+        initialAlt={imageEditState?.alt ?? ""}
+        altTextVendor={preferredVendorAltText ?? null}
+        onAiGenerate={async () => {
+          if (!imageEditState?.src || !preferredVendorAltText) return null;
+          try {
+            const r = await describeImageForBubble({
+              data: {
+                imageUrl: imageEditState.src,
+                vendor: preferredVendorAltText as DescribeImageBodyVendor,
+                ...(imageEditState.alt.trim() ? { existingAltText: imageEditState.alt.trim() } : {}),
+              },
+            });
+            return r.altText;
+          } catch (err: any) {
+            const code = err?.data?.code ?? err?.response?.data?.code;
+            if (code === "vision_not_supported") {
+              toast({ title: "Vision not supported", description: "This AI model does not support image analysis. Choose a vision-capable model in Admin → AI → Task Preferences.", variant: "destructive" });
+            } else {
+              toast({ title: "AI failed", description: "Could not generate alt text.", variant: "destructive" });
+            }
+            return null;
+          }
+        }}
+        onSave={async (alt) => {
+          if (!imageEditState || imageEditState.pos < 0) return;
+          editor.chain().focus().setNodeSelection(imageEditState.pos).updateAttributes("image", { alt }).run();
+          const mediaPrefix = "/api/media/";
+          if (imageEditState.src.startsWith(mediaPrefix)) {
+            const filename = imageEditState.src.slice(mediaPrefix.length).split("?")[0] ?? "";
+            if (filename && !filename.includes("/")) {
+              await updateMediaAltText({ fileName: filename, data: { altText: alt || null } });
+            }
+          }
+          setImageEditState(null);
+          toast({ title: "Alt text saved" });
+        }}
+        onReplace={() => {
+          setImageEditState(null);
+          setImageInsertDialogOpen(true);
+        }}
+        onRemove={() => {
+          if (imageEditState && imageEditState.pos >= 0) {
+            editor.chain().focus().setNodeSelection(imageEditState.pos).deleteSelection().run();
+          }
+          setImageEditState(null);
+        }}
+      />
+
+      <PieceEditDialog
+        open={!!pieceEditState}
+        onOpenChange={(open) => { if (!open) setPieceEditState(null); }}
+        initialTitle={pieceEditState?.title ?? ""}
+        initialDescription={pieceEditState?.ariaLabel ?? ""}
+        altTextVendor={preferredVendorAltText ?? null}
+        onAiImprove={async (text) => {
+          if (!preferredVendorAltText) return null;
+          try {
+            const r = await processAiText.mutateAsync({ data: { content: text, vendor: preferredVendorAltText as ProcessAiTextBodyVendor, mode: "text" } });
+            return r.text;
+          } catch { return null; }
+        }}
+        onSave={async (description) => {
+          if (!pieceEditState || pieceEditState.pos < 0) return;
+          editor.chain().focus().setNodeSelection(pieceEditState.pos).updateAttributes("iframeEmbed", { ariaLabel: description }).run();
+          const pieceId = parseInt(pieceEditState.src.split("/").pop() ?? "", 10);
+          if (!isNaN(pieceId)) {
+            await updateArtPieceForBubble({ id: pieceId, data: { prompt: description } });
+          }
+          setPieceEditState(null);
+          toast({ title: "Description saved" });
+        }}
+        onReplace={() => {
+          setPieceEditState(null);
+          setIsPieceLibraryOpen(true);
+        }}
+        onRemove={() => {
+          if (pieceEditState && pieceEditState.pos >= 0) {
+            editor.chain().focus().setNodeSelection(pieceEditState.pos).deleteSelection().run();
+          }
+          setPieceEditState(null);
+        }}
+      />
+
+      <EmbedDialog
+        open={!!embedEditState}
+        onOpenChange={(open) => { if (!open) setEmbedEditState(null); }}
+        initialCode={embedEditState?.initialCode}
+        onApply={(attrs) => {
+          if (!embedEditState || embedEditState.pos < 0) {
+            editor?.chain().focus().insertIframe(attrs).run();
+          } else {
+            editor?.chain().focus().setNodeSelection(embedEditState.pos).updateAttributes("iframeEmbed", attrs).run();
+          }
+          setEmbedEditState(null);
+        }}
+        onRemove={() => {
+          if (embedEditState && embedEditState.pos >= 0) {
+            editor?.chain().focus().setNodeSelection(embedEditState.pos).deleteSelection().run();
+          }
+          setEmbedEditState(null);
+        }}
+      />
+
+      <YouTubeDialog
+        open={!!youTubeEditState}
+        onOpenChange={(open) => { if (!open) setYouTubeEditState(null); }}
+        initialUrl={youTubeEditState?.initialUrl}
+        onApply={(attrs) => {
+          if (!youTubeEditState || youTubeEditState.pos < 0) {
+            editor?.chain().focus().insertIframe(attrs).run();
+          } else {
+            editor?.chain().focus().setNodeSelection(youTubeEditState.pos).updateAttributes("iframeEmbed", attrs).run();
+          }
+          setYouTubeEditState(null);
+        }}
+        onRemove={() => {
+          if (youTubeEditState && youTubeEditState.pos >= 0) {
+            editor?.chain().focus().setNodeSelection(youTubeEditState.pos).deleteSelection().run();
+          }
+          setYouTubeEditState(null);
+        }}
+      />
 
       <ArtPieceLibraryDialog
         open={isPieceLibraryOpen}
@@ -1281,6 +1448,7 @@ export function RichPostEditor({
                   buildPieceIframeAttrs({
                     id: response.id,
                     title: response.title,
+                    prompt: response.prompt,
                     currentVersionId: response.currentVersionId!,
                   }),
                 ).run();
@@ -1293,6 +1461,99 @@ export function RichPostEditor({
               },
             },
           );
+        }}
+      />
+
+      <AlertDialog open={isCancelWarningOpen} onOpenChange={setIsCancelWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. If you cancel now, your edits will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setIsCancelWarningOpen(false);
+                onCancel?.();
+              }}
+            >
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!pendingNavUrl} onOpenChange={(v) => { if (!v) setPendingNavUrl(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave page?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. If you leave now, your edits will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingNavUrl(null)}>Stay</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const url = pendingNavUrl;
+                setPendingNavUrl(null);
+                if (url) {
+                  window.location.href = url;
+                }
+              }}
+            >
+              Leave
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LinkDialog
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        initialHref={editor?.getAttributes("link").href as string | undefined}
+        initialOpenInNewTab={editor?.getAttributes("link").target === "_blank"}
+        onApply={(href, openInNewTab) => {
+          editor?.chain().focus().extendMarkRange("link").setLink({ href, target: openInNewTab ? "_blank" : null }).run();
+        }}
+        onRemove={() => {
+          editor?.chain().focus().extendMarkRange("link").unsetLink().run();
+        }}
+      />
+
+      <EmbedDialog
+        open={embedDialogOpen}
+        onOpenChange={setEmbedDialogOpen}
+        onApply={(attrs) => {
+          editor?.chain().focus().insertIframe(attrs).run();
+        }}
+      />
+
+      <YouTubeDialog
+        open={youTubeDialogOpen}
+        onOpenChange={setYouTubeDialogOpen}
+        onApply={(attrs) => {
+          editor?.chain().focus().insertIframe(attrs).run();
+        }}
+      />
+
+      <ImageInsertDialog
+        open={imageInsertDialogOpen}
+        onOpenChange={setImageInsertDialogOpen}
+        altTextVendor={preferredVendorAltText ?? null}
+        onInsert={(url, altText) => {
+          editor?.chain().focus().setImage({ src: url, alt: altText ?? "" }).run();
+          if (!featuredImageUrl.trim() && featuredImageSource !== "manual") {
+            setFeaturedImageUrl(url);
+            setFeaturedImageSource("auto");
+            toast({
+              title: "Featured image selected",
+              description: "The first inserted content image is now the featured image.",
+            });
+          }
         }}
       />
     </div>

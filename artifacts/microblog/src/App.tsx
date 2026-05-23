@@ -23,6 +23,7 @@ import AdminPagesPage from "@/pages/admin/admin-pages";
 import AdminPageEditor from "@/pages/admin/admin-page-editor";
 import AdminAiPage from "@/pages/admin/admin-ai";
 import AdminPiecesPage from "@/pages/admin/admin-pieces";
+import AdminLibraryPage from "@/pages/admin/admin-library";
 import AdminPlatformsPage from "@/pages/admin/admin-platforms";
 import AdminPostsPage from "@/pages/admin-posts";
 import SearchPage from "@/pages/search";
@@ -77,6 +78,7 @@ function AppShell() {
             <Route path="/admin/posts" component={AdminPostsPage} />
             <Route path="/admin/ai" component={AdminAiPage} />
             <Route path="/admin/pieces" component={AdminPiecesPage} />
+            <Route path="/admin/library" component={AdminLibraryPage} />
             <Route path="/admin/platforms" component={AdminPlatformsPage} />
             <Route path="/admin/categories" component={AdminCategoriesPage} />
             <Route path="/admin/navigation" component={AdminNavigationPage} />

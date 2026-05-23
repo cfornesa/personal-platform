@@ -193,6 +193,8 @@ paths:
           description: Unauthorized
         "403":
           description: Forbidden
+        "413":
+          description: Uploaded image is too large
         "404":
           description: Not found
     delete:
@@ -525,6 +527,69 @@ paths:
         "429":
           description: Upstream provider rate limited the request
 
+  /ai/describe-image:
+    post:
+      operationId: describeImage
+      tags: [ai]
+      summary: Generate alt text for an image URL using the owner-selected AI vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                imageUrl:
+                  type: string
+                vendor:
+                  type: string
+                  enum:
+                    - openrouter
+                    - opencode-zen
+                    - opencode-go
+                    - google
+                existingAltText:
+                  type: string
+                  description: Optional existing alt text to use as context for refinement
+              required:
+                - imageUrl
+                - vendor
+      responses:
+        "200":
+          description: Generated alt text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  altText:
+                    type: string
+                required:
+                  - altText
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "409":
+          description: Selected AI vendor is not enabled for this user
+        "422":
+          description: AI model does not support image analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum:
+                      - vision_not_supported
+                required:
+                  - error
+
   /art-pieces:
     get:
       operationId: listArtPieces
@@ -740,6 +805,23 @@ paths:
                 $ref: "#/components/schemas/FeedStats"
 
   /media:
+    get:
+      operationId: listMedia
+      tags: [posts]
+      summary: List all uploaded media assets (owner only)
+      responses:
+        "200":
+          description: List of media assets ordered by upload date descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaAsset"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
     post:
       operationId: uploadMedia
       tags: [posts]
@@ -769,6 +851,33 @@ paths:
           description: Unauthorized
         "403":
           description: Forbidden
+
+  /media/import:
+    post:
+      operationId: importMedia
+      tags: [posts]
+      summary: Import a remote image URL into the media library (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportMediaBody"
+      responses:
+        "201":
+          description: Imported media metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedMedia"
+        "400":
+          description: Invalid image URL
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "413":
+          description: Imported image is too large
 
   /site-settings:
     get:
@@ -1504,6 +1613,37 @@ paths:
                 $ref: "#/components/schemas/SiteFeedsList"
 
   /media/{fileName}:
+    patch:
+      operationId: updateMediaAltText
+      tags: [posts]
+      summary: Update title and alt text for an uploaded media asset (owner only)
+      parameters:
+        - in: path
+          name: fileName
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMediaAltTextBody"
+      responses:
+        "200":
+          description: Updated media asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
     get:
       operationId: getMedia
       tags: [posts]
@@ -1517,6 +1657,25 @@ paths:
       responses:
         "200":
           description: Media content
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteMedia
+      tags: [posts]
+      summary: Permanently delete an uploaded media asset (owner only)
+      parameters:
+        - in: path
+          name: fileName
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
         "404":
           description: Not found
 
@@ -2491,10 +2650,28 @@ components:
             - opencode-zen
             - opencode-go
             - google
+        preferredVendorTextImprove:
+          type: string
+          nullable: true
+          enum:
+            - openrouter
+            - opencode-zen
+            - opencode-go
+            - google
+        preferredVendorAltText:
+          type: string
+          nullable: true
+          enum:
+            - openrouter
+            - opencode-zen
+            - opencode-go
+            - google
       required:
         - availableVendors
         - settings
         - preferredArtPieceVendor
+        - preferredVendorTextImprove
+        - preferredVendorAltText
 
     UpdateMyAiVendorSettingBody:
       type: object
@@ -2538,6 +2715,22 @@ components:
             - opencode-zen
             - opencode-go
             - google
+        preferredVendorTextImprove:
+          type: string
+          nullable: true
+          enum:
+            - openrouter
+            - opencode-zen
+            - opencode-go
+            - google
+        preferredVendorAltText:
+          type: string
+          nullable: true
+          enum:
+            - openrouter
+            - opencode-zen
+            - opencode-go
+            - google
       required:
         - settings
 
@@ -2554,6 +2747,11 @@ components:
             - opencode-zen
             - opencode-go
             - google
+        mode:
+          type: string
+          enum:
+            - html
+            - text
       required:
         - content
         - vendor
@@ -2923,11 +3121,65 @@ components:
         - totalPosts
         - totalComments
 
+    MediaAsset:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        filename:
+          type: string
+        title:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+        altText:
+          type: string
+          nullable: true
+        uploadedAt:
+          type: string
+      required:
+        - id
+        - url
+        - filename
+        - mimeType
+        - uploadedAt
+
+    ImportMediaBody:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+          format: uri
+        altText:
+          type: string
+          nullable: true
+          maxLength: 500
+      required:
+        - imageUrl
+
+    UpdateMediaAltTextBody:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+          maxLength: 255
+        altText:
+          type: string
+          nullable: true
+          maxLength: 500
+
     UploadedMedia:
       type: object
       properties:
         url:
           type: string
+        title:
+          type: string
+          nullable: true
         mimeType:
           type: string
         width:

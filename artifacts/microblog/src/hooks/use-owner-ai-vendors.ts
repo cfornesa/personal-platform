@@ -26,5 +26,9 @@ export function useOwnerAiVendors() {
     isLoading: aiSettings.isLoading,
     preferredArtPieceVendor:
       (aiSettings.data?.preferredArtPieceVendor as ProcessAiTextBodyVendor | null | undefined) ?? null,
+    preferredVendorTextImprove:
+      (aiSettings.data?.preferredVendorTextImprove as ProcessAiTextBodyVendor | null | undefined) ?? null,
+    preferredVendorAltText:
+      (aiSettings.data?.preferredVendorAltText as ProcessAiTextBodyVendor | null | undefined) ?? null,
   };
 }

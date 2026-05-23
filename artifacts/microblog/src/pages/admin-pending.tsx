@@ -76,6 +76,7 @@ type PendingPostCardProps = {
   post: PendingPost;
   isMutating: boolean;
   aiVendors: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
+  preferredVendorAltText?: ProcessAiTextBodyVendor | null;
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
 };
@@ -83,7 +84,7 @@ type PendingPostCardProps = {
 // Per-row component so each card owns its own edit state and editor
 // instance — keeps the editor unmounted (and out of memory) for posts
 // the owner isn't actively touching.
-function PendingPostCard({ post, isMutating, aiVendors, onApprove, onReject }: PendingPostCardProps) {
+function PendingPostCard({ post, isMutating, aiVendors, preferredVendorAltText, onApprove, onReject }: PendingPostCardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -164,6 +165,7 @@ function PendingPostCard({ post, isMutating, aiVendors, onApprove, onReject }: P
               cancelLabel="Cancel"
               isSubmitting={isSavingEdit}
               aiVendors={aiVendors}
+              preferredVendorAltText={preferredVendorAltText}
               onCancel={() => setIsEditing(false)}
               onUpload={async (file) => {
                 const uploaded = await uploadMedia.mutateAsync({ data: { file } });
@@ -212,7 +214,7 @@ function PendingPostCard({ post, isMutating, aiVendors, onApprove, onReject }: P
 
 export default function AdminPendingPage() {
   const { isOwner, isLoading: isUserLoading } = useCurrentUser();
-  const { aiVendors } = useOwnerAiVendors();
+  const { aiVendors, preferredVendorAltText } = useOwnerAiVendors();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -369,6 +371,7 @@ export default function AdminPendingPage() {
                     post={post}
                     isMutating={isMutating}
                     aiVendors={aiVendors}
+                    preferredVendorAltText={preferredVendorAltText}
                     onApprove={(id) => approve.mutate({ id })}
                     onReject={(id) => reject.mutate({ id })}
                   />

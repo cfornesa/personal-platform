@@ -39,6 +39,9 @@ import type {
   CreatePageBody,
   CreatePlatformConnectionBody,
   CreatePostBody,
+  DescribeImage200,
+  DescribeImage422,
+  DescribeImageBody,
   EmbeddedArtPiece,
   FeedRefreshResult,
   FeedRefreshSummary,
@@ -52,12 +55,14 @@ import type {
   GetEmbeddedArtPieceParams,
   GetPostsByUserParams,
   HealthStatus,
+  ImportMediaBody,
   ListArtPiecesResponse,
   ListNavLinksParams,
   ListPagesParams,
   ListPendingPostsParams,
   ListPostsParams,
   ListSiteFeedsParams,
+  MediaAsset,
   MyAiSettings,
   NavItemsReorderBody,
   NavLink,
@@ -86,6 +91,7 @@ import type {
   UpdateCategoryBody,
   UpdateCommentBody,
   UpdateFeedSourceBody,
+  UpdateMediaAltTextBody,
   UpdateMyAiSettingsBody,
   UpdateNavLinkBody,
   UpdatePageBody,
@@ -1482,6 +1488,77 @@ export const useProcessAiText = <TError = ErrorType<void>,
     }
 
 /**
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ */
+export const getDescribeImageUrl = () => {
+
+
+
+
+  return `/api/ai/describe-image`
+}
+
+export const describeImage = async (describeImageBody: DescribeImageBody, options?: RequestInit): Promise<DescribeImage200> => {
+
+  return customFetch<DescribeImage200>(getDescribeImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      describeImageBody,)
+  }
+);}
+
+
+
+
+export const getDescribeImageMutationOptions = <TError = ErrorType<void | DescribeImage422>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof describeImage>>, TError,{data: BodyType<DescribeImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof describeImage>>, TError,{data: BodyType<DescribeImageBody>}, TContext> => {
+
+const mutationKey = ['describeImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof describeImage>>, {data: BodyType<DescribeImageBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  describeImage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DescribeImageMutationResult = NonNullable<Awaited<ReturnType<typeof describeImage>>>
+    export type DescribeImageMutationBody = BodyType<DescribeImageBody>
+    export type DescribeImageMutationError = ErrorType<void | DescribeImage422>
+
+    /**
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ */
+export const useDescribeImage = <TError = ErrorType<void | DescribeImage422>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof describeImage>>, TError,{data: BodyType<DescribeImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof describeImage>>,
+        TError,
+        {data: BodyType<DescribeImageBody>},
+        TContext
+      > => {
+      return useMutation(getDescribeImageMutationOptions(options));
+    }
+
+/**
  * @summary List the owner's reusable art pieces
  */
 export const getListArtPiecesUrl = () => {
@@ -2158,6 +2235,83 @@ export function useGetFeedStats<TData = Awaited<ReturnType<typeof getFeedStats>>
 
 
 /**
+ * @summary List all uploaded media assets (owner only)
+ */
+export const getListMediaUrl = () => {
+
+
+
+
+  return `/api/media`
+}
+
+export const listMedia = async ( options?: RequestInit): Promise<MediaAsset[]> => {
+
+  return customFetch<MediaAsset[]>(getListMediaUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMediaQueryKey = () => {
+    return [
+    `/api/media`
+    ] as const;
+    }
+
+
+export const getListMediaQueryOptions = <TData = Awaited<ReturnType<typeof listMedia>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMediaQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMedia>>> = ({ signal }) => listMedia({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMedia>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMediaQueryResult = NonNullable<Awaited<ReturnType<typeof listMedia>>>
+export type ListMediaQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all uploaded media assets (owner only)
+ */
+
+export function useListMedia<TData = Awaited<ReturnType<typeof listMedia>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMediaQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+/**
  * @summary Upload a media asset for a post (owner only)
  */
 export const getUploadMediaUrl = () => {
@@ -2228,6 +2382,77 @@ export const useUploadMedia = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUploadMediaMutationOptions(options));
+    }
+
+/**
+ * @summary Import a remote image URL into the media library (owner only)
+ */
+export const getImportMediaUrl = () => {
+
+
+
+
+  return `/api/media/import`
+}
+
+export const importMedia = async (importMediaBody: ImportMediaBody, options?: RequestInit): Promise<UploadedMedia> => {
+
+  return customFetch<UploadedMedia>(getImportMediaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      importMediaBody,)
+  }
+);}
+
+
+
+
+export const getImportMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importMedia>>, TError,{data: BodyType<ImportMediaBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importMedia>>, TError,{data: BodyType<ImportMediaBody>}, TContext> => {
+
+const mutationKey = ['importMedia'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importMedia>>, {data: BodyType<ImportMediaBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importMedia(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportMediaMutationResult = NonNullable<Awaited<ReturnType<typeof importMedia>>>
+    export type ImportMediaMutationBody = BodyType<ImportMediaBody>
+    export type ImportMediaMutationError = ErrorType<void>
+
+    /**
+ * @summary Import a remote image URL into the media library (owner only)
+ */
+export const useImportMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importMedia>>, TError,{data: BodyType<ImportMediaBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importMedia>>,
+        TError,
+        {data: BodyType<ImportMediaBody>},
+        TContext
+      > => {
+      return useMutation(getImportMediaMutationOptions(options));
     }
 
 /**
@@ -4502,6 +4727,78 @@ export function useListSiteFeeds<TData = Awaited<ReturnType<typeof listSiteFeeds
 
 
 /**
+ * @summary Update title and alt text for an uploaded media asset (owner only)
+ */
+export const getUpdateMediaAltTextUrl = (fileName: string,) => {
+
+
+
+
+  return `/api/media/${fileName}`
+}
+
+export const updateMediaAltText = async (fileName: string,
+    updateMediaAltTextBody: UpdateMediaAltTextBody, options?: RequestInit): Promise<MediaAsset> => {
+
+  return customFetch<MediaAsset>(getUpdateMediaAltTextUrl(fileName),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMediaAltTextBody,)
+  }
+);}
+
+
+
+
+export const getUpdateMediaAltTextMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMediaAltText>>, TError,{fileName: string;data: BodyType<UpdateMediaAltTextBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMediaAltText>>, TError,{fileName: string;data: BodyType<UpdateMediaAltTextBody>}, TContext> => {
+
+const mutationKey = ['updateMediaAltText'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMediaAltText>>, {fileName: string;data: BodyType<UpdateMediaAltTextBody>}> = (props) => {
+          const {fileName,data} = props ?? {};
+
+          return  updateMediaAltText(fileName,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMediaAltTextMutationResult = NonNullable<Awaited<ReturnType<typeof updateMediaAltText>>>
+    export type UpdateMediaAltTextMutationBody = BodyType<UpdateMediaAltTextBody>
+    export type UpdateMediaAltTextMutationError = ErrorType<void>
+
+    /**
+ * @summary Update title and alt text for an uploaded media asset (owner only)
+ */
+export const useUpdateMediaAltText = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMediaAltText>>, TError,{fileName: string;data: BodyType<UpdateMediaAltTextBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMediaAltText>>,
+        TError,
+        {fileName: string;data: BodyType<UpdateMediaAltTextBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateMediaAltTextMutationOptions(options));
+    }
+
+/**
  * @summary Fetch an uploaded media asset
  */
 export const getGetMediaUrl = (fileName: string,) => {
@@ -4577,6 +4874,76 @@ export function useGetMedia<TData = Awaited<ReturnType<typeof getMedia>>, TError
 
 
 
+
+/**
+ * @summary Permanently delete an uploaded media asset (owner only)
+ */
+export const getDeleteMediaUrl = (fileName: string,) => {
+
+
+
+
+  return `/api/media/${fileName}`
+}
+
+export const deleteMedia = async (fileName: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMediaUrl(fileName),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMedia>>, TError,{fileName: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMedia>>, TError,{fileName: string}, TContext> => {
+
+const mutationKey = ['deleteMedia'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMedia>>, {fileName: string}> = (props) => {
+          const {fileName} = props ?? {};
+
+          return  deleteMedia(fileName,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMediaMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMedia>>>
+
+    export type DeleteMediaMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete an uploaded media asset (owner only)
+ */
+export const useDeleteMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMedia>>, TError,{fileName: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMedia>>,
+        TError,
+        {fileName: string},
+        TContext
+      > => {
+      return useMutation(getDeleteMediaMutationOptions(options));
+    }
 
 /**
  * Returns one entry per OAuth-app platform (`wordpress_com`, `blogger`, `linkedin`, `facebook`) with a

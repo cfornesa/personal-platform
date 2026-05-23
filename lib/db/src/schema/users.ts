@@ -49,6 +49,8 @@ export const usersTable = mysqlTable(
     colorDestructive: varchar("color_destructive", { length: 64 }),
     colorDestructiveForeground: varchar("color_destructive_foreground", { length: 64 }),
     preferredArtPieceVendor: varchar("preferred_art_piece_vendor", { length: 64 }),
+    preferredVendorTextImprove: varchar("preferred_vendor_text_improve", { length: 64 }),
+    preferredVendorAltText: varchar("preferred_vendor_alt_text", { length: 64 }),
   },
   (table) => ({
     emailIdx: uniqueIndex("users_email_unique").on(table.email),

@@ -680,7 +680,9 @@ export const GetMyAiSettingsResponse = zod.object({
   "configured": zod.boolean(),
   "model": zod.string().nullish()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
 })
 
 
@@ -700,7 +702,9 @@ export const UpdateMyAiSettingsBody = zod.object({
   "model": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemModelMax).optional(),
   "apiKey": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemApiKeyMax).optional()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish()
 }).describe('Owner AI settings for all supported vendors. Each vendor keeps its own\nenabled flag, model slug, and encrypted API key so the editor can\nswitch vendors without re-entering credentials.\n')
 
 export const UpdateMyAiSettingsResponse = zod.object({
@@ -715,7 +719,9 @@ export const UpdateMyAiSettingsResponse = zod.object({
   "configured": zod.boolean(),
   "model": zod.string().nullish()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
 })
 
 
@@ -732,7 +738,8 @@ export const processAiTextBodyContentMax = 40000;
 
 export const ProcessAiTextBody = zod.object({
   "content": zod.string().max(processAiTextBodyContentMax),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google'])
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "mode": zod.enum(['html', 'text']).optional()
 })
 
 export const ProcessAiTextResponse = zod.object({
@@ -740,6 +747,20 @@ export const ProcessAiTextResponse = zod.object({
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
   "vendorLabel": zod.string(),
   "model": zod.string()
+})
+
+
+/**
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ */
+export const DescribeImageBody = zod.object({
+  "imageUrl": zod.string(),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "existingAltText": zod.string().optional().describe('Optional existing alt text to use as context for refinement')
+})
+
+export const DescribeImageResponse = zod.object({
+  "altText": zod.string()
 })
 
 
@@ -1022,10 +1043,38 @@ export const GetFeedStatsResponse = zod.object({
 
 
 /**
+ * @summary List all uploaded media assets (owner only)
+ */
+export const ListMediaResponseItem = zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "filename": zod.string(),
+  "title": zod.string().nullish(),
+  "mimeType": zod.string(),
+  "altText": zod.string().nullish(),
+  "uploadedAt": zod.string()
+})
+export const ListMediaResponse = zod.array(ListMediaResponseItem)
+
+
+/**
  * @summary Upload a media asset for a post (owner only)
  */
 export const UploadMediaBody = zod.object({
   "file": zod.instanceof(File)
+})
+
+
+/**
+ * @summary Import a remote image URL into the media library (owner only)
+ */
+export const importMediaBodyAltTextMax = 500;
+
+
+
+export const ImportMediaBody = zod.object({
+  "imageUrl": zod.string().url(),
+  "altText": zod.string().max(importMediaBodyAltTextMax).nullish()
 })
 
 
@@ -1880,9 +1929,46 @@ export const ListSiteFeedsResponse = zod.object({
 
 
 /**
+ * @summary Update title and alt text for an uploaded media asset (owner only)
+ */
+export const UpdateMediaAltTextParams = zod.object({
+  "fileName": zod.coerce.string()
+})
+
+export const updateMediaAltTextBodyTitleMax = 255;
+
+export const updateMediaAltTextBodyAltTextMax = 500;
+
+
+
+export const UpdateMediaAltTextBody = zod.object({
+  "title": zod.string().max(updateMediaAltTextBodyTitleMax).nullish(),
+  "altText": zod.string().max(updateMediaAltTextBodyAltTextMax).nullish()
+})
+
+export const UpdateMediaAltTextResponse = zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "filename": zod.string(),
+  "title": zod.string().nullish(),
+  "mimeType": zod.string(),
+  "altText": zod.string().nullish(),
+  "uploadedAt": zod.string()
+})
+
+
+/**
  * @summary Fetch an uploaded media asset
  */
 export const GetMediaParams = zod.object({
+  "fileName": zod.coerce.string()
+})
+
+
+/**
+ * @summary Permanently delete an uploaded media asset (owner only)
+ */
+export const DeleteMediaParams = zod.object({
   "fileName": zod.coerce.string()
 })
 

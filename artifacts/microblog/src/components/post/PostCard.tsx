@@ -59,7 +59,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors } = useOwnerAiVendors();
+  const { aiVendors, preferredVendorAltText } = useOwnerAiVendors();
   const { connections: platformConnections } = useEnabledPlatformConnections();
   const [displayPost, setDisplayPost] = useState(post);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -385,6 +385,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
               cancelLabel="Cancel"
               isSubmitting={updatePost.isPending || uploadMedia.isPending}
               aiVendors={aiVendors}
+              preferredVendorAltText={preferredVendorAltText}
               platformConnections={platformConnections}
               onCancel={() => setIsEditing(false)}
               onUpload={async (file) => {

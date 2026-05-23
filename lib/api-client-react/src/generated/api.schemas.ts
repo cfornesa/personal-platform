@@ -613,10 +613,32 @@ export const MyAiSettingsPreferredArtPieceVendor = {
   google: 'google',
 } as const;
 
+export type MyAiSettingsPreferredVendorTextImprove = typeof MyAiSettingsPreferredVendorTextImprove[keyof typeof MyAiSettingsPreferredVendorTextImprove] | null;
+
+
+export const MyAiSettingsPreferredVendorTextImprove = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+} as const;
+
+export type MyAiSettingsPreferredVendorAltText = typeof MyAiSettingsPreferredVendorAltText[keyof typeof MyAiSettingsPreferredVendorAltText] | null;
+
+
+export const MyAiSettingsPreferredVendorAltText = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+} as const;
+
 export interface MyAiSettings {
   availableVendors: AiVendorOption[];
   settings: MyAiVendorSetting[];
   preferredArtPieceVendor: MyAiSettingsPreferredArtPieceVendor;
+  preferredVendorTextImprove: MyAiSettingsPreferredVendorTextImprove;
+  preferredVendorAltText: MyAiSettingsPreferredVendorAltText;
 }
 
 export type UpdateMyAiVendorSettingBodyVendor = typeof UpdateMyAiVendorSettingBodyVendor[keyof typeof UpdateMyAiVendorSettingBodyVendor];
@@ -654,6 +676,26 @@ export const UpdateMyAiSettingsBodyPreferredArtPieceVendor = {
   google: 'google',
 } as const;
 
+export type UpdateMyAiSettingsBodyPreferredVendorTextImprove = typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove[keyof typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove] | null;
+
+
+export const UpdateMyAiSettingsBodyPreferredVendorTextImprove = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+} as const;
+
+export type UpdateMyAiSettingsBodyPreferredVendorAltText = typeof UpdateMyAiSettingsBodyPreferredVendorAltText[keyof typeof UpdateMyAiSettingsBodyPreferredVendorAltText] | null;
+
+
+export const UpdateMyAiSettingsBodyPreferredVendorAltText = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+} as const;
+
 /**
  * Owner AI settings for all supported vendors. Each vendor keeps its own
 enabled flag, model slug, and encrypted API key so the editor can
@@ -663,6 +705,8 @@ switch vendors without re-entering credentials.
 export interface UpdateMyAiSettingsBody {
   settings: UpdateMyAiVendorSettingBody[];
   preferredArtPieceVendor?: UpdateMyAiSettingsBodyPreferredArtPieceVendor;
+  preferredVendorTextImprove?: UpdateMyAiSettingsBodyPreferredVendorTextImprove;
+  preferredVendorAltText?: UpdateMyAiSettingsBodyPreferredVendorAltText;
 }
 
 export type ProcessAiTextBodyVendor = typeof ProcessAiTextBodyVendor[keyof typeof ProcessAiTextBodyVendor];
@@ -675,10 +719,19 @@ export const ProcessAiTextBodyVendor = {
   google: 'google',
 } as const;
 
+export type ProcessAiTextBodyMode = typeof ProcessAiTextBodyMode[keyof typeof ProcessAiTextBodyMode];
+
+
+export const ProcessAiTextBodyMode = {
+  html: 'html',
+  text: 'text',
+} as const;
+
 export interface ProcessAiTextBody {
   /** @maxLength 40000 */
   content: string;
   vendor: ProcessAiTextBodyVendor;
+  mode?: ProcessAiTextBodyMode;
 }
 
 export type ProcessAiTextResponseVendor = typeof ProcessAiTextResponseVendor[keyof typeof ProcessAiTextResponseVendor];
@@ -970,8 +1023,32 @@ export interface FeedStats {
   totalComments: number;
 }
 
+export interface MediaAsset {
+  id: number;
+  url: string;
+  filename: string;
+  title?: string | null;
+  mimeType: string;
+  altText?: string | null;
+  uploadedAt: string;
+}
+
+export interface ImportMediaBody {
+  imageUrl: string;
+  /** @maxLength 500 */
+  altText?: string | null;
+}
+
+export interface UpdateMediaAltTextBody {
+  /** @maxLength 255 */
+  title?: string | null;
+  /** @maxLength 500 */
+  altText?: string | null;
+}
+
 export interface UploadedMedia {
   url: string;
+  title?: string | null;
   mimeType: string;
   width?: number | null;
   height?: number | null;
@@ -1770,6 +1847,39 @@ limit?: number;
 export type GetPostsByUserParams = {
 page?: number;
 limit?: number;
+};
+
+export type DescribeImageBodyVendor = typeof DescribeImageBodyVendor[keyof typeof DescribeImageBodyVendor];
+
+
+export const DescribeImageBodyVendor = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+} as const;
+
+export type DescribeImageBody = {
+  imageUrl: string;
+  vendor: DescribeImageBodyVendor;
+  /** Optional existing alt text to use as context for refinement */
+  existingAltText?: string;
+};
+
+export type DescribeImage200 = {
+  altText: string;
+};
+
+export type DescribeImage422Code = typeof DescribeImage422Code[keyof typeof DescribeImage422Code];
+
+
+export const DescribeImage422Code = {
+  vision_not_supported: 'vision_not_supported',
+} as const;
+
+export type DescribeImage422 = {
+  error: string;
+  code?: DescribeImage422Code;
 };
 
 export type GetEmbeddedArtPieceParams = {

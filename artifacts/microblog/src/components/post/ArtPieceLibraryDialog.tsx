@@ -15,7 +15,7 @@ import { ArtPieceRenderer } from "./ArtPieceRenderer";
 type ArtPieceLibraryDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onInsert: (piece: { id: number; title: string; currentVersionId: number }) => void;
+  onInsert: (piece: { id: number; title: string; prompt: string; currentVersionId: number }) => void;
 };
 
 export function ArtPieceLibraryDialog({
@@ -101,6 +101,7 @@ export function ArtPieceLibraryDialog({
                   code={selected.currentVersion.generatedCode}
                   htmlCode={selected.currentVersion.htmlCode}
                   cssCode={selected.currentVersion.cssCode}
+                  title={selected.prompt}
                 />
               </>
             ) : (
@@ -123,6 +124,7 @@ export function ArtPieceLibraryDialog({
               onInsert({
                 id: selected.id,
                 title: selected.title,
+                prompt: selected.prompt,
                 currentVersionId: selected.currentVersionId,
               });
               onOpenChange(false);
