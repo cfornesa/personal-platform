@@ -30,9 +30,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { ImmersiveMediaFrame } from "@/components/immersive/ImmersiveMediaFrame";
 import { useToast } from "@/hooks/use-toast";
 import { MediaGrid } from "./MediaGrid";
 import { getUploadErrorMessage } from "@/components/post/upload-error";
+import { buildImmersiveImageHref } from "@/lib/immersive-view";
 import { cn } from "@/lib/utils";
 
 type Tab = "library" | "upload" | "url";
@@ -436,11 +438,21 @@ export function FeaturedImagePicker({
             {selectedAsset && (
               <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
                 <div className="mb-3 flex gap-3">
-                  <img
-                    src={selectedAsset.url}
-                    alt={altTextDraft || selectedAsset.title || selectedAsset.filename}
-                    className="h-20 w-28 shrink-0 rounded border border-border object-cover"
-                  />
+                  <ImmersiveMediaFrame
+                    href={buildImmersiveImageHref(selectedAsset.url, {
+                      alt: altTextDraft || selectedAsset.title || selectedAsset.filename,
+                      title: titleDraft || selectedAsset.title || selectedAsset.filename,
+                    })}
+                    label="Open selected image in immersive view"
+                    className="shrink-0"
+                    buttonClassName="bottom-2 right-2 h-8 min-w-8 px-2 text-[10px]"
+                  >
+                    <img
+                      src={selectedAsset.url}
+                      alt={altTextDraft || selectedAsset.title || selectedAsset.filename}
+                      className="h-20 w-28 rounded border border-border object-cover"
+                    />
+                  </ImmersiveMediaFrame>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{selectedAsset.title || selectedAsset.filename}</p>
                     <p className="break-all text-xs text-muted-foreground">{selectedAsset.url}</p>

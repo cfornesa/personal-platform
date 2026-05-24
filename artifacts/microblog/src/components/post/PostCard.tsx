@@ -29,6 +29,8 @@ import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 import { useEnabledPlatformConnections } from "@/hooks/use-enabled-platform-connections";
+import { ImmersiveMediaFrame } from "@/components/immersive/ImmersiveMediaFrame";
+import { buildImmersiveImageHref } from "@/lib/immersive-view";
 import { PostContent } from "./PostContent";
 import { RichPostEditor } from "./RichPostEditor";
 import { getUploadErrorMessage } from "./upload-error";
@@ -53,6 +55,12 @@ interface PostCardProps {
    */
   highlightQuery?: string | null;
 }
+
+type DisplayPostWithFeaturedImageMeta = Post & {
+  featuredImageUrl?: string | null;
+  featuredImageTitle?: string | null;
+  featuredImageAltText?: string | null;
+};
 
 export function PostCard({ post, isDetail = false, highlightQuery }: PostCardProps) {
   const { currentUser, isOwner } = useCurrentUser();
@@ -407,12 +415,25 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
           </div>
         ) : (
           <>
-            {(displayPost as Post & { featuredImageUrl?: string | null }).featuredImageUrl ? (
-              <img
-                src={(displayPost as Post & { featuredImageUrl?: string | null }).featuredImageUrl!}
-                alt=""
-                className="w-full rounded-xl border border-border object-cover mb-2"
-              />
+            {(displayPost as DisplayPostWithFeaturedImageMeta).featuredImageUrl ? (
+              <ImmersiveMediaFrame
+                href={buildImmersiveImageHref((displayPost as DisplayPostWithFeaturedImageMeta).featuredImageUrl!, {
+                  alt:
+                    (displayPost as DisplayPostWithFeaturedImageMeta).featuredImageAltText?.trim() ||
+                    undefined,
+                  title:
+                    (displayPost as DisplayPostWithFeaturedImageMeta).featuredImageTitle?.trim() ||
+                    undefined,
+                })}
+                label="Open featured image in immersive view"
+                className="mb-2"
+              >
+                <img
+                  src={(displayPost as DisplayPostWithFeaturedImageMeta).featuredImageUrl!}
+                  alt=""
+                  className="w-full rounded-xl border border-border object-cover"
+                />
+              </ImmersiveMediaFrame>
             ) : null}
             {(displayPost as Post & { title?: string | null }).title ? (
               <h2 className="text-lg font-semibold leading-snug mb-1">

@@ -11,6 +11,8 @@ import SettingsPage from "@/pages/settings";
 import PostDetail from "@/pages/post-detail";
 import PostEmbed from "@/pages/post-embed";
 import PieceEmbed from "@/pages/piece-embed";
+import ImmersiveImagePage from "@/pages/immersive-image";
+import ImmersivePiecePage from "@/pages/immersive-piece";
 import UserProfile from "@/pages/user-profile";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
@@ -50,14 +52,18 @@ function AdminRedirect() {
 function AppShell() {
   const [isPostEmbed] = useRoute("/embed/posts/:id");
   const [isPieceEmbed] = useRoute("/embed/pieces/:id");
+  const [isImmersiveImage] = useRoute("/immersive/images/:encodedRef");
+  const [isImmersivePiece] = useRoute("/immersive/pieces/:id");
 
-  if (isPostEmbed || isPieceEmbed) {
+  if (isPostEmbed || isPieceEmbed || isImmersiveImage || isImmersivePiece) {
     return (
       <QueryClientProvider client={queryClient}>
         <ThemeInjector />
         <Switch>
           <Route path="/embed/posts/:id" component={PostEmbed} />
           <Route path="/embed/pieces/:id" component={PieceEmbed} />
+          <Route path="/immersive/images/:encodedRef" component={ImmersiveImagePage} />
+          <Route path="/immersive/pieces/:id" component={ImmersivePiecePage} />
         </Switch>
         <Toaster />
       </QueryClientProvider>

@@ -1,5 +1,10 @@
 import { memo, useMemo, type ReactNode } from "react";
 import type { PostContentFormat } from "@workspace/api-client-react";
+import {
+  buildImmersiveImageHref,
+  buildImmersivePieceHref,
+  extractPieceEmbedMeta,
+} from "@/lib/immersive-view";
 
 type PostContentProps = {
   content: string;
@@ -94,6 +99,61 @@ function highlightHtml(html: string, regex: RegExp): string {
   return root.innerHTML;
 }
 
+function createImmersiveAnchorMarkup(href: string, label: string) {
+  const boxSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px;flex-shrink:0"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
+  return `<a href="${href}" aria-label="${label.replace(/"/g, "&quot;")}" class="absolute bottom-3 right-3 z-20 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-border/70 bg-background/90 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground shadow-lg backdrop-blur transition hover:border-primary hover:text-primary">${boxSvg}<span aria-hidden="true">VR</span></a>`;
+}
+
+function enhanceImmersiveHtml(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstChild as HTMLElement | null;
+  if (!root) return html;
+
+  Array.from(root.querySelectorAll("img[src]")).forEach((image) => {
+    const src = image.getAttribute("src");
+    if (!src || image.closest("[data-immersive-wrapper]")) return;
+
+    const wrapper = doc.createElement("span");
+    wrapper.setAttribute("data-immersive-wrapper", "image");
+    wrapper.className = "not-prose group/immersive relative my-4 inline-block max-w-full align-middle";
+    image.parentNode?.insertBefore(wrapper, image);
+    wrapper.appendChild(image);
+    wrapper.insertAdjacentHTML(
+      "beforeend",
+      createImmersiveAnchorMarkup(
+        buildImmersiveImageHref(src, {
+          alt: image.getAttribute("alt"),
+          title: image.getAttribute("title"),
+        }),
+        "Open image in immersive view",
+      ),
+    );
+  });
+
+  Array.from(root.querySelectorAll("iframe[src]")).forEach((frame) => {
+    const src = frame.getAttribute("src");
+    if (!src || frame.closest("[data-immersive-wrapper]")) return;
+    const meta = extractPieceEmbedMeta(src);
+    if (!meta) return;
+
+    const wrapper = doc.createElement("div");
+    wrapper.setAttribute("data-immersive-wrapper", "piece");
+    wrapper.className = "not-prose group/immersive relative my-4";
+    frame.parentNode?.insertBefore(wrapper, frame);
+    wrapper.appendChild(frame);
+    wrapper.insertAdjacentHTML(
+      "beforeend",
+      createImmersiveAnchorMarkup(
+        buildImmersivePieceHref(meta.id, meta.versionId),
+        "Open piece in immersive view",
+      ),
+    );
+  });
+
+  return root.innerHTML;
+}
+
 // Same yellow `<mark>` look as the search results page so a click-through
 // from /search feels visually continuous.
 const MARK_CLASSES =
@@ -121,6 +181,10 @@ export const PostContent = memo(function PostContent({
       regex && contentFormat === "html" ? highlightHtml(content, regex) : content,
     [content, contentFormat, regex],
   );
+  const immersiveHtml = useMemo(
+    () => (contentFormat === "html" ? enhanceImmersiveHtml(renderedHtml) : renderedHtml),
+    [contentFormat, renderedHtml],
+  );
 
   if (contentFormat === "plain") {
     const baseClass = className ?? DEFAULT_PLAIN_CLASS;
@@ -137,7 +201,7 @@ export const PostContent = memo(function PostContent({
   return (
     <div
       className={finalClass}
-      dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      dangerouslySetInnerHTML={{ __html: immersiveHtml }}
     />
   );
 });

@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
+import { buildImmersivePieceHref } from "@/lib/immersive-view";
 
 const PIECE_TEMPLATES: Record<ArtPieceEngine, { html: string; css: string; js: string }> = {
   p5: {
@@ -808,6 +809,11 @@ canvas { display: block; }`;
                     htmlCode={htmlCode}
                     cssCode={cssCode}
                     title={prompt || selected?.title}
+                    immersiveHref={
+                      selected?.id
+                        ? buildImmersivePieceHref(selected.id, selected.currentVersionId)
+                        : null
+                    }
                   />
                 ) : null}
 

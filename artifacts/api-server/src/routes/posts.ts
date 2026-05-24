@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mysqlPool, postsTable, commentsTable, feedSourcesTable, categoriesTable, postCategoriesTable, eq, desc, count, and, or, isNull, inArray, notExists, sql, gte, lte, formatMysqlDateTime, formatMysqlDateTimeUtc } from "@workspace/db";
+import { db, mysqlPool, postsTable, commentsTable, feedSourcesTable, categoriesTable, postCategoriesTable, mediaAssetsTable, eq, desc, count, and, or, isNull, inArray, notExists, sql, gte, lte, formatMysqlDateTime, formatMysqlDateTimeUtc } from "@workspace/db";
 import {
   attachCategoriesToPosts,
   hydratePostCategories,
@@ -59,6 +59,57 @@ async function attachSyndications<T extends { id: number }>(
     map.get(pid)!.push({ platform: row.platform as string, externalUrl: (row.external_url as string | null) ?? null });
   }
   return posts.map((p) => ({ ...p, syndications: map.get(p.id) ?? [] }));
+}
+
+async function attachFeaturedImageMetadata<T extends { featuredImageUrl?: string | null }>(
+  posts: T[],
+): Promise<(T & { featuredImageTitle: string | null; featuredImageAltText: string | null })[]> {
+  if (posts.length === 0) {
+    return posts.map((post) => ({
+      ...post,
+      featuredImageTitle: null,
+      featuredImageAltText: null,
+    }));
+  }
+
+  const featuredUrls = Array.from(
+    new Set(
+      posts
+        .map((post) => post.featuredImageUrl?.trim())
+        .filter((url): url is string => Boolean(url)),
+    ),
+  );
+
+  if (featuredUrls.length === 0) {
+    return posts.map((post) => ({
+      ...post,
+      featuredImageTitle: null,
+      featuredImageAltText: null,
+    }));
+  }
+
+  const assets = await db
+    .select({
+      url: mediaAssetsTable.url,
+      title: mediaAssetsTable.title,
+      altText: mediaAssetsTable.altText,
+    })
+    .from(mediaAssetsTable)
+    .where(inArray(mediaAssetsTable.url, featuredUrls));
+
+  const assetByUrl = new Map(
+    assets.map((asset) => [asset.url, asset] as const),
+  );
+
+  return posts.map((post) => {
+    const featuredUrl = post.featuredImageUrl?.trim() || "";
+    const asset = featuredUrl ? assetByUrl.get(featuredUrl) : undefined;
+    return {
+      ...post,
+      featuredImageTitle: asset?.title?.trim() || null,
+      featuredImageAltText: asset?.altText?.trim() || null,
+    };
+  });
 }
 
 const router: IRouter = Router();
@@ -141,7 +192,8 @@ router.get("/posts/drafts", requireAuth, requireOwner, async (req: Request, res:
       .groupBy(postsTable.id)
       .orderBy(desc(postsTable.createdAt));
 
-    const hydrated = await attachCategoriesToPosts(posts);
+    const withFeaturedImageMetadata = await attachFeaturedImageMetadata(posts);
+    const hydrated = await attachCategoriesToPosts(withFeaturedImageMetadata);
     return res.json({
       posts: hydrated.map((p) => ({
         ...p,
@@ -196,7 +248,8 @@ router.get("/posts/user/:userId", async (req: Request, res: Response) => {
       .where(and(eq(postsTable.authorId, userId), eq(postsTable.status, "published")));
     const total = totalResult[0]?.count ?? 0;
 
-    const hydrated = await attachCategoriesToPosts(posts);
+    const withFeaturedImageMetadata = await attachFeaturedImageMetadata(posts);
+    const hydrated = await attachCategoriesToPosts(withFeaturedImageMetadata);
     const withSyndications = await attachSyndications(hydrated);
     return res.json({ posts: withSyndications, total, page, limit });
   } catch (err) {
@@ -520,7 +573,8 @@ router.get("/posts", async (req: Request, res: Response) => {
         .where(and(...calendarConditions))
         .groupBy(postsTable.id)
         .orderBy(desc(postsTable.createdAt));
-      const hydrated = await attachCategoriesToPosts(calendarPosts);
+      const withFeaturedImageMetadata = await attachFeaturedImageMetadata(calendarPosts);
+      const hydrated = await attachCategoriesToPosts(withFeaturedImageMetadata);
       const withSyndications = await attachSyndications(hydrated);
       return res.json({
         posts: withSyndications.map((p) => ({
@@ -616,7 +670,8 @@ router.get("/posts", async (req: Request, res: Response) => {
       .where(whereClause);
     const total = totalResult[0]?.count ?? 0;
 
-    const hydrated = await attachCategoriesToPosts(posts);
+    const withFeaturedImageMetadata = await attachFeaturedImageMetadata(posts);
+    const hydrated = await attachCategoriesToPosts(withFeaturedImageMetadata);
     const withSyndications = await attachSyndications(hydrated);
     return res.json({ posts: withSyndications, total, page, limit });
   } catch (err) {
@@ -706,6 +761,7 @@ router.post("/posts", requireAuth, requireOwner, async (req: Request, res: Respo
       return res.status(500).json({ error: "Failed to load created post" });
     }
 
+    const [postWithFeaturedImageMetadata] = await attachFeaturedImageMetadata(post);
     const categoriesMap = await hydratePostCategories([insertedId]);
 
     // Only syndicate immediately when publishing now.
@@ -716,7 +772,7 @@ router.post("/posts", requireAuth, requireOwner, async (req: Request, res: Respo
     }
 
     return res.status(201).json({
-      ...post[0],
+      ...postWithFeaturedImageMetadata,
       scheduledAt: toUtcIso(post[0].scheduledAt),
       pendingPlatformIds: post[0].pendingPlatformIds
         ? (JSON.parse(post[0].pendingPlatformIds) as number[])
@@ -781,8 +837,9 @@ router.get("/posts/:id", async (req: Request, res: Response) => {
       .where(eq(commentsTable.postId, id))
       .orderBy(desc(commentsTable.createdAt));
 
+    const [postWithFeaturedImageMetadata] = await attachFeaturedImageMetadata([post]);
     const categoriesMap = await hydratePostCategories([id]);
-    const [withSyndication] = await attachSyndications([{ ...post, categories: categoriesMap.get(id) ?? [] }]);
+    const [withSyndication] = await attachSyndications([{ ...postWithFeaturedImageMetadata, categories: categoriesMap.get(id) ?? [] }]);
     return res.json({
       post: {
         ...withSyndication,
@@ -951,13 +1008,15 @@ router.patch("/posts/:id", requireAuth, requireOwner, async (req: Request, res: 
       return res.status(500).json({ error: "Failed to load updated post" });
     }
 
+    const [updatedPostWithFeaturedImageMetadata] = await attachFeaturedImageMetadata(updatedPost);
+
     const commentCountResult = await db
       .select({ count: count(commentsTable.id) })
       .from(commentsTable)
       .where(eq(commentsTable.postId, id));
     const categoriesMap = await hydratePostCategories([id]);
     const [withSyndication] = await attachSyndications([{
-      ...updatedPost[0],
+      ...updatedPostWithFeaturedImageMetadata,
       categories: categoriesMap.get(id) ?? [],
     }]);
 

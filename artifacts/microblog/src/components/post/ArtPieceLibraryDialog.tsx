@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ArtPieceRenderer } from "./ArtPieceRenderer";
+import { buildImmersivePieceHref } from "@/lib/immersive-view";
 
 type ArtPieceLibraryDialogProps = {
   open: boolean;
@@ -102,6 +103,7 @@ export function ArtPieceLibraryDialog({
                   htmlCode={selected.currentVersion.htmlCode}
                   cssCode={selected.currentVersion.cssCode}
                   title={selected.prompt}
+                  immersiveHref={buildImmersivePieceHref(selected.id, selected.currentVersionId)}
                 />
               </>
             ) : (

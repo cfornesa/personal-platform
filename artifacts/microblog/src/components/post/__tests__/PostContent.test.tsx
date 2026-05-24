@@ -22,6 +22,29 @@ describe("PostContent", () => {
     expect(container.querySelector("strong")?.textContent).toBe("world");
   });
 
+  it("adds an immersive trigger to rendered images", () => {
+    const { container } = render(
+      <PostContent
+        content='<p><img src="/media/example.jpg" alt="Studio lights" /></p>'
+        contentFormat="html"
+      />,
+    );
+    const trigger = container.querySelector('a[href^="/immersive/images/"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger?.getAttribute("aria-label")).toContain("immersive");
+  });
+
+  it("adds an immersive trigger to embedded art pieces", () => {
+    const { container } = render(
+      <PostContent
+        content='<iframe src="/embed/pieces/7?version=9" title="Orbit Bloom"></iframe>'
+        contentFormat="html"
+      />,
+    );
+    const trigger = container.querySelector('a[href="/immersive/pieces/7?version=9"]');
+    expect(trigger).not.toBeNull();
+  });
+
   it("preserves whitespace in plain content", () => {
     const { container } = render(
       <PostContent content={"line one\n\nline two"} contentFormat="plain" />,

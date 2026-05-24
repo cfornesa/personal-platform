@@ -23,7 +23,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ImmersiveMediaFrame } from "@/components/immersive/ImmersiveMediaFrame";
 import { useToast } from "@/hooks/use-toast";
+import { buildImmersiveImageHref } from "@/lib/immersive-view";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -141,15 +143,23 @@ function MediaDetailsDialog({
 
           <div className="space-y-4">
             <div className="flex max-h-[48vh] items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
-              <img
-                src={asset.url}
-                alt={altText || getAssetTitle(asset)}
-                className="max-h-[48vh] w-auto max-w-full object-contain"
-                onLoad={(event) => {
-                  const image = event.currentTarget;
-                  setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
-                }}
-              />
+              <ImmersiveMediaFrame
+                href={buildImmersiveImageHref(asset.url, {
+                  alt: altText || getAssetTitle(asset),
+                  title: title || getAssetTitle(asset),
+                })}
+                label={`Open ${getAssetTitle(asset)} in immersive view`}
+              >
+                <img
+                  src={asset.url}
+                  alt={altText || getAssetTitle(asset)}
+                  className="max-h-[48vh] w-auto max-w-full object-contain"
+                  onLoad={(event) => {
+                    const image = event.currentTarget;
+                    setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+                  }}
+                />
+              </ImmersiveMediaFrame>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
