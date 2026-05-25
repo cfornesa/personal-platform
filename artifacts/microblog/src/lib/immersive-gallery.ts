@@ -399,9 +399,10 @@ export function createKeyboardNavigation(
     maxX?: number;
     minZ?: number;
     maxZ?: number;
+    container?: HTMLElement;
   } = {},
 ): KeyboardNavigation {
-  const { speed = 0.05, minX = -8, maxX = 8, minZ = 0.5, maxZ = Infinity } = options;
+  const { speed = 0.05, minX = -8, maxX = 8, minZ = 0.5, maxZ = Infinity, container } = options;
   const keys = new Set<string>();
 
   function onKeyDown(e: KeyboardEvent) {
@@ -448,14 +449,22 @@ export function createKeyboardNavigation(
     // Calling it here too would double-process sphericalDelta.
   }
 
+  function onContainerClick() { container?.focus(); }
+  if (container) {
+    container.tabIndex = 0;
+    container.addEventListener("click", onContainerClick, { passive: true });
+  }
+  const target: EventTarget = container ?? window;
+
   function dispose() {
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
+    target.removeEventListener("keydown", onKeyDown);
+    target.removeEventListener("keyup", onKeyUp);
+    if (container) container.removeEventListener("click", onContainerClick);
     keys.clear();
   }
 
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
+  target.addEventListener("keydown", onKeyDown);
+  target.addEventListener("keyup", onKeyUp);
   return { update, dispose };
 }
 

@@ -13,6 +13,7 @@ type ArtPieceRendererProps = {
   title?: string;
   onStatusChange?: (status: { valid: boolean; error: string | null; warning?: string | null }) => void;
   immersiveHref?: string | null;
+  diagnostics?: boolean;
 };
 
 export function ArtPieceRenderer({
@@ -25,6 +26,7 @@ export function ArtPieceRenderer({
   title,
   onStatusChange,
   immersiveHref,
+  diagnostics = false,
 }: ArtPieceRendererProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -43,7 +45,7 @@ export function ArtPieceRenderer({
     return () => window.removeEventListener("message", handleMessage);
   }, [onStatusChange]);
 
-  const srcDoc = buildArtPieceSrcDoc(engine, code, htmlCode, cssCode);
+  const srcDoc = buildArtPieceSrcDoc(engine, code, htmlCode, cssCode, { diagnostics });
 
   const iframe = (
     <iframe
@@ -51,7 +53,7 @@ export function ArtPieceRenderer({
       srcDoc={srcDoc}
       title={title}
       className="w-full rounded-xl border border-border bg-black/5"
-      style={{ minHeight: height }}
+      style={{ height: height, minHeight: height }}
       sandbox="allow-scripts allow-same-origin"
       frameBorder="0"
     />

@@ -19,6 +19,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useToast } from "@/hooks/use-toast";
 
 const TASK_PREF_NONE = "__none__";
+const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe"] as const;
 
 type VendorDraftState = Record<string, { enabled: boolean; model: string; apiKey: string }>;
 
@@ -67,8 +68,11 @@ export default function AdminAiPage() {
   const updateAiSettings = useUpdateMyAiSettings({
     mutation: {
       onSuccess: (data) => {
-        queryClient.invalidateQueries({ queryKey: getGetMyAiSettingsQueryKey() });
+        queryClient.setQueryData(getGetMyAiSettingsQueryKey(), data);
         setDrafts(createDraftState(data.settings));
+        setPrefTextImprove(data.preferredVendorTextImprove ?? TASK_PREF_NONE);
+        setPrefAltText(data.preferredVendorAltText ?? TASK_PREF_NONE);
+        setPrefArtPiece(data.preferredArtPieceVendor ?? TASK_PREF_NONE);
         setError(null);
         toast({
           title: "AI settings saved",
@@ -152,6 +156,11 @@ export default function AdminAiPage() {
                           ? "Configured. Leave the API key field blank to keep the saved key."
                           : "Not configured yet. Add a model and API key to enable it."}
                       </p>
+                      {setting.vendor === "mistral-vibe" && (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          Uses your Mistral Vibe API key. Confirmed model as of May 2026: <code className="font-mono">mistral-vibe-cli-latest</code>
+                        </p>
+                      )}
                     </div>
                     <label className="flex items-center gap-2 text-sm font-medium">
                       <Checkbox
@@ -186,7 +195,15 @@ export default function AdminAiPage() {
                             },
                           }))
                         }
-                        placeholder={setting.vendor === "opencode-zen" ? "big-pickle" : "Enter the provider model slug"}
+                        placeholder={
+                          setting.vendor === "opencode-zen"
+                            ? "big-pickle"
+                            : setting.vendor === "mistral"
+                            ? "mistral-large-latest"
+                            : setting.vendor === "mistral-vibe"
+                            ? "mistral-vibe-cli-latest"
+                            : "Enter the provider model slug"
+                        }
                         className={yellowInputClass}
                       />
                     </div>
@@ -228,23 +245,26 @@ export default function AdminAiPage() {
         {(() => {
           const enabledVendors = settings.filter((s) => s.enabled && s.configured);
           if (enabledVendors.length === 0) return null;
+          const enabledPieceVendors = enabledVendors.filter((v) =>
+            (PIECE_GENERATION_VENDORS as readonly string[]).includes(v.vendor),
+          );
           const taskPrefSelectClass =
             "h-9 w-full rounded-none border-2 border-yellow-400 bg-zinc-100 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(234,179,8,1)] focus:outline-none dark:bg-zinc-950 dark:text-zinc-50";
           const taskPrefs = [
-            { id: "textImprove", label: "Text improvement", value: prefTextImprove, onChange: setPrefTextImprove },
-            { id: "altText", label: "Visual descriptions", value: prefAltText, onChange: setPrefAltText },
-            { id: "artPiece", label: "Art pieces", value: prefArtPiece, onChange: setPrefArtPiece },
+            { id: "textImprove", label: "Text improvement", value: prefTextImprove, onChange: setPrefTextImprove, vendors: enabledVendors },
+            { id: "altText", label: "Visual descriptions", value: prefAltText, onChange: setPrefAltText, vendors: enabledVendors },
+            { id: "artPiece", label: "Art pieces", value: prefArtPiece, onChange: setPrefArtPiece, vendors: enabledPieceVendors },
           ];
           return (
             <Card className="border-2 border-yellow-400 bg-zinc-50 text-zinc-950 shadow-[6px_6px_0_0_rgba(0,0,0,0.95)] dark:bg-zinc-950 dark:text-zinc-50">
               <CardHeader>
                 <CardTitle>Task Preferences</CardTitle>
                 <CardDescription className="text-zinc-700 dark:text-zinc-300">
-                  Set a default vendor per task so you are not prompted each time. Only enabled vendors appear here.
+                  Set a default vendor per task so you are not prompted each time. Only enabled vendors appear here. Art pieces are restricted to Google, Mistral AI, and Mistral Vibe.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {taskPrefs.map(({ id, label, value, onChange }) => (
+                {taskPrefs.map(({ id, label, value, onChange, vendors }) => (
                   <div key={id} className="grid gap-2 md:grid-cols-[180px_1fr]">
                     <Label htmlFor={`task-pref-${id}`} className="flex items-center text-sm font-medium">{label}</Label>
                     <select
@@ -254,7 +274,7 @@ export default function AdminAiPage() {
                       className={taskPrefSelectClass}
                     >
                       <option value={TASK_PREF_NONE}>None (ask each time)</option>
-                      {enabledVendors.map((v) => (
+                      {vendors.map((v) => (
                         <option key={v.vendor} value={v.vendor}>{v.vendorLabel}</option>
                       ))}
                     </select>

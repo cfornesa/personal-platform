@@ -5,6 +5,8 @@ import {
 } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
+const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe"] as const;
+
 export function useOwnerAiVendors() {
   const { currentUser, isOwner } = useCurrentUser();
   const aiSettings = useGetMyAiSettings({
@@ -21,8 +23,13 @@ export function useOwnerAiVendors() {
       label: setting.vendorLabel,
     }));
 
+  const pieceVendors = aiVendors.filter((v) =>
+    (PIECE_GENERATION_VENDORS as readonly string[]).includes(v.id),
+  );
+
   return {
     aiVendors,
+    pieceVendors,
     isLoading: aiSettings.isLoading,
     preferredArtPieceVendor:
       (aiSettings.data?.preferredArtPieceVendor as ProcessAiTextBodyVendor | null | undefined) ?? null,

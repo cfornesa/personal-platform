@@ -23,7 +23,7 @@ const DISALLOWED_CODE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
 
 const MAX_ART_PIECE_ELEMENTS = 24;
 const MAX_ART_PIECE_ATTEMPTS = 5;
-const ART_PIECE_TIMEOUT_MS = 120_000;
+const ART_PIECE_TIMEOUT_MS = 600_000;
 const VALIDATED_DRAFT_TTL_MS = 10 * 60 * 1000;
 
 const colorSchema = z
@@ -426,12 +426,16 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     systemPrompt: [
       "You generate reusable interactive art sketches for a self-hosted p5 runtime.",
       "You MUST return your response as three separate Markdown code blocks (```html, ```css, and ```javascript).",
-      "Include a <div> for the sketch and relevant CSS for centering or sizing, even if they are minimal.",
+      "The HTML block must contain ONLY a mount element such as `<div id=\"canvas-container\"></div>`. Do NOT include <style>, <script>, <link>, <base>, <html>, <head>, or <body> tags in the HTML block.",
+      "The CSS block may style only mount IDs/classes that you define in the HTML block. Do NOT target `html`, `body`, or global `canvas`, and do NOT use `position: fixed`, `display: none`, `visibility: hidden`, or `opacity: 0`.",
       "Do NOT use import statements for p5; the runtime provides it globally.",
       "The JS must assign its sketch function to `window.sketch` like this: `window.sketch = (p) => { p.setup = () => {}; p.draw = () => {}; };`.",
+      "Always call `p.createCanvas(p.windowWidth, p.windowHeight)` inside `setup()` so the sketch fills the iframe. Do NOT hardcode small fixed dimensions like `createCanvas(400, 400)`.",
       "CRITICAL: Animations MUST be infinite and engaging. Use periodic functions like Math.sin() or Math.cos() combined with p.frameCount to ensure movement loops or pulsates indefinitely.",
       "Avoid logic that permanently removes all elements from the screen. If elements are destroyed, they must be periodically respawned.",
       "Keep the composition self-contained and visually intentional.",
+      "NEVER use `p` as a variable name for anything other than the p5 instance. In forEach/map/filter callbacks and class instances, use names like `particle`, `item`, `shape`, `obj` — using `p` shadows the outer p5 instance and causes all p5 calls inside the callback to fail.",
+      "Always initialize every state/config object inside `setup()`, not at the top of the sketch. In `draw()` and event handlers, guard any access to objects that might not yet exist: `if (!myObj) return;`. Do NOT call methods on variables that are declared but not yet initialized.",
     ].join(" "),
     compile: compileP5StructuredSpec, // Kept for backwards compatibility
     preflight: preflightP5Code,
@@ -441,9 +445,19 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     systemPrompt: [
       "You generate reusable interactive art sketches for a self-hosted c2.js runtime.",
       "You MUST return your response as three separate Markdown code blocks (```html, ```css, and ```javascript).",
-      "Include a <canvas> for the sketch and relevant CSS for centering or sizing.",
+      "The HTML block must contain ONLY a mount canvas such as `<canvas id=\"piece-canvas\"></canvas>`. Do NOT include <style>, <script>, <link>, <base>, <html>, <head>, or <body> tags in the HTML block.",
+      "The CSS block may style only mount IDs/classes that you define in the HTML block. Do NOT target `html`, `body`, or global `canvas`, and do NOT use `position: fixed`, `display: none`, `visibility: hidden`, or `opacity: 0`.",
       "Do NOT use import statements for c2; the runtime provides it globally.",
-      "The JS must assign its setup function to `window.sketch` like this: `window.sketch = (runtime) => { const { c2, canvas, startFrame } = runtime; /* ... */ };`.",
+      "The JS must assign its setup function to `window.sketch` like this: `window.sketch = (runtime) => { const { c2, canvas, startFrame } = runtime; const renderer = new c2.Renderer(canvas); startFrame((frameCount) => { renderer.clear(); /* draw */ }); };`. CALL `startFrame(handler)` inside the sketch to register the animation loop — do NOT return it or return an object containing it.",
+      "Do NOT include any <script src> tags — the runtime is already loaded, and any <script src> referencing an external file will cause a fatal error.",
+      "Use `new c2.Renderer(canvas)` to create the renderer. Do NOT call any canvas-sizing or canvas-context methods directly.",
+      "RENDERER API (call on the renderer object): renderer.clear(), renderer.clear(cssColor) [fills canvas with that color — use this for background fills], renderer.fill(cssColor), renderer.stroke(cssColor), renderer.fill(false), renderer.stroke(false), renderer.lineWidth(n), renderer.alpha(a), renderer.fontSize(n), renderer.fontFamily(f), renderer.textAlign(a), renderer.text(str,x,y). IMPORTANT: renderer.background(c) only sets a CSS style and does NOT paint the canvas — NEVER use renderer.background() for background fills; use renderer.clear('#color') instead.",
+      "DRAWING METHODS — use these exact signatures: renderer.circle(x,y,r) OR renderer.circle(new c2.Circle(x,y,r)); renderer.rect(x,y,w,h) OR renderer.rect(new c2.Rect(x,y,w,h)); renderer.line(x1,y1,x2,y2) OR renderer.line(new c2.Line(p1,p2)); renderer.ellipse(x,y,rx,ry) [no c2.Ellipse constructor exists — always call directly]; renderer.triangle(x1,y1,x2,y2,x3,y3); renderer.polygon([{x,y},...]); renderer.arc(new c2.Arc(p,r,start,end)); renderer.sector(new c2.Sector(p,r1,r2,start,end)).",
+      "NEVER use: c2.Ellipse, c2.Text, c2.Path, c2.Shape, beginShape, endShape, vertex, bezierVertex, curveVertex, noFill, noStroke, push, pop, strokeWeight, beginFill, endFill — these do not exist in c2.js. renderer.fill() and renderer.stroke() each take exactly ONE argument (a CSS color string, e.g. '#ff0000'). Do not call renderer.draw(), renderer.animation(), or renderer.loop() — the runtime drives the animation loop.",
+      "The `c2` library object comes from `runtime.c2` — always destructure it as `const { c2, canvas, startFrame } = runtime`. Do NOT assume `c2` is a global variable.",
+      "Do NOT use `c2.Ease`, `c2.Mouse`, `c2.Keyboard`, `c2.Touch`, `.linear`, `.pressed`, or any c2 input/easing helper. Those helpers are not provided by this runtime. For easing, write local math functions such as `const ease = (t) => t * t * (3 - 2 * t);`. For motion, use `frameCount`, `Math.sin`, and `Math.cos`.",
+      "ALWAYS use `canvas.width` and `canvas.height` (not hardcoded pixel values) for ALL coordinate and size calculations — the canvas dimensions vary by context. To center a shape: `canvas.width/2, canvas.height/2`. To fill the background: draw from `0,0` to `canvas.width, canvas.height`.",
+      "NEVER call `document.body.appendChild(canvas)` or any DOM method that moves the canvas element. The runtime manages canvas placement.",
       "CRITICAL: Animations MUST be infinite. Use the frameCount passed to startFrame() with periodic functions like Math.sin() to ensure the piece loops or pulsates indefinitely. Respawn elements if they move off-screen or are destroyed.",
       "Keep the work visually intentional.",
     ].join(" "),
@@ -458,8 +472,13 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
       "Include a container <div> or <canvas> and relevant CSS for centering or sizing.",
       "The runtime provides THREE globally. Do NOT use import statements.",
       "The JS must assign its setup function to `window.sketch` like this:",
-      "`window.sketch = (runtime) => { const { THREE, canvas, startFrame } = runtime; /* setup scene, return cleanup function */ return () => {}; };`.",
-      "CRITICAL: Animations MUST be infinite. Use the frameCount passed to startFrame() with Math.sin/cos to create periodic motion or pulsating effects. Ensure elements don't just disappear; the scene must remain visually active indefinitely.",
+      "`window.sketch = (runtime) => { const { THREE, canvas, startFrame, width, height } = runtime; /* setup scene, return cleanup function */ return () => {}; };`.",
+      "CRITICAL: Always create the WebGLRenderer with the provided canvas: `new THREE.WebGLRenderer({ canvas, antialias: true })`. If you omit `{ canvas }`, Three.js creates a second canvas element that is not positioned in the DOM — the scene will be invisible. NEVER call `document.body.appendChild(renderer.domElement)` — the canvas is already in the correct position.",
+      "CRITICAL: The HTML container div MUST use id=\"container\" — do NOT use custom ids such as 'book-container', 'scene-container', 'app', or 'root'. The runtime only mounts the WebGL canvas inside elements with known ids (container, canvas-container, sketch-container). Any other id causes the canvas to be placed outside the styled container, making the scene invisible in the normal preview.",
+      "CRITICAL: Use `width` and `height` from the runtime for ALL sizing — never use `window.innerWidth` or `window.innerHeight`. Pass `false` as the third argument to `renderer.setSize(width, height, false)` to prevent CSS override. Do NOT add `window.addEventListener('resize', ...)` — the runtime handles resize. Incorrect sizing makes the scene invisible in the default post view.",
+      "CRITICAL: If you use MeshPhongMaterial, MeshLambertMaterial, or MeshStandardMaterial, you MUST add at least one light (e.g. AmbientLight + DirectionalLight). These materials are invisible without lights. MeshBasicMaterial does not need lights and is suitable for simple solid-colored objects.",
+      "Prefer `startFrame(handler)` for animation and render inside that handler. If you use another Three.js animation pattern, it must still render into the provided canvas and remain self-contained.",
+      "CRITICAL: Animations MUST be infinite. Use Math.sin/cos, elapsed time, frameCount, or a supervised render loop to create periodic motion or pulsating effects. Ensure elements don't just disappear; the scene must remain visually active indefinitely.",
       "Keep the scene self-contained.",
     ].join(" "),
     normalizeParsed: normalizeThreeStructuredSpecInput,
@@ -973,6 +992,21 @@ function preflightP5Code(code: string) {
 
 function preflightC2Code(code: string) {
   const validatedCode = validateArtPieceCode(code);
+  const c2DisallowedPatterns: Array<{ pattern: RegExp; message: string }> = [
+    {
+      pattern: /\bc2\s*\.\s*Ease\b|\bEase\s*\.\s*linear\b|\.linear\s*\(/,
+      message: "Generated C2.js code cannot use c2.Ease, Ease.linear, or .linear() easing helpers; define a local easing function instead.",
+    },
+    {
+      pattern: /\bc2\s*\.\s*(Mouse|Keyboard|Touch)\b|\b(Mouse|Keyboard|Touch)\s*\(|\.(pressed|released|dragged)\b/,
+      message: "Generated C2.js code cannot use c2 input helpers or .pressed/.released/.dragged state; this runtime only provides c2, canvas, and startFrame.",
+    },
+  ];
+  for (const rule of c2DisallowedPatterns) {
+    if (rule.pattern.test(validatedCode)) {
+      throw new Error(rule.message);
+    }
+  }
   const mockWindow = createPreflightPermissiveMock();
   let sketchFactory: any = null;
 
@@ -994,6 +1028,15 @@ function preflightC2Code(code: string) {
 
   if (typeof sketchFactory !== "function") {
     throw new Error("Generated code did not define window.sketch or evaluate to a function");
+  }
+
+  const runtime = createMockC2Runtime();
+  try {
+    sketchFactory(runtime);
+    runtime.flush();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown C2.js runtime error";
+    throw new Error(`Generated C2.js code failed server preflight: ${message}`);
   }
 
   return validatedCode;
@@ -1448,27 +1491,86 @@ function createMockC2Runtime() {
       ensureFinite(width, height);
     }
     background(_color: string) {}
-    clear() {}
+    clear(_color?: string) {}
     fill(_value: string | boolean) {}
     stroke(_value: string | boolean) {}
+    alpha(value: number) {
+      ensureFinite(value);
+    }
+    fontSize(value: number) {
+      ensureFinite(value);
+    }
+    fontFamily(_value: string) {}
+    textAlign(_value: string) {}
+    text(value: string, x: number, y: number) {
+      if (typeof value !== "string") {
+        throw new Error("Sketch attempted to draw non-string text");
+      }
+      ensureFinite(x, y);
+    }
     lineWidth(weight: number) {
       ensureFinite(weight);
     }
-    circle(circle: { x: number; y: number; r: number }) {
-      ensureFinite(circle.x, circle.y, circle.r);
+    circle(circleOrX: { x: number; y: number; r: number } | number, y?: number, r?: number) {
+      if (typeof circleOrX === "number") {
+        ensureFinite(circleOrX, y as number, r as number);
+        return;
+      }
+      ensureFinite(circleOrX.x, circleOrX.y, circleOrX.r);
     }
-    rect(rect: { x: number; y: number; w: number; h: number }) {
-      ensureFinite(rect.x, rect.y, rect.w, rect.h);
+    rect(rectOrX: { x: number; y: number; w: number; h: number } | number, y?: number, w?: number, h?: number) {
+      if (typeof rectOrX === "number") {
+        ensureFinite(rectOrX, y as number, w as number, h as number);
+        return;
+      }
+      ensureFinite(rectOrX.x, rectOrX.y, rectOrX.w, rectOrX.h);
     }
-    line(line: { x1: number; y1: number; x2: number; y2: number }) {
-      ensureFinite(line.x1, line.y1, line.x2, line.y2);
+    line(lineOrX1: { x1: number; y1: number; x2: number; y2: number } | number, y1?: number, x2?: number, y2?: number) {
+      if (typeof lineOrX1 === "number") {
+        ensureFinite(lineOrX1, y1 as number, x2 as number, y2 as number);
+        return;
+      }
+      ensureFinite(lineOrX1.x1, lineOrX1.y1, lineOrX1.x2, lineOrX1.y2);
+    }
+    ellipse(x: number, y: number, rx: number, ry: number) {
+      ensureFinite(x, y, rx, ry);
+    }
+    triangle(x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) {
+      ensureFinite(x1, y1, x2, y2, x3, y3);
+    }
+    polygon(points: Array<{ x: number; y: number }>) {
+      if (!Array.isArray(points)) {
+        throw new Error("Sketch attempted to draw a polygon without point array");
+      }
+      points.forEach((point) => ensureFinite(point.x, point.y));
+    }
+    arc(arc: { p?: { x: number; y: number }; r?: number; start?: number; end?: number }) {
+      ensureFinite(arc.p?.x as number, arc.p?.y as number, arc.r as number, arc.start as number, arc.end as number);
+    }
+    sector(sector: { p?: { x: number; y: number }; r1?: number; r2?: number; start?: number; end?: number }) {
+      ensureFinite(
+        sector.p?.x as number,
+        sector.p?.y as number,
+        sector.r1 as number,
+        sector.r2 as number,
+        sector.start as number,
+        sector.end as number,
+      );
     }
   }
 
   return {
-    canvas: {},
+    canvas: { width: 1280, height: 720 },
     c2: {
       Renderer,
+      Point: class Point {
+        x: number;
+        y: number;
+        constructor(x: number, y: number) {
+          this.x = x;
+          this.y = y;
+        }
+      },
       Circle: class Circle {
         x: number;
         y: number;
@@ -1503,6 +1605,32 @@ function createMockC2Runtime() {
           this.y2 = y2;
         }
       },
+      Arc: class Arc {
+        p: { x: number; y: number };
+        r: number;
+        start: number;
+        end: number;
+        constructor(p: { x: number; y: number }, r: number, start: number, end: number) {
+          this.p = p;
+          this.r = r;
+          this.start = start;
+          this.end = end;
+        }
+      },
+      Sector: class Sector {
+        p: { x: number; y: number };
+        r1: number;
+        r2: number;
+        start: number;
+        end: number;
+        constructor(p: { x: number; y: number }, r1: number, r2: number, start: number, end: number) {
+          this.p = p;
+          this.r1 = r1;
+          this.r2 = r2;
+          this.start = start;
+          this.end = end;
+        }
+      },
     },
     startFrame(handler: (frameCount: number) => void) {
       frameHandler = handler;
@@ -1529,38 +1657,75 @@ function createMockThreeRuntime() {
       this.y = y;
       this.z = z;
     }
+    clone() {
+      const next = new Vector3();
+      next.set(this.x, this.y, this.z);
+      return next;
+    }
+    copy(value: { x?: number; y?: number; z?: number }) {
+      this.x = value.x ?? this.x;
+      this.y = value.y ?? this.y;
+      this.z = value.z ?? this.z;
+      return this;
+    }
+    normalize() {
+      return this;
+    }
+    multiplyScalar(_value: number) {
+      return this;
+    }
   }
 
   class Euler extends Vector3 {}
 
-  class Mesh {
+  class Object3D {
     position = new Vector3();
     rotation = new Euler();
     scale = new Vector3();
+    children: unknown[] = [];
+    castShadow = false;
+    receiveShadow = false;
+    visible = true;
+    add(...values: unknown[]) {
+      this.children.push(...values);
+    }
+    remove(...values: unknown[]) {
+      this.children = this.children.filter((child) => !values.includes(child));
+    }
+    lookAt(_x: number | Vector3, _y?: number, _z?: number) {}
+  }
+
+  class Mesh extends Object3D {
     geometry: { dispose: () => void };
     material: { dispose: () => void };
     constructor(geometry: { dispose: () => void }, material: { dispose: () => void }) {
+      super();
       this.geometry = geometry;
       this.material = material;
     }
   }
 
-  class Scene {
+  class Scene extends Object3D {
     background: unknown;
-    children: unknown[] = [];
-    add(value: unknown) {
-      this.children.push(value);
+  }
+
+  class PerspectiveCamera extends Object3D {
+    aspect: number;
+    updateProjectionMatrix() {}
+    constructor(_fov: number, aspect: number, _near: number, _far: number) {
+      super();
+      this.aspect = aspect;
     }
   }
 
-  class PerspectiveCamera {
-    position = new Vector3();
-    lookAt(_x: number, _y: number, _z: number) {}
-    constructor(_fov: number, _aspect: number, _near: number, _far: number) {}
-  }
-
   class WebGLRenderer {
-    constructor(_input: unknown) {}
+    domElement: unknown;
+    shadowMap: { enabled: boolean; type?: unknown } = { enabled: false };
+    constructor(input: { canvas?: unknown } | undefined) {
+      this.domElement = input?.canvas ?? {};
+    }
+    setPixelRatio(_value: number) {}
+    setClearColor(_value: unknown) {}
     setSize(_width: number, _height: number, _updateStyle: boolean) {}
     render(_scene: unknown, _camera: unknown) {}
     dispose() {}
@@ -1570,38 +1735,104 @@ function createMockThreeRuntime() {
     constructor(_value: string) {}
   }
 
-  class BaseLight {
-    position = new Vector3();
-    constructor(_color: string, _intensity: number) {}
+  class BaseLight extends Object3D {
+    shadow = {
+      mapSize: { width: 0, height: 0 },
+      camera: {},
+      bias: 0,
+      radius: 0,
+    };
+    constructor(_color: string, _intensity: number) {
+      super();
+    }
   }
 
-  return {
-    canvas: {},
-    THREE: {
-      Scene,
-      Color,
-      PerspectiveCamera,
-      WebGLRenderer,
-      AmbientLight: BaseLight,
-      DirectionalLight: BaseLight,
-      BoxGeometry: class {
-        dispose() {}
-      },
-      SphereGeometry: class {
-        dispose() {}
-      },
-      PlaneGeometry: class {
-        dispose() {}
-      },
-      TorusKnotGeometry: class {
-        dispose() {}
-      },
-      MeshStandardMaterial: class {
-        dispose() {}
-        constructor(_input: unknown) {}
-      },
-      Mesh,
+  class GenericDisposable {
+    dispose() {}
+    constructor(..._args: unknown[]) {}
+  }
+
+  class GenericObject extends Object3D {
+    dispose() {}
+    set(..._args: unknown[]) {
+      return this;
+    }
+    clone() {
+      return new GenericObject();
+    }
+    constructor(..._args: unknown[]) {
+      super();
+    }
+  }
+
+  const threeApi = {
+    Scene,
+    Color,
+    PerspectiveCamera,
+    OrthographicCamera: PerspectiveCamera,
+    WebGLRenderer,
+    Object3D,
+    Group: class Group extends Object3D {},
+    AmbientLight: BaseLight,
+    DirectionalLight: BaseLight,
+    PointLight: BaseLight,
+    SpotLight: BaseLight,
+    HemisphereLight: BaseLight,
+    BoxGeometry: GenericDisposable,
+    SphereGeometry: GenericDisposable,
+    PlaneGeometry: GenericDisposable,
+    TorusKnotGeometry: GenericDisposable,
+    TorusGeometry: GenericDisposable,
+    CylinderGeometry: GenericDisposable,
+    ConeGeometry: GenericDisposable,
+    ExtrudeGeometry: GenericDisposable,
+    ShapeGeometry: GenericDisposable,
+    BufferGeometry: GenericDisposable,
+    MeshStandardMaterial: GenericDisposable,
+    MeshBasicMaterial: GenericDisposable,
+    MeshPhongMaterial: GenericDisposable,
+    MeshLambertMaterial: GenericDisposable,
+    CanvasTexture: GenericDisposable,
+    TextureLoader: class TextureLoader {
+      load(_url: string) {
+        return new GenericObject();
+      }
     },
+    Mesh,
+    Vector2: Vector3,
+    Vector3,
+    Euler,
+    MathUtils: {
+      degToRad(value: number) {
+        return (value * Math.PI) / 180;
+      },
+      lerp(a: number, b: number, t: number) {
+        return a + ((b - a) * t);
+      },
+      clamp(value: number, min: number, max: number) {
+        return Math.max(min, Math.min(max, value));
+      },
+    },
+    PCFSoftShadowMap: "PCFSoftShadowMap",
+    DoubleSide: "DoubleSide",
+    FrontSide: "FrontSide",
+    BackSide: "BackSide",
+    SRGBColorSpace: "SRGBColorSpace",
+  };
+
+  return {
+    canvas: { width: 1280, height: 720, style: {} },
+    width: 1280,
+    height: 720,
+    size: { width: 1280, height: 720 },
+    THREE: new Proxy(threeApi, {
+      get(target, prop: string | symbol) {
+        if (prop in target) {
+          return target[prop as keyof typeof target];
+        }
+        return GenericObject;
+      },
+    }),
     startFrame(handler: (frameCount: number) => void) {
       frameHandler = handler;
     },

@@ -24,6 +24,7 @@ import {
   generateArtPiece as requestGeneratedArtPiece,
   useCreateArtPiece,
   useDescribeImage,
+  useListArtPieces,
   useProcessAiText,
   useUpdateArtPiece,
   useUpdateMediaAltText,
@@ -74,6 +75,8 @@ type RichPostEditorProps = {
    */
   showCategories?: boolean;
   aiVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
+  /** Subset of aiVendors that support piece generation (google, mistral, mistral-vibe). */
+  pieceVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
   /** Pre-selected vendor for text improvement (skips dropdown). */
   preferredVendorTextImprove?: ProcessAiTextBodyVendor | null;
   /** Pre-selected vendor for image alt text generation. */
@@ -217,6 +220,7 @@ export function RichPostEditor({
   initialPlatformIds = [],
   showCategories = true,
   aiVendors = [],
+  pieceVendors = [],
   preferredVendorTextImprove,
   preferredVendorAltText,
   platformConnections,
@@ -243,6 +247,9 @@ export function RichPostEditor({
   const [categoryIds, setCategoryIds] = useState<number[]>(initialCategoryIds);
   const [platformIds, setPlatformIds] = useState<number[]>(initialPlatformIds ?? []);
   const [substackSendNewsletter, setSubstackSendNewsletter] = useState(false);
+  const artPiecesList = useListArtPieces();
+  const hasPieces = (artPiecesList.data?.pieces?.length ?? 0) > 0;
+
   const [selectedAiVendor, setSelectedAiVendor] = useState<ProcessAiTextBodyVendor | "">(aiVendors[0]?.id ?? "");
   const [selectedAiMode, setSelectedAiMode] = useState<"text" | "piece">("text");
   const [selectedPieceEngine, setSelectedPieceEngine] = useState<ArtPieceEngine>("p5");
@@ -342,7 +349,15 @@ export function RichPostEditor({
     if (!aiVendors.some((vendor) => vendor.id === selectedAiVendor)) {
       setSelectedAiVendor(aiVendors[0]!.id);
     }
-  }, [aiVendors, selectedAiVendor]);
+
+    if (selectedAiMode === "piece") {
+      if (pieceVendors.length === 0 && !hasPieces) {
+        setSelectedAiMode("text");
+      } else if (pieceVendors.length > 0 && !pieceVendors.some((v) => v.id === selectedAiVendor) && pieceVendors[0]) {
+        setSelectedAiVendor(pieceVendors[0].id);
+      }
+    }
+  }, [aiVendors, hasPieces, pieceVendors, selectedAiVendor, selectedAiMode]);
 
   useEffect(() => {
     if (preferredVendorTextImprove && aiVendors.some((v) => v.id === preferredVendorTextImprove)) {
@@ -1132,10 +1147,16 @@ export function RichPostEditor({
                 aria-label="AI Mode"
                 className={aiModeSelectClass}
                 value={selectedAiMode}
-                onChange={(event) => setSelectedAiMode(event.target.value as "text" | "piece")}
+                onChange={(event) => {
+                  const next = event.target.value as "text" | "piece";
+                  setSelectedAiMode(next);
+                  if (next === "piece" && !pieceVendors.some((v) => v.id === selectedAiVendor)) {
+                    if (pieceVendors[0]) setSelectedAiVendor(pieceVendors[0].id);
+                  }
+                }}
               >
                 <option value="text">Text</option>
-                <option value="piece">Piece</option>
+                {(pieceVendors.length > 0 || hasPieces) ? <option value="piece">Piece</option> : null}
               </select>
               {selectedAiMode === "piece" ? (
                 <select
@@ -1155,11 +1176,14 @@ export function RichPostEditor({
                 value={selectedAiVendor}
                 onChange={(event) => setSelectedAiVendor(event.target.value as ProcessAiTextBodyVendor)}
               >
-                {aiVendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.label}
-                  </option>
-                ))}
+                {selectedAiMode === "piece" && pieceVendors.length === 0
+                  ? <option value="" disabled>No piece vendors enabled</option>
+                  : (selectedAiMode === "piece" ? pieceVendors : aiVendors).map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.label}
+                      </option>
+                    ))
+                }
               </select>
               <Button
                 type="button"

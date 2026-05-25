@@ -670,19 +670,19 @@ export const UpdateMeResponse = zod.object({
  */
 export const GetMyAiSettingsResponse = zod.object({
   "availableVendors": zod.array(zod.object({
-  "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "label": zod.string()
 })),
   "settings": zod.array(zod.object({
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "vendorLabel": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
   "model": zod.string().nullish()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable()
 })
 
 
@@ -697,31 +697,31 @@ export const updateMyAiSettingsBodySettingsItemApiKeyMax = 4096;
 
 export const UpdateMyAiSettingsBody = zod.object({
   "settings": zod.array(zod.object({
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "enabled": zod.boolean().optional(),
   "model": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemModelMax).optional(),
   "apiKey": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemApiKeyMax).optional()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish()
 }).describe('Owner AI settings for all supported vendors. Each vendor keeps its own\nenabled flag, model slug, and encrypted API key so the editor can\nswitch vendors without re-entering credentials.\n')
 
 export const UpdateMyAiSettingsResponse = zod.object({
   "availableVendors": zod.array(zod.object({
-  "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "label": zod.string()
 })),
   "settings": zod.array(zod.object({
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "vendorLabel": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
   "model": zod.string().nullish()
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullable()
+  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable(),
+  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable(),
+  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullable()
 })
 
 
@@ -738,13 +738,13 @@ export const processAiTextBodyContentMax = 40000;
 
 export const ProcessAiTextBody = zod.object({
   "content": zod.string().max(processAiTextBodyContentMax),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "mode": zod.enum(['html', 'text']).optional()
 })
 
 export const ProcessAiTextResponse = zod.object({
   "text": zod.string(),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "vendorLabel": zod.string(),
   "model": zod.string()
 })
@@ -755,7 +755,7 @@ export const ProcessAiTextResponse = zod.object({
  */
 export const DescribeImageBody = zod.object({
   "imageUrl": zod.string(),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "existingAltText": zod.string().optional().describe('Optional existing alt text to use as context for refinement')
 })
 
@@ -788,7 +788,7 @@ export const ListArtPiecesResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
   "generationAttemptCount": zod.number(),
@@ -834,7 +834,7 @@ export const generateArtPieceBodyPromptMax = 4000;
 export const GenerateArtPieceBody = zod.object({
   "prompt": zod.string().min(1).max(generateArtPieceBodyPromptMax),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google'])
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe'])
 })
 
 export const GenerateArtPieceResponse = zod.object({
@@ -846,7 +846,7 @@ export const GenerateArtPieceResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "notes": zod.string().nullable(),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']),
   "vendorLabel": zod.string(),
   "model": zod.string(),
   "validationStatus": zod.enum(['validated']),
@@ -885,7 +885,7 @@ export const GetArtPieceResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
   "generationAttemptCount": zod.number(),
@@ -902,7 +902,7 @@ export const GetArtPieceResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
   "generationAttemptCount": zod.number(),
@@ -954,7 +954,7 @@ export const UpdateArtPieceResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
   "generationAttemptCount": zod.number(),
@@ -1023,7 +1023,7 @@ export const GetEmbeddedArtPieceResponse = zod.object({
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google']).nullish(),
+  "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
   "generationAttemptCount": zod.number(),

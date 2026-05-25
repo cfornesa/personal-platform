@@ -578,6 +578,8 @@ export const AiVendorOptionId = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface AiVendorOption {
@@ -593,6 +595,8 @@ export const MyAiVendorSettingVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface MyAiVendorSetting {
@@ -611,6 +615,8 @@ export const MyAiSettingsPreferredArtPieceVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type MyAiSettingsPreferredVendorTextImprove = typeof MyAiSettingsPreferredVendorTextImprove[keyof typeof MyAiSettingsPreferredVendorTextImprove] | null;
@@ -621,6 +627,8 @@ export const MyAiSettingsPreferredVendorTextImprove = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type MyAiSettingsPreferredVendorAltText = typeof MyAiSettingsPreferredVendorAltText[keyof typeof MyAiSettingsPreferredVendorAltText] | null;
@@ -631,6 +639,8 @@ export const MyAiSettingsPreferredVendorAltText = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface MyAiSettings {
@@ -649,6 +659,8 @@ export const UpdateMyAiVendorSettingBodyVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface UpdateMyAiVendorSettingBody {
@@ -674,6 +686,8 @@ export const UpdateMyAiSettingsBodyPreferredArtPieceVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type UpdateMyAiSettingsBodyPreferredVendorTextImprove = typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove[keyof typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove] | null;
@@ -684,6 +698,8 @@ export const UpdateMyAiSettingsBodyPreferredVendorTextImprove = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type UpdateMyAiSettingsBodyPreferredVendorAltText = typeof UpdateMyAiSettingsBodyPreferredVendorAltText[keyof typeof UpdateMyAiSettingsBodyPreferredVendorAltText] | null;
@@ -694,6 +710,8 @@ export const UpdateMyAiSettingsBodyPreferredVendorAltText = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 /**
@@ -717,6 +735,8 @@ export const ProcessAiTextBodyVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type ProcessAiTextBodyMode = typeof ProcessAiTextBodyMode[keyof typeof ProcessAiTextBodyMode];
@@ -742,6 +762,8 @@ export const ProcessAiTextResponseVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface ProcessAiTextResponse {
@@ -770,6 +792,8 @@ export const ArtPieceVersionGenerationVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type ArtPieceVersionValidationStatus = typeof ArtPieceVersionValidationStatus[keyof typeof ArtPieceVersionValidationStatus];
@@ -852,6 +876,8 @@ export const GenerateArtPieceBodyVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export interface GenerateArtPieceBody {
@@ -883,6 +909,8 @@ export const GeneratedArtPieceDraftVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type GeneratedArtPieceDraftValidationStatus = typeof GeneratedArtPieceDraftValidationStatus[keyof typeof GeneratedArtPieceDraftValidationStatus];
@@ -1857,6 +1885,8 @@ export const DescribeImageBodyVendor = {
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
   google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
 } as const;
 
 export type DescribeImageBody = {

@@ -1,3 +1,5 @@
+import { sanitizeArtPieceHtml } from "./art-piece-runtime";
+
 export type ImmersiveRuntimeSize = {
   width: number;
   height: number;
@@ -70,6 +72,12 @@ export function createImmersiveHost(
     canvas {
       display: block;
       max-width: none;
+      position: static !important;
+      top: auto !important;
+      left: auto !important;
+      bottom: auto !important;
+      right: auto !important;
+      z-index: auto !important;
     }
   `;
 
@@ -77,7 +85,7 @@ export function createImmersiveHost(
   const markup = document.createElement("div");
   markup.style.width = "100%";
   markup.style.height = "100%";
-  markup.innerHTML = htmlCode && htmlCode.trim() ? htmlCode : defaultHtml;
+  markup.innerHTML = sanitizeArtPieceHtml(htmlCode, defaultHtml);
   host.appendChild(markup);
   document.body.appendChild(host);
   return host;

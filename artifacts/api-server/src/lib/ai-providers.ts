@@ -1,7 +1,7 @@
 import { logger } from "./logger";
 import type { AiVendor } from "./ai-settings";
 
-const AI_TIMEOUT_MS = 45_000;
+const AI_TIMEOUT_MS = 120_000;
 
 type FailureClass = "timeout" | "upstream_http" | "network" | "parse" | "unknown_model";
 type EndpointFamily = "responses" | "chat_completions" | "messages" | "generate_content";
@@ -323,6 +323,15 @@ function getTransportAttempts(input: ProcessTextInput): TransportAttempt[] {
       return getOpencodeZenTransportAttempt(input.model);
     case "opencode-go":
       return getOpencodeGoTransportAttempt(input.model);
+    case "mistral":
+    case "mistral-vibe":
+      return [
+        {
+          kind: "chat-completions",
+          url: "https://api.mistral.ai/v1/chat/completions",
+          endpointFamily: "chat_completions",
+        },
+      ];
   }
 }
 

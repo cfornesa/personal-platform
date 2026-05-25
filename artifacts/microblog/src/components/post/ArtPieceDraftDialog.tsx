@@ -115,6 +115,7 @@ export function ArtPieceDraftDialog({
                 htmlCode={draft.htmlCode}
                 cssCode={draft.cssCode}
                 onStatusChange={handleStatusChange}
+                diagnostics
               />
               {previewError ? (
                 <p className="text-sm text-destructive">

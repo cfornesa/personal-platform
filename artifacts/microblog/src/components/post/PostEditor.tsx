@@ -75,7 +75,7 @@ export function PostEditor({
   const { currentUser, isOwner } = useCurrentUser();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, preferredVendorTextImprove, preferredVendorAltText } = useOwnerAiVendors();
+  const { aiVendors, pieceVendors, preferredVendorTextImprove, preferredVendorAltText } = useOwnerAiVendors();
   const { connections: platformConnections } = useEnabledPlatformConnections();
 
   const [isExpanded, setIsExpanded] = useState(
@@ -370,6 +370,7 @@ export function PostEditor({
       cancelLabel="Cancel"
       isSubmitting={createPost.isPending || updatePost.isPending || uploadMedia.isPending}
       aiVendors={aiVendors}
+      pieceVendors={pieceVendors}
       preferredVendorTextImprove={preferredVendorTextImprove}
       preferredVendorAltText={preferredVendorAltText}
       onCancel={() => {

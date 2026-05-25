@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createImmersiveHost,
   DEFAULT_IMMERSIVE_RUNTIME_SIZE,
   getCanvasMetrics,
   resolveSketchFactory,
@@ -37,5 +38,28 @@ describe("immersive-piece-runtime helpers", () => {
       height: 400,
       aspect: 2,
     });
+  });
+
+  it("sanitizes generated HTML before inserting it into the immersive document", () => {
+    const host = createImmersiveHost(
+      `
+        <style>html, body { overflow: hidden; height: 100%; }</style>
+        <script src="https://example.test/runtime.js"></script>
+        <link rel="stylesheet" href="https://example.test/style.css">
+        <canvas id="piece-canvas" style="position: fixed"></canvas>
+      `,
+      "html, body { overflow: hidden; }",
+      '<canvas id="piece-canvas"></canvas>',
+      DEFAULT_IMMERSIVE_RUNTIME_SIZE,
+    );
+
+    expect(host.querySelector("canvas#piece-canvas")).toBeTruthy();
+    expect(host.querySelectorAll("style")).toHaveLength(1);
+    expect(host.innerHTML).not.toContain("html, body { overflow: hidden");
+    expect(host.querySelector("script")).toBeNull();
+    expect(host.querySelector("link")).toBeNull();
+    expect(host.querySelector("canvas")?.getAttribute("style")).toBeNull();
+
+    host.remove();
   });
 });

@@ -98,6 +98,63 @@ describe("art piece helpers", () => {
     expect(() => helpers.preflightCompiledArtPieceCode("c2", code)).not.toThrow();
   });
 
+  it("preflights C2 sketches that use direct renderer method signatures", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "c2",
+        `
+          window.sketch = (runtime) => {
+            const { c2, canvas, startFrame } = runtime;
+            const renderer = new c2.Renderer(canvas);
+            startFrame((frameCount) => {
+              renderer.clear("#111");
+              renderer.fill("#fff");
+              renderer.circle(canvas.width / 2, canvas.height / 2, 40 + Math.sin(frameCount) * 8);
+              renderer.ellipse(canvas.width / 2, canvas.height / 2, 120, 40);
+              renderer.text("ok", 20, 30);
+            });
+          };
+        `,
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects C2 drafts that use unsupported easing helpers before browser preview", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "c2",
+        `
+          window.sketch = (runtime) => {
+            const { c2, canvas, startFrame } = runtime;
+            const renderer = new c2.Renderer(canvas);
+            startFrame((frameCount) => {
+              const t = c2.Ease.linear(frameCount / 60);
+              renderer.circle(canvas.width / 2, canvas.height / 2, t * 40);
+            });
+          };
+        `,
+      ),
+    ).toThrow("Generated C2.js code cannot use c2.Ease");
+  });
+
+  it("rejects C2 drafts that use unsupported pressed input state before browser preview", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "c2",
+        `
+          window.sketch = (runtime) => {
+            const { c2, canvas, startFrame } = runtime;
+            const renderer = new c2.Renderer(canvas);
+            const mouse = c2.Mouse(canvas);
+            startFrame(() => {
+              if (mouse.pressed) renderer.circle(20, 20, 10);
+            });
+          };
+        `,
+      ),
+    ).toThrow("Generated C2.js code cannot use c2 input helpers");
+  });
+
   it("compiles and preflights a three scene", () => {
     const code = helpers.compileStructuredArtPieceSpec("three", {
       version: 1,
@@ -124,6 +181,91 @@ describe("art piece helpers", () => {
 
     expect(code).toContain("camera.lookAt(0, 0, 0)");
     expect(() => helpers.preflightCompiledArtPieceCode("three", code)).not.toThrow();
+  });
+
+  it("accepts Three.js sketches that use the preferred runtime contract", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "three",
+        `
+          window.sketch = (runtime) => {
+            const { THREE, canvas, startFrame, width, height } = runtime;
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+            camera.position.set(0, 1, 5);
+            camera.lookAt(0, 0, 0);
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(width, height, false);
+            const mesh = new THREE.Mesh(
+              new THREE.BoxGeometry(1, 1, 1),
+              new THREE.MeshStandardMaterial({ color: "#ffffff" }),
+            );
+            scene.add(mesh);
+            startFrame((frameCount) => {
+              mesh.rotation.y = frameCount / 60;
+              renderer.render(scene, camera);
+            });
+          };
+        `,
+      ),
+    ).not.toThrow();
+  });
+
+  it("accepts Three.js sketches that use native setAnimationLoop", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "three",
+        `
+          window.sketch = (runtime) => {
+            const { THREE, canvas, width, height } = runtime;
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setAnimationLoop(() => renderer.render(scene, camera));
+          };
+        `,
+      ),
+    ).not.toThrow();
+  });
+
+  it("allows common Three.js scene graph and shadow APIs during preflight", () => {
+    expect(() =>
+      helpers.preflightCompiledArtPieceCode(
+        "three",
+        `
+          window.sketch = (runtime) => {
+            const { THREE, canvas, startFrame, width, height } = runtime;
+            const scene = new THREE.Scene();
+            const root = new THREE.Group();
+            const pivot = new THREE.Object3D();
+            root.add(pivot);
+            scene.add(root);
+            const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.setSize(width, height, false);
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(2, 4, 3);
+            light.castShadow = true;
+            light.shadow.mapSize.width = 1024;
+            light.shadow.mapSize.height = 1024;
+            scene.add(light);
+            const mesh = new THREE.Mesh(
+              new THREE.BoxGeometry(1, 1, 1),
+              new THREE.MeshStandardMaterial({ color: "#ffffff" }),
+            );
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            pivot.add(mesh);
+            startFrame((frameCount) => {
+              root.rotation.y = frameCount / 60;
+              renderer.render(scene, camera);
+            });
+          };
+        `,
+      ),
+    ).not.toThrow();
   });
 
   it("normalizes a three box that uses scale instead of size", () => {
@@ -245,6 +387,20 @@ describe("art piece helpers", () => {
 
     expect(helpers.consumeValidatedDraftToken(draftToken, "owner-1")?.attemptCount).toBe(2);
     expect(helpers.consumeValidatedDraftToken(draftToken, "owner-1")).toBeNull();
+  });
+
+  it("includes container id requirement in Three.js system prompt", () => {
+    const prompt = helpers.getArtPieceGenerationSystemPrompt("three");
+
+    expect(prompt).toContain('id="container"');
+    expect(prompt).toContain("Any other id causes the canvas to be placed outside the styled container");
+  });
+
+  it("includes lighting requirement for standard materials in Three.js system prompt", () => {
+    const prompt = helpers.getArtPieceGenerationSystemPrompt("three");
+
+    expect(prompt).toContain("MeshPhongMaterial, MeshLambertMaterial, or MeshStandardMaterial");
+    expect(prompt).toContain("These materials are invisible without lights");
   });
 
   it("builds a live iframe embed snippet that resolves the current piece version", () => {

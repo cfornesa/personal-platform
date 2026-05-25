@@ -92,6 +92,8 @@ function ImmersiveGalleryPieceStage({
     );
 
     let sourceCanvas: HTMLCanvasElement | null = null;
+    let mcStyleObserver: MutationObserver | null = null;
+    let mcBodyObserver: MutationObserver | null = null;
     let artTexture: any = null;
     let frameId = 0;
     let detectCanvasTimer: number | null = null;
@@ -161,12 +163,20 @@ function ImmersiveGalleryPieceStage({
 
         const c2Module = await import("c2.js");
         const c2 = (c2Module.default ?? c2Module) as any;
+        (window as any).c2 = c2;
         const sketchFactory = resolveSketchFactory(code);
         const managedCanvas =
           (host.querySelector("canvas") as HTMLCanvasElement | null) ||
           document.createElement("canvas");
         managedCanvas.width = runtimeSize.width;
         managedCanvas.height = runtimeSize.height;
+        // Clear any AI-generated inline position:fixed that would escape the host's off-screen placement
+        managedCanvas.style.position = "";
+        managedCanvas.style.top = "";
+        managedCanvas.style.left = "";
+        managedCanvas.style.bottom = "";
+        managedCanvas.style.right = "";
+        managedCanvas.style.zIndex = "";
         managedCanvas.style.width = `${runtimeSize.width}px`;
         managedCanvas.style.height = `${runtimeSize.height}px`;
         if (!managedCanvas.parentNode) {
@@ -179,12 +189,45 @@ function ImmersiveGalleryPieceStage({
           let frameCount = 0;
           function tick() {
             frameCount += 1;
-            handler(frameCount);
+            try {
+              handler(frameCount);
+            } catch (err) {
+              onError(`Piece runtime error: ${(err as Error)?.message ?? String(err)}`);
+              return;
+            }
             rafId = window.requestAnimationFrame(tick);
           }
           rafId = window.requestAnimationFrame(tick);
           return () => window.cancelAnimationFrame(rafId);
         };
+
+        // MutationObserver fires as microtask after each RAF callback but before browser paint —
+        // clears any position:fixed the sketch sets before it becomes visible.
+        const mc = managedCanvas;
+        mcStyleObserver = new MutationObserver(() => {
+          if (mc.style.position || mc.style.zIndex || mc.style.top || mc.style.left || mc.style.right || mc.style.bottom) {
+            mc.style.position = "";
+            mc.style.top = "";
+            mc.style.left = "";
+            mc.style.bottom = "";
+            mc.style.right = "";
+            mc.style.zIndex = "";
+            mc.style.pointerEvents = "";
+            mc.style.width = `${runtimeSize.width}px`;
+            mc.style.height = `${runtimeSize.height}px`;
+          }
+        });
+        mcStyleObserver.observe(mc, { attributes: true, attributeFilter: ["style"] });
+
+        // If sketch code moves managedCanvas to document.body, pull it back into host.
+        mcBodyObserver = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            for (const node of m.addedNodes) {
+              if (node === mc) host.appendChild(mc);
+            }
+          }
+        });
+        mcBodyObserver.observe(document.body, { childList: true });
 
         const cleanup = sketchFactory({
           c2,
@@ -204,7 +247,7 @@ function ImmersiveGalleryPieceStage({
     }
 
     const floorNav = createFloorClickNavigation(shell.camera, shell.controls, shell.floor, stageEl);
-    const keyNav = createKeyboardNavigation(shell.controls);
+    const keyNav = createKeyboardNavigation(shell.controls, { container: stageEl });
 
     function animate() {
       frameId = requestAnimationFrame(animate);
@@ -212,6 +255,21 @@ function ImmersiveGalleryPieceStage({
       keyNav.update();
       const activeSourceCanvas = sourceCanvas;
       if (activeSourceCanvas && artTexture) {
+        if (engine !== "p5") {
+          // c2's renderer.background(c) sets canvas.style.background (CSS only, not pixels).
+          // destination-over compositing paints that color behind the already-drawn shapes.
+          const bg = activeSourceCanvas.style.background || activeSourceCanvas.style.backgroundColor;
+          if (bg) {
+            const ctx = activeSourceCanvas.getContext("2d");
+            if (ctx) {
+              ctx.save();
+              ctx.globalCompositeOperation = "destination-over";
+              ctx.fillStyle = bg;
+              ctx.fillRect(0, 0, activeSourceCanvas.width, activeSourceCanvas.height);
+              ctx.restore();
+            }
+          }
+        }
         if (presentationSurface) {
           drawContainedIntoPresentationSurface(
             presentationSurface,
@@ -264,6 +322,8 @@ function ImmersiveGalleryPieceStage({
       p5Instance?.remove?.();
       floorNav.dispose();
       keyNav.dispose();
+      mcStyleObserver?.disconnect();
+      mcBodyObserver?.disconnect();
       host.remove();
       stageEl.innerHTML = "";
     };
@@ -303,6 +363,7 @@ function ImmersiveThreePieceStage({
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     canvas.style.display = "block";
+    canvas.style.touchAction = "none";
 
     const mount =
       host.querySelector("#container") ||
@@ -396,6 +457,8 @@ function ImmersiveThreePieceStage({
     };
 
     let controls: OrbitControls | null = null;
+    const _orbitCamPos = new THREE.Vector3();
+    const _orbitTarget = new THREE.Vector3();
 
     let threeAnimFromTarget: any = null;
     let threeAnimToTarget: any = null;
@@ -404,10 +467,108 @@ function ImmersiveThreePieceStage({
     let threeAnimStart = 0;
     let threeDownX = 0;
     let threeDownY = 0;
+    let threeDownButton = 0;
     const threeRaycaster = new THREE.Raycaster();
     const threeKeys = new Set<string>();
     const _threeFwd = new THREE.Vector3();
     const _threeRight = new THREE.Vector3();
+
+    function saveOrbitState() {
+      if (!controls || !state.camera) return;
+      _orbitCamPos.copy(state.camera.position);
+      _orbitTarget.copy(controls.target);
+    }
+
+    function cancelThreeNavigationAnimation() {
+      threeAnimFromTarget = null;
+      threeAnimToTarget = null;
+      threeAnimFromCam = null;
+      threeAnimToCam = null;
+      if (controls) {
+        controls.enabled = true;
+      }
+    }
+
+    function reassertThreeCanvasContainment() {
+      if (canvas.parentElement !== stageEl) {
+        stageEl.appendChild(canvas);
+      }
+      if (canvas.style.position || canvas.style.zIndex) {
+        canvas.style.position = "";
+        canvas.style.top = "";
+        canvas.style.left = "";
+        canvas.style.bottom = "";
+        canvas.style.right = "";
+        canvas.style.zIndex = "";
+        canvas.style.pointerEvents = "";
+      }
+      canvas.style.touchAction = "none";
+    }
+
+    function getThreeNavigationLimit() {
+      if (!state.scene || state.objects.length === 0) {
+        return 5;
+      }
+      const box = new THREE.Box3().setFromObject(state.scene);
+      if (box.isEmpty()) {
+        return 5;
+      }
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      return Math.max(size.x, size.z, 1) * 0.7;
+    }
+
+    function panThreeOrbitBy(dx: number, dz: number) {
+      if (!controls || !state.camera) return;
+      const maxOffset = getThreeNavigationLimit();
+      const clampedDx = Math.max(-maxOffset, Math.min(maxOffset, dx));
+      const clampedDz = Math.max(-maxOffset, Math.min(maxOffset, dz));
+      if (Math.abs(clampedDx) < 1e-6 && Math.abs(clampedDz) < 1e-6) return;
+      controls.target.x += clampedDx;
+      controls.target.z += clampedDz;
+      state.camera.position.x += clampedDx;
+      state.camera.position.z += clampedDz;
+      controls.update();
+      saveOrbitState();
+    }
+
+    function moveThreeOrbitTo(hitPoint: any) {
+      if (!controls || !state.camera) return;
+      const dx = hitPoint.x - controls.target.x;
+      const dz = hitPoint.z - controls.target.z;
+      const maxOffset = getThreeNavigationLimit();
+      const shift = new THREE.Vector3(
+        Math.max(-maxOffset, Math.min(maxOffset, dx)),
+        0,
+        Math.max(-maxOffset, Math.min(maxOffset, dz)),
+      );
+      if (shift.lengthSq() < 0.003) return;
+
+      cancelThreeNavigationAnimation();
+      threeAnimFromTarget = controls.target.clone();
+      threeAnimToTarget = threeAnimFromTarget.clone().add(shift);
+      threeAnimFromCam = state.camera.position.clone();
+      threeAnimToCam = threeAnimFromCam.clone().add(shift);
+      threeAnimStart = performance.now();
+      controls.enabled = false;
+    }
+
+    function zoomThreeOrbit(deltaY: number) {
+      if (!controls || !state.camera) return;
+      cancelThreeNavigationAnimation();
+      const cameraPosition = state.camera.position;
+      const direction = cameraPosition.clone().sub(controls.target);
+      const currentDistance = direction.length();
+      if (currentDistance < 1e-6) return;
+      const minDistance = controls.minDistance || 0.6;
+      const maxDistance = controls.maxDistance || Math.max(40, currentDistance * 4);
+      const zoomScale = Math.exp(Math.max(-1, Math.min(1, deltaY / 600)));
+      const nextDistance = Math.max(minDistance, Math.min(maxDistance, currentDistance * zoomScale));
+      direction.setLength(nextDistance);
+      cameraPosition.copy(controls.target).add(direction);
+      controls.update();
+      saveOrbitState();
+    }
 
     function onThreeKeyDown(e: KeyboardEvent) {
       if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -421,12 +582,16 @@ function ImmersiveThreePieceStage({
     }
 
     function onThreePointerDown(e: PointerEvent) {
+      threeDownButton = e.button;
       threeDownX = e.clientX;
       threeDownY = e.clientY;
+      canvas.setPointerCapture?.(e.pointerId);
     }
 
     function onThreePointerUp(e: PointerEvent) {
       if (!controls || !state.camera) return;
+      canvas.releasePointerCapture?.(e.pointerId);
+      if (threeDownButton !== 0 || e.button !== 0) return;
       if (Math.hypot(e.clientX - threeDownX, e.clientY - threeDownY) >= 6) return;
 
       const rect = canvas.getBoundingClientRect();
@@ -439,53 +604,32 @@ function ImmersiveThreePieceStage({
       );
 
       let hitPoint: any = null;
-
-      if (state.objects.length > 0) {
-        const hits = threeRaycaster.intersectObjects(state.objects, false);
-        for (const hit of hits) {
-          if (hit.face) {
-            const worldNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-            if (worldNormal.y > 0.7) {
-              hitPoint = hit.point;
-              break;
-            }
-          }
+      if (state.scene?.children?.length) {
+        const hits = threeRaycaster.intersectObjects(state.scene.children, true);
+        if (hits.length > 0) {
+          hitPoint = hits[0].point;
         }
       }
 
-      if (!hitPoint) {
-        const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-        const planeHit = new THREE.Vector3();
-        if (threeRaycaster.ray.intersectPlane(floorPlane, planeHit)) {
-          hitPoint = planeHit;
-        }
+      const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const planeHit = new THREE.Vector3();
+      if (!hitPoint && threeRaycaster.ray.intersectPlane(floorPlane, planeHit)) {
+        hitPoint = planeHit;
       }
 
       if (!hitPoint) return;
+      moveThreeOrbitTo(hitPoint);
+    }
 
-      let maxOffset = 5;
-      if (state.scene && state.objects.length > 0) {
-        const box = new THREE.Box3().setFromObject(state.scene);
-        if (!box.isEmpty()) {
-          const size = new THREE.Vector3();
-          box.getSize(size);
-          maxOffset = Math.max(size.x, size.z, 1) * 0.7;
-        }
-      }
+    function onThreeWheel(e: WheelEvent) {
+      if (!controls || !state.camera) return;
+      e.preventDefault();
+      e.stopPropagation();
+      zoomThreeOrbit(e.deltaY);
+    }
 
-      const shift = new THREE.Vector3(
-        Math.max(-maxOffset, Math.min(maxOffset, hitPoint.x - state.camera.position.x)),
-        0,
-        Math.max(-maxOffset, Math.min(maxOffset, hitPoint.z - state.camera.position.z)),
-      );
-      if (shift.lengthSq() < 0.003) return;
-
-      threeAnimFromTarget = controls.target.clone();
-      threeAnimToTarget = threeAnimFromTarget.clone().add(shift);
-      threeAnimFromCam = state.camera.position.clone();
-      threeAnimToCam = threeAnimFromCam.clone().add(shift);
-      threeAnimStart = performance.now();
-      controls.enabled = false;
+    function onThreeStageClick() {
+      stageEl.focus();
     }
 
     function resize() {
@@ -499,9 +643,6 @@ function ImmersiveThreePieceStage({
           state.camera.aspect = width / Math.max(height, 1);
         }
         state.camera.updateProjectionMatrix?.();
-      }
-      if (controls) {
-        autoFitCamera(width);
       }
     }
 
@@ -541,24 +682,34 @@ function ImmersiveThreePieceStage({
 
     function animateControls() {
       frameId = requestAnimationFrame(animateControls);
-      if (threeAnimToTarget && threeAnimFromTarget && controls) {
-        const t = Math.min((performance.now() - threeAnimStart) / 350, 1);
-        const eased = 1 - (1 - t) ** 3;
-        controls.target.lerpVectors(threeAnimFromTarget, threeAnimToTarget, eased);
-        state.camera.position.lerpVectors(threeAnimFromCam, threeAnimToCam, eased);
+      // Re-assert canvas containment — AI startFrame handlers may call document.body.appendChild or set position:fixed every frame.
+      reassertThreeCanvasContainment();
+      if (controls && state.camera) {
+        // Restore OrbitControls camera state, overriding any camera changes made
+        // by the piece's startFrame handler (which fires first every RAF).
+        state.camera.position.copy(_orbitCamPos);
+        controls.target.copy(_orbitTarget);
         controls.update();
-        if (t >= 1) {
-          controls.enabled = true;
-          threeAnimFromTarget = threeAnimToTarget = threeAnimFromCam = threeAnimToCam = null;
-        }
-      } else {
-        if (threeKeys.size > 0 && controls && state.camera) {
+
+        if (threeAnimToTarget && threeAnimFromTarget) {
+          const t = Math.min((performance.now() - threeAnimStart) / 350, 1);
+          const eased = 1 - (1 - t) ** 3;
+          controls.target.lerpVectors(threeAnimFromTarget, threeAnimToTarget, eased);
+          state.camera.position.lerpVectors(threeAnimFromCam, threeAnimToCam, eased);
+          controls.update();
+          if (t >= 1) {
+            controls.enabled = true;
+            threeAnimFromTarget = threeAnimToTarget = threeAnimFromCam = threeAnimToCam = null;
+            saveOrbitState();
+          }
+        } else if (threeKeys.size > 0) {
+          const speed = Math.max(0.05, controls.target.distanceTo(state.camera.position) * 0.03);
           let fwdScale = 0;
           let rightScale = 0;
-          if (threeKeys.has("ArrowUp")) fwdScale += 0.05;
-          if (threeKeys.has("ArrowDown")) fwdScale -= 0.05;
-          if (threeKeys.has("ArrowLeft")) rightScale -= 0.05;
-          if (threeKeys.has("ArrowRight")) rightScale += 0.05;
+          if (threeKeys.has("ArrowUp")) fwdScale += speed;
+          if (threeKeys.has("ArrowDown")) fwdScale -= speed;
+          if (threeKeys.has("ArrowLeft")) rightScale -= speed;
+          if (threeKeys.has("ArrowRight")) rightScale += speed;
           if (fwdScale !== 0 || rightScale !== 0) {
             state.camera.getWorldDirection(_threeFwd);
             _threeFwd.y = 0;
@@ -568,14 +719,16 @@ function ImmersiveThreePieceStage({
               _threeRight.set(-_threeFwd.z, 0, _threeFwd.x);
               const dx = _threeFwd.x * fwdScale + _threeRight.x * rightScale;
               const dz = _threeFwd.z * fwdScale + _threeRight.z * rightScale;
-              controls.target.x += dx;
-              controls.target.z += dz;
-              state.camera.position.x += dx;
-              state.camera.position.z += dz;
+              panThreeOrbitBy(dx, dz);
             }
           }
         }
-        controls?.update();
+
+        // Save OrbitControls state; restored at top of next frame.
+        saveOrbitState();
+      }
+      if (state.renderer && state.scene && state.camera) {
+        state.renderer.render(state.scene, state.camera);
       }
     }
 
@@ -606,21 +759,34 @@ function ImmersiveThreePieceStage({
       canvas.style.bottom = "";
       canvas.style.right = "";
       canvas.style.zIndex = "";
+      canvas.style.pointerEvents = "";
       canvas.style.width = "100%";
       canvas.style.height = "100%";
+      canvas.style.touchAction = "none";
 
       resize();
       controls = new OrbitControls(state.camera, canvas);
       controls.enableDamping = true;
       controls.enablePan = true;
       controls.minDistance = 0.6;
-      controls.maxDistance = 40;
-      autoFitCamera();
+      const _initDir = new THREE.Vector3();
+      state.camera.getWorldDirection(_initDir);
+      const initialCamDist = state.camera.position.length();
+      const targetDist = Math.max(initialCamDist * 0.8, 3);
+      controls.target.copy(state.camera.position).addScaledVector(_initDir, targetDist);
+      const initialTargetDist = state.camera.position.distanceTo(controls.target);
+      controls.maxDistance = Math.max(40, initialTargetDist * 4);
+      controls.update();
+      _orbitCamPos.copy(state.camera.position);
+      _orbitTarget.copy(controls.target);
       animateControls();
       canvas.addEventListener("pointerdown", onThreePointerDown);
       canvas.addEventListener("pointerup", onThreePointerUp);
+      canvas.addEventListener("wheel", onThreeWheel, { passive: false, capture: true });
+      stageEl.tabIndex = 0;
       window.addEventListener("keydown", onThreeKeyDown);
       window.addEventListener("keyup", onThreeKeyUp);
+      stageEl.addEventListener("click", onThreeStageClick, { passive: true } as AddEventListenerOptions);
       onError(null);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Immersive runtime failed to boot.");
@@ -634,8 +800,10 @@ function ImmersiveThreePieceStage({
       cancelAnimationFrame(frameId);
       canvas.removeEventListener("pointerdown", onThreePointerDown);
       canvas.removeEventListener("pointerup", onThreePointerUp);
+      canvas.removeEventListener("wheel", onThreeWheel, { capture: true });
       window.removeEventListener("keydown", onThreeKeyDown);
       window.removeEventListener("keyup", onThreeKeyUp);
+      stageEl.removeEventListener("click", onThreeStageClick);
       threeKeys.clear();
       if (controls) controls.enabled = true;
       controls?.dispose();

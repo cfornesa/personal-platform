@@ -6,9 +6,18 @@ export const AI_VENDOR_OPTIONS = [
   { id: "opencode-zen", label: "Opencode Zen" },
   { id: "opencode-go", label: "Opencode Go" },
   { id: "google", label: "Google" },
+  { id: "mistral", label: "Mistral AI" },
+  { id: "mistral-vibe", label: "Mistral Vibe" },
 ] as const;
 
 export type AiVendor = (typeof AI_VENDOR_OPTIONS)[number]["id"];
+
+export const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe"] as const;
+export type PieceGenerationVendor = (typeof PIECE_GENERATION_VENDORS)[number];
+
+export function isPieceGenerationVendor(vendor: string): vendor is PieceGenerationVendor {
+  return (PIECE_GENERATION_VENDORS as readonly string[]).includes(vendor);
+}
 
 export type SafeAiVendorSetting = {
   vendor: AiVendor;

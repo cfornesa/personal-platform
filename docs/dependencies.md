@@ -189,6 +189,22 @@
 - **Self-hosting alternative:** None. Both platforms are closed and gated behind Meta's Developer App Review process.
 - **Operational note:** Requires a Meta Developer App with App Review for production use (`pages_manage_posts`, `instagram_content_publish` permissions). Facebook Page Access Tokens do not expire as long as the user keeps the app authorized. Instagram requires a Business or Creator account linked to the authorized Facebook Page.
 
+## Mistral AI
+
+- **Purpose:** Optional owner-enabled AI assistance through Mistral AI using the owner's saved standard Mistral API key and chosen model slug for text rewriting, alt text generation, and validated interactive piece generation across `p5`, `c2`, and `three`.
+- **Sends data off-domain:** Yes, to `api.mistral.ai` when the owner explicitly triggers AI from the post editor or the interactive-piece generation flow.
+- **What breaks if it changes or is removed:** AI-assisted rewriting and AI-assisted interactive piece generation for users who selected Mistral AI stop working until the adapter is updated or the user switches vendors; the rest of the app remains functional.
+- **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
+- **Routing note:** Uses Mistral's OpenAI-compatible `POST https://api.mistral.ai/v1/chat/completions` endpoint with `Authorization: Bearer {key}`. The owner supplies their own API key from `console.mistral.ai`.
+
+## Mistral Vibe
+
+- **Purpose:** Optional owner-enabled AI assistance through Mistral's Vibe API using the owner's saved Vibe API key (obtained from `console.mistral.ai/codestral/vibe`) for text rewriting, alt text generation, and validated interactive piece generation across `p5`, `c2`, and `three`.
+- **Sends data off-domain:** Yes, to `api.mistral.ai` when the owner explicitly triggers AI from the post editor or the interactive-piece generation flow.
+- **What breaks if it changes or is removed:** AI-assisted rewriting and AI-assisted interactive piece generation for users who selected Mistral Vibe stop working until the adapter is updated or the user switches vendors; the rest of the app remains functional.
+- **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
+- **Routing note:** Uses `POST https://api.mistral.ai/v1/chat/completions` with the Vibe API key. The confirmed model slug as of May 2026 is `mistral-vibe-cli-latest` (Devstral 2). Standard `-latest` aliases like `devstral-small-latest` are specific to `codestral.mistral.ai` and will return a 400 on this endpoint. The vendor ID `codestral` is reserved for a future distinct Codestral vendor.
+
 ## turndown
 
 - **Purpose:** Converting rich-post HTML to Markdown before submitting to the Medium API, which accepts Markdown more cleanly than raw HTML.

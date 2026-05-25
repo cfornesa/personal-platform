@@ -34,6 +34,7 @@ import {
 import {
   decryptAiApiKey,
   getAiVendorLabel,
+  isPieceGenerationVendor,
   normalizeOptionalString,
   type AiVendor,
 } from "../lib/ai-settings";
@@ -43,7 +44,7 @@ const router: IRouter = Router();
 
 const artPieceEngineSchema = dbArtPieceEngineSchema;
 const artPieceStatusSchema = z.enum(["active", "archived"]);
-const aiVendorSchema = z.enum(["openrouter", "opencode-zen", "opencode-go", "google"]);
+const aiVendorSchema = z.enum(["openrouter", "opencode-zen", "opencode-go", "google", "mistral", "mistral-vibe"]);
 
 const GenerateArtPieceBody = z.object({
   prompt: z.string().trim().min(1).max(4000),
@@ -478,6 +479,12 @@ router.post("/art-pieces/generate", requireAuth, requireOwner, async (req: Reque
     if (selected?.enabled !== 1 || !model || !encryptedApiKey) {
       return res.status(409).json({
         error: `${getAiVendorLabel(parsed.data.vendor) ?? "Selected AI vendor"} is not enabled and configured for this user`,
+      });
+    }
+
+    if (!isPieceGenerationVendor(parsed.data.vendor)) {
+      return res.status(422).json({
+        error: `${getAiVendorLabel(parsed.data.vendor) ?? "Selected AI vendor"} is not supported for piece generation. Use Google, Mistral AI, or Mistral Vibe.`,
       });
     }
 

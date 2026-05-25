@@ -14,6 +14,8 @@ Test vendors in this order:
 2. `opencode-go`
 3. `google`
 4. `openrouter`
+5. `mistral`
+6. `mistral-vibe`
 
 ## Verification Template
 
@@ -149,6 +151,21 @@ Unknown Zen model slugs must fail fast before any outbound request.
 - Confirm provider-prefixed model slugs such as `anthropic/...`, `openai/...`, or `mistral/...` are accepted as saved model strings.
 - Confirm returned `choices[0].message.content` parses correctly.
 - Confirm the owner saved the model/API key in the `OpenRouter` section of `/admin/ai`, not an old `Kilo Gateway` row from a prior schema state.
+
+### Mistral AI
+
+- Confirm endpoint is `https://api.mistral.ai/v1/chat/completions`.
+- Confirm Bearer auth works with the user's standard Mistral API key from `console.mistral.ai`.
+- Confirm any model slug (e.g. `mistral-large-latest`, `mistral-small-latest`) is accepted as a saved model string.
+- Confirm returned `choices[0].message.content` parses correctly.
+
+### Mistral Vibe
+
+- Confirm endpoint is `https://api.mistral.ai/v1/chat/completions`.
+- Confirm Bearer auth works with the Vibe API key (obtained from `console.mistral.ai/codestral/vibe`).
+- Use `mistral-vibe-cli-latest` as the known-good model slug (confirmed as of May 2026; Devstral 2 via Vibe key). Standard `-latest` aliases like `devstral-small-latest` are for the `codestral.mistral.ai` endpoint and will fail here.
+- Confirm returned `choices[0].message.content` parses correctly.
+- If you see "Invalid request body" (400), check: (1) the saved model slug is `mistral-vibe-cli-latest`, and (2) the vendor Zod enum in `art-pieces.ts` includes `"mistral-vibe"`.
 
 ## Recording Template
 

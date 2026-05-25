@@ -548,6 +548,8 @@ paths:
                     - opencode-zen
                     - opencode-go
                     - google
+                    - mistral
+                    - mistral-vibe
                 existingAltText:
                   type: string
                   description: Optional existing alt text to use as context for refinement
@@ -2600,6 +2602,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         label:
           type: string
       required:
@@ -2616,6 +2620,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         vendorLabel:
           type: string
         enabled:
@@ -2650,6 +2656,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         preferredVendorTextImprove:
           type: string
           nullable: true
@@ -2658,6 +2666,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         preferredVendorAltText:
           type: string
           nullable: true
@@ -2666,6 +2676,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
       required:
         - availableVendors
         - settings
@@ -2683,6 +2695,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         enabled:
           type: boolean
         model:
@@ -2715,6 +2729,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         preferredVendorTextImprove:
           type: string
           nullable: true
@@ -2723,6 +2739,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         preferredVendorAltText:
           type: string
           nullable: true
@@ -2731,6 +2749,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
       required:
         - settings
 
@@ -2747,6 +2767,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         mode:
           type: string
           enum:
@@ -2768,6 +2790,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         vendorLabel:
           type: string
         model:
@@ -2809,6 +2833,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
           nullable: true
         generationModel:
           type: string
@@ -2916,6 +2942,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
       required:
         - prompt
         - engine
@@ -2953,6 +2981,8 @@ components:
             - opencode-zen
             - opencode-go
             - google
+            - mistral
+            - mistral-vibe
         vendorLabel:
           type: string
         model:

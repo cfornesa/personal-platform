@@ -131,7 +131,7 @@ canvas { display: block; }`,
 export default function AdminPiecesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, preferredArtPieceVendor, preferredVendorAltText } = useOwnerAiVendors();
+  const { aiVendors, pieceVendors, preferredArtPieceVendor, preferredVendorAltText } = useOwnerAiVendors();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -166,15 +166,17 @@ export default function AdminPiecesPage() {
   }, [creationMode, filtered, selectedId]);
 
   useEffect(() => {
-    if (aiVendors.length > 0 && !aiVendors.some((vendor) => vendor.id === selectedVendor)) {
+    if (pieceVendors.length > 0 && !pieceVendors.some((vendor) => vendor.id === selectedVendor)) {
       const preferredVendorStillAvailable =
         preferredArtPieceVendor &&
-        aiVendors.some((vendor) => vendor.id === preferredArtPieceVendor);
+        pieceVendors.some((vendor) => vendor.id === preferredArtPieceVendor);
       setSelectedVendor(
-        preferredVendorStillAvailable ? preferredArtPieceVendor : aiVendors[0]!.id,
+        preferredVendorStillAvailable ? preferredArtPieceVendor : pieceVendors[0]!.id,
       );
+    } else if (pieceVendors.length === 0 && selectedVendor !== "") {
+      setSelectedVendor("");
     }
-  }, [aiVendors, preferredArtPieceVendor, selectedVendor]);
+  }, [pieceVendors, preferredArtPieceVendor, selectedVendor]);
 
   const detail = useGetArtPiece(selectedId ?? 0, {
     query: {
@@ -523,7 +525,7 @@ canvas { display: block; }`;
   return (
     <AdminLayout
       title="Pieces"
-      description="Reusable interactive pieces for embedding into posts."
+      description="Reusable interactive pieces for embedding into posts. Generate new pieces at your own risk. AI-generated pieces likely require some manual tweaking to work well, which is why you can edit code once you have saved a piece."
     >
       <div className="mb-4 flex justify-end gap-2">
         <Button
@@ -632,10 +634,14 @@ canvas { display: block; }`;
                       onChange={(event) =>
                         handleVendorChange(event.target.value as ProcessAiTextBodyVendor)
                       }
+                      disabled={pieceVendors.length === 0}
                     >
-                      {aiVendors.map((vendor) => (
-                        <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
-                      ))}
+                      {pieceVendors.length === 0
+                        ? <option value="">No piece vendors enabled — configure in Admin → AI</option>
+                        : pieceVendors.map((vendor) => (
+                            <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
+                          ))
+                      }
                     </select>
                   </div>
                 </div>
@@ -742,10 +748,14 @@ canvas { display: block; }`;
                             onChange={(event) =>
                               handleVendorChange(event.target.value as ProcessAiTextBodyVendor)
                             }
+                            disabled={pieceVendors.length === 0}
                           >
-                            {aiVendors.map((vendor) => (
-                              <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
-                            ))}
+                            {pieceVendors.length === 0
+                              ? <option value="">No piece vendors enabled — configure in Admin → AI</option>
+                              : pieceVendors.map((vendor) => (
+                                  <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
+                                ))
+                            }
                           </select>
                         </div>
                       </div>
@@ -809,6 +819,7 @@ canvas { display: block; }`;
                     htmlCode={htmlCode}
                     cssCode={cssCode}
                     title={prompt || selected?.title}
+                    diagnostics
                     immersiveHref={
                       selected?.id
                         ? buildImmersivePieceHref(selected.id, selected.currentVersionId)
