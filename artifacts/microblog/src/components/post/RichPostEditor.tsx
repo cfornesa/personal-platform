@@ -75,7 +75,7 @@ type RichPostEditorProps = {
    */
   showCategories?: boolean;
   aiVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
-  /** Subset of aiVendors that support piece generation (google, mistral, mistral-vibe). */
+  /** Subset of aiVendors that support piece generation. */
   pieceVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
   /** Pre-selected vendor for text improvement (skips dropdown). */
   preferredVendorTextImprove?: ProcessAiTextBodyVendor | null;

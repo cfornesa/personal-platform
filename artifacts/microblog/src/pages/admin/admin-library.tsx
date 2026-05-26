@@ -15,21 +15,16 @@ import { FeaturedImagePicker } from "@/components/media/FeaturedImagePicker";
 import { MediaGrid } from "@/components/media/MediaGrid";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
-import { useGetMyAiSettings, getGetMyAiSettingsQueryKey } from "@workspace/api-client-react";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 
 export default function AdminLibraryPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isOwner } = useCurrentUser();
   const [isAddImageOpen, setIsAddImageOpen] = useState(false);
+  const { imageDescriptionVendors, preferredVendorAltText } = useOwnerAiVendors();
 
   const { data: assets = [], isLoading } = useListMedia({
     query: { queryKey: getListMediaQueryKey() },
-  });
-
-  const { data: aiSettings } = useGetMyAiSettings({
-    query: { queryKey: getGetMyAiSettingsQueryKey(), enabled: isOwner },
   });
 
   const { mutate: deleteMedia, isPending: isDeleting } = useDeleteMedia({
@@ -58,9 +53,7 @@ export default function AdminLibraryPage() {
 
   const { mutateAsync: describeImage } = useDescribeImage();
 
-  const preferredVendor = aiSettings?.preferredVendorAltText ?? null;
-  const firstEnabledVendor = aiSettings?.settings.find((s) => s.enabled && s.configured)?.vendor ?? null;
-  const altTextVendor = preferredVendor ?? firstEnabledVendor;
+  const altTextVendor = preferredVendorAltText ?? imageDescriptionVendors[0]?.id ?? null;
 
   async function handleSaveDetails(asset: MediaAsset, values: { title: string; altText: string }) {
     await updateAltText({

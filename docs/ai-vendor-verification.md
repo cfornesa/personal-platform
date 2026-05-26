@@ -16,6 +16,7 @@ Test vendors in this order:
 4. `openrouter`
 5. `mistral`
 6. `mistral-vibe`
+7. `deepseek`
 
 ## Verification Template
 
@@ -166,6 +167,17 @@ Unknown Zen model slugs must fail fast before any outbound request.
 - Use `mistral-vibe-cli-latest` as the known-good model slug (confirmed as of May 2026; Devstral 2 via Vibe key). Standard `-latest` aliases like `devstral-small-latest` are for the `codestral.mistral.ai` endpoint and will fail here.
 - Confirm returned `choices[0].message.content` parses correctly.
 - If you see "Invalid request body" (400), check: (1) the saved model slug is `mistral-vibe-cli-latest`, and (2) the vendor Zod enum in `art-pieces.ts` includes `"mistral-vibe"`.
+
+### DeepSeek
+
+- Confirm endpoint is `https://api.deepseek.com/chat/completions`.
+- Confirm Bearer auth works with the owner's DeepSeek API key.
+- Use `deepseek-v4-flash` as the default known-good model slug; use `deepseek-v4-pro` for a higher-capability manual check.
+- Confirm returned `choices[0].message.content` parses correctly.
+- Confirm DeepSeek appears for text improvement and validated piece generation across `p5`, `c2`, and `three`.
+- Confirm DeepSeek piece-generation requests include `thinking: { type: "disabled" }` and use the larger code-generation output budget. Ordinary DeepSeek text rewriting should keep the normal chat-completions request shape.
+- If piece generation fails, check the provider diagnostics for `finish_reason`, `reasoning_content` length, and `rawResponsePreview`. `finish_reason: "length"` means the response was truncated; `content_filter` means the provider filtered the final answer; `insufficient_system_resource` means an upstream resource-limit failure; non-empty `reasoning_content` with empty `message.content` means the model reasoned but did not emit usable final code.
+- Confirm DeepSeek does not appear in the Admin AI "Visual descriptions" preference and that a direct `/api/ai/describe-image` request with `vendor: "deepseek"` returns `422` with `code: "vision_not_supported"`.
 
 ## Recording Template
 

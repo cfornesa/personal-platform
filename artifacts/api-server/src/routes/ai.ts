@@ -17,7 +17,10 @@ import {
   decryptAiApiKey,
   encryptAiApiKey,
   getAiVendorLabel,
+  isImageDescriptionVendor,
   isAiVendor,
+  isPieceGenerationVendor,
+  isTextGenerationVendor,
   normalizeAiVendorSettingsInput,
   normalizeOptionalString,
   toSafeAiSettingsResponse,
@@ -101,8 +104,8 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
 
     if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredArtPieceVendor")) {
       const requested = parsed.data.preferredArtPieceVendor;
-      if (typeof requested === "string" && !isAiVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
+      if (typeof requested === "string" && !isPieceGenerationVendor(requested)) {
+        return res.status(400).json({ error: `Unsupported art piece AI vendor "${requested}"` });
       }
       preferredArtPieceVendor = requested ?? null;
       userPrefsUpdate.preferredArtPieceVendor = preferredArtPieceVendor;
@@ -110,8 +113,8 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
 
     if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorTextImprove")) {
       const requested = (parsed.data as { preferredVendorTextImprove?: string | null }).preferredVendorTextImprove;
-      if (typeof requested === "string" && !isAiVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
+      if (typeof requested === "string" && !isTextGenerationVendor(requested)) {
+        return res.status(400).json({ error: `Unsupported text AI vendor "${requested}"` });
       }
       preferredVendorTextImprove = requested ?? null;
       userPrefsUpdate.preferredVendorTextImprove = preferredVendorTextImprove;
@@ -119,8 +122,8 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
 
     if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorAltText")) {
       const requested = (parsed.data as { preferredVendorAltText?: string | null }).preferredVendorAltText;
-      if (typeof requested === "string" && !isAiVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported AI vendor "${requested}"` });
+      if (typeof requested === "string" && !isImageDescriptionVendor(requested)) {
+        return res.status(400).json({ error: `Unsupported image description AI vendor "${requested}"` });
       }
       preferredVendorAltText = requested ?? null;
       userPrefsUpdate.preferredVendorAltText = preferredVendorAltText;
@@ -257,6 +260,15 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
     }
     if (typeof vendor !== "string" || !vendor.trim()) {
       return res.status(400).json({ error: "vendor is required" });
+    }
+    if (!isAiVendor(vendor)) {
+      return res.status(400).json({ error: `Unsupported AI vendor "${vendor}"` });
+    }
+    if (!isImageDescriptionVendor(vendor)) {
+      return res.status(422).json({
+        error: `${getAiVendorLabel(vendor) ?? "Selected AI vendor"} is not supported for image alt text generation.`,
+        code: "vision_not_supported",
+      });
     }
 
     const rows = await loadUserAiSettings(req.currentUser!.id);

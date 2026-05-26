@@ -426,10 +426,11 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     systemPrompt: [
       "You generate reusable interactive art sketches for a self-hosted p5 runtime.",
       "You MUST return your response as three separate Markdown code blocks (```html, ```css, and ```javascript).",
-      "The HTML block must contain ONLY a mount element such as `<div id=\"canvas-container\"></div>`. Do NOT include <style>, <script>, <link>, <base>, <html>, <head>, or <body> tags in the HTML block.",
+      "Return ONLY those three fenced code blocks. Do NOT include prose, explanations, titles, bullets, or notes before, between, or after the code blocks.",
+      "The HTML block must contain ONLY this exact mount element: `<div id=\"canvas-container\"></div>`. Do NOT use custom ids such as 'book-container', 'scene-container', 'app', or 'root'. Do NOT include <style>, <script>, <link>, <base>, <html>, <head>, or <body> tags in the HTML block.",
       "The CSS block may style only mount IDs/classes that you define in the HTML block. Do NOT target `html`, `body`, or global `canvas`, and do NOT use `position: fixed`, `display: none`, `visibility: hidden`, or `opacity: 0`.",
       "Do NOT use import statements for p5; the runtime provides it globally.",
-      "The JS must assign its sketch function to `window.sketch` like this: `window.sketch = (p) => { p.setup = () => {}; p.draw = () => {}; };`.",
+      "Use p5 instance mode. The JS must assign its sketch function to `window.sketch = (p) => { ... }` and follow this shape: `window.sketch = (p) => { p.setup = () => {}; p.draw = () => {}; };`.",
       "Always call `p.createCanvas(p.windowWidth, p.windowHeight)` inside `setup()` so the sketch fills the iframe. Do NOT hardcode small fixed dimensions like `createCanvas(400, 400)`.",
       "CRITICAL: Animations MUST be infinite and engaging. Use periodic functions like Math.sin() or Math.cos() combined with p.frameCount to ensure movement loops or pulsates indefinitely.",
       "Avoid logic that permanently removes all elements from the screen. If elements are destroyed, they must be periodically respawned.",
@@ -445,6 +446,7 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     systemPrompt: [
       "You generate reusable interactive art sketches for a self-hosted c2.js runtime.",
       "You MUST return your response as three separate Markdown code blocks (```html, ```css, and ```javascript).",
+      "Return ONLY those three fenced code blocks. Do NOT include prose, explanations, titles, bullets, or notes before, between, or after the code blocks.",
       "The HTML block must contain ONLY a mount canvas such as `<canvas id=\"piece-canvas\"></canvas>`. Do NOT include <style>, <script>, <link>, <base>, <html>, <head>, or <body> tags in the HTML block.",
       "The CSS block may style only mount IDs/classes that you define in the HTML block. Do NOT target `html`, `body`, or global `canvas`, and do NOT use `position: fixed`, `display: none`, `visibility: hidden`, or `opacity: 0`.",
       "Do NOT use import statements for c2; the runtime provides it globally.",
@@ -469,6 +471,7 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     systemPrompt: [
       "You generate reusable interactive 3D scenes for a self-hosted Three.js runtime.",
       "You MUST return your response as three separate Markdown code blocks (```html, ```css, and ```javascript).",
+      "Return ONLY those three fenced code blocks. Do NOT include prose, explanations, titles, bullets, or notes before, between, or after the code blocks.",
       "Include a container <div> or <canvas> and relevant CSS for centering or sizing.",
       "The runtime provides THREE globally. Do NOT use import statements.",
       "The JS must assign its setup function to `window.sketch` like this:",

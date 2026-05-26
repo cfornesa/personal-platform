@@ -56,6 +56,180 @@ describe("processTextWithProvider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("uses DeepSeek's OpenAI-compatible chat completions endpoint", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://api.deepseek.com/chat/completions");
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({
+        model: "deepseek-v4-flash",
+        max_tokens: 4096,
+        messages: [
+          { role: "system", content: "System prompt" },
+          { role: "user", content: "Hello world" },
+        ],
+      });
+      expect(body.thinking).toBeUndefined();
+      expect(init?.headers).toMatchObject({
+        "content-type": "application/json",
+        Authorization: "Bearer sk-deepseek",
+      });
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: "Expanded via DeepSeek",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await processTextWithProvider({
+      vendor: "deepseek",
+      model: "deepseek-v4-flash",
+      apiKey: "sk-deepseek",
+      plainText: "Hello world",
+      systemPrompt: "System prompt",
+    });
+
+    expect(result).toBe("Expanded via DeepSeek");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables DeepSeek thinking and expands token budget for art-piece generation", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://api.deepseek.com/chat/completions");
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({
+        model: "deepseek-v4-pro",
+        max_tokens: 12000,
+        thinking: { type: "disabled" },
+        messages: [
+          { role: "system", content: "Piece system prompt" },
+          { role: "user", content: "Make a p5 page flip animation" },
+        ],
+      });
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: "```html\n<div id=\"canvas-container\"></div>\n```\n```css\n#canvas-container{height:100%;}\n```\n```javascript\nwindow.sketch = (p) => {};\n```",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await processTextWithProvider({
+      vendor: "deepseek",
+      model: "deepseek-v4-pro",
+      apiKey: "sk-deepseek",
+      plainText: "Make a p5 page flip animation",
+      systemPrompt: "Piece system prompt",
+      intent: "art-piece",
+    });
+
+    expect(result).toContain("window.sketch");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("diagnoses DeepSeek reasoning-only chat-completions responses", async () => {
+    global.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: "",
+                reasoning_content: "I should produce code blocks, but no final answer was emitted.",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    await expect(
+      processTextWithProvider({
+        vendor: "deepseek",
+        model: "deepseek-v4-flash",
+        apiKey: "sk-deepseek",
+        plainText: "Make a p5 sketch",
+        systemPrompt: "System prompt",
+        intent: "art-piece",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      statusCode: 502,
+      retryable: true,
+      failureClass: "parse",
+      finishReason: "stop",
+      reasoningContentLength: expect.any(Number),
+      rawResponsePreview: expect.stringContaining("reasoning_content"),
+      message:
+        "The AI provider returned reasoning but no usable final answer. Try again or use a non-thinking/code-generation model setting.",
+    } satisfies Partial<AiProviderError>);
+  });
+
+  it("diagnoses truncated chat-completions responses", async () => {
+    global.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "length",
+              message: { content: "" },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    await expect(
+      processTextWithProvider({
+        vendor: "deepseek",
+        model: "deepseek-v4-pro",
+        apiKey: "sk-deepseek",
+        plainText: "Make a Three.js sketch",
+        systemPrompt: "System prompt",
+        intent: "art-piece",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      statusCode: 502,
+      retryable: true,
+      failureClass: "parse",
+      finishReason: "length",
+      message: expect.stringContaining("truncated"),
+    } satisfies Partial<AiProviderError>);
+  });
+
   it("uses the Google generateContent shape for Google", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe(

@@ -12,13 +12,21 @@ const mockAiSettings = {
     { id: "opencode-zen", label: "Opencode Zen" },
     { id: "opencode-go", label: "Opencode Go" },
     { id: "google", label: "Google" },
+    { id: "mistral", label: "Mistral AI" },
+    { id: "mistral-vibe", label: "Mistral Vibe" },
+    { id: "deepseek", label: "DeepSeek" },
   ],
   preferredArtPieceVendor: null,
+  preferredVendorTextImprove: null,
+  preferredVendorAltText: null,
   settings: [
     { vendor: "openrouter", vendorLabel: "OpenRouter", enabled: false, configured: false, model: null },
     { vendor: "opencode-zen", vendorLabel: "Opencode Zen", enabled: false, configured: false, model: null },
     { vendor: "opencode-go", vendorLabel: "Opencode Go", enabled: false, configured: false, model: null },
     { vendor: "google", vendorLabel: "Google", enabled: true, configured: true, model: "gemini-2.5-flash" },
+    { vendor: "mistral", vendorLabel: "Mistral AI", enabled: false, configured: false, model: null },
+    { vendor: "mistral-vibe", vendorLabel: "Mistral Vibe", enabled: false, configured: false, model: null },
+    { vendor: "deepseek", vendorLabel: "DeepSeek", enabled: true, configured: true, model: null },
   ],
 };
 
@@ -84,7 +92,11 @@ describe("AdminAiPage", () => {
     expect(screen.getByText("OpenRouter")).toBeInTheDocument();
     expect(screen.getByText("Opencode Zen")).toBeInTheDocument();
     expect(screen.getByText("Opencode Go")).toBeInTheDocument();
-    expect(screen.getByText("Google")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Google" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mistral AI" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mistral Vibe" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "DeepSeek" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("deepseek-v4-flash")).toBeInTheDocument();
   });
 
   it("blocks enabling a vendor without an API key on first setup", async () => {
@@ -113,7 +125,7 @@ describe("AdminAiPage", () => {
     await user.click(screen.getByRole("button", { name: "Save AI Settings" }));
 
     expect(updateAiMutate).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         settings: expect.arrayContaining([
           expect.objectContaining({
             vendor: "openrouter",
@@ -122,7 +134,32 @@ describe("AdminAiPage", () => {
             apiKey: "sk-openrouter",
           }),
         ]),
-      },
+      }),
+    });
+  });
+
+  it("offers DeepSeek for text and art piece preferences but not visual descriptions", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const textPreference = screen.getByLabelText("Text improvement");
+    const visualPreference = screen.getByLabelText("Visual descriptions");
+    const artPreference = screen.getByLabelText("Art pieces");
+
+    expect(within(textPreference).getByRole("option", { name: "DeepSeek" })).toBeInTheDocument();
+    expect(within(artPreference).getByRole("option", { name: "DeepSeek" })).toBeInTheDocument();
+    expect(within(visualPreference).queryByRole("option", { name: "DeepSeek" })).not.toBeInTheDocument();
+
+    await user.selectOptions(textPreference, "deepseek");
+    await user.selectOptions(artPreference, "deepseek");
+    await user.click(screen.getByRole("button", { name: "Save AI Settings" }));
+
+    expect(updateAiMutate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        preferredVendorTextImprove: "deepseek",
+        preferredArtPieceVendor: "deepseek",
+        preferredVendorAltText: null,
+      }),
     });
   });
 });

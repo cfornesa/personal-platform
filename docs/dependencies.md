@@ -205,6 +205,14 @@
 - **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
 - **Routing note:** Uses `POST https://api.mistral.ai/v1/chat/completions` with the Vibe API key. The confirmed model slug as of May 2026 is `mistral-vibe-cli-latest` (Devstral 2). Standard `-latest` aliases like `devstral-small-latest` are specific to `codestral.mistral.ai` and will return a 400 on this endpoint. The vendor ID `codestral` is reserved for a future distinct Codestral vendor.
 
+## DeepSeek
+
+- **Purpose:** Optional owner-enabled AI assistance through DeepSeek using the owner's saved DeepSeek API key for text rewriting and validated interactive piece generation across `p5`, `c2`, and `three`.
+- **Sends data off-domain:** Yes, to `api.deepseek.com` when the owner explicitly triggers AI text or interactive-piece generation.
+- **What breaks if it changes or is removed:** DeepSeek-backed AI text rewriting and AI-assisted interactive piece generation stop working until the adapter is updated or the owner switches vendors; local posts, saved pieces, feeds, exports, and other AI vendors remain functional.
+- **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
+- **Routing note:** Uses DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` endpoint with `Authorization: Bearer {key}`. The Admin AI UI defaults to `deepseek-v4-flash`; `deepseek-v4-pro` can be entered manually. For validated piece generation, DeepSeek requests use non-thinking mode and a larger code-generation output budget; ordinary text rewriting keeps the normal chat-completions request shape. DeepSeek is intentionally excluded from image alt-text generation until official DeepSeek API image-input support is documented or live-verified.
+
 ## turndown
 
 - **Purpose:** Converting rich-post HTML to Markdown before submitting to the Medium API, which accepts Markdown more cleanly than raw HTML.

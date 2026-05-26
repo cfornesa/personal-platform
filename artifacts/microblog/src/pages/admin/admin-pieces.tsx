@@ -131,7 +131,7 @@ canvas { display: block; }`,
 export default function AdminPiecesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, pieceVendors, preferredArtPieceVendor, preferredVendorAltText } = useOwnerAiVendors();
+  const { aiVendors, pieceVendors, preferredArtPieceVendor, preferredVendorTextImprove } = useOwnerAiVendors();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -357,7 +357,7 @@ canvas { display: block; }`;
       toast({ title: "Text required", description: "Enter a prompt or description before using AI improvement.", variant: "destructive" });
       return;
     }
-    const descriptionVendor = preferredVendorAltText ?? aiVendors[0]?.id ?? null;
+    const descriptionVendor = preferredVendorTextImprove ?? aiVendors[0]?.id ?? null;
     if (!descriptionVendor) {
       toast({ title: "No AI vendor", description: "Configure a vendor in Admin → AI first.", variant: "destructive" });
       return;
@@ -661,7 +661,7 @@ canvas { display: block; }`;
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isImprovingText || !(preferredVendorAltText ?? aiVendors[0]?.id)}
+                    disabled={isImprovingText || !(preferredVendorTextImprove ?? aiVendors[0]?.id)}
                     onClick={() => void handleImproveText()}
                   >
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
@@ -832,7 +832,7 @@ canvas { display: block; }`;
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isImprovingText || !(preferredVendorAltText ?? aiVendors[0]?.id)}
+                    disabled={isImprovingText || !(preferredVendorTextImprove ?? aiVendors[0]?.id)}
                     onClick={() => void handleImproveText()}
                   >
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />

@@ -389,6 +389,37 @@ describe("art piece helpers", () => {
     expect(helpers.consumeValidatedDraftToken(draftToken, "owner-1")).toBeNull();
   });
 
+  it.each(["p5", "c2", "three"] as const)(
+    "requires code-block-only output in %s system prompt",
+    (engine) => {
+      const prompt = helpers.getArtPieceGenerationSystemPrompt(engine);
+
+      expect(prompt).toContain("Return ONLY those three fenced code blocks");
+      expect(prompt).toContain("```html");
+      expect(prompt).toContain("```css");
+      expect(prompt).toContain("```javascript");
+      expect(prompt).toContain("Do NOT include prose");
+    },
+  );
+
+  it("includes the p5 mount id and instance-mode requirements in the p5 system prompt", () => {
+    const prompt = helpers.getArtPieceGenerationSystemPrompt("p5");
+
+    expect(prompt).toContain('id="canvas-container"');
+    expect(prompt).toContain("Do NOT use custom ids");
+    expect(prompt).toContain("window.sketch = (p) => { ... }");
+    expect(prompt).toContain("p5 instance mode");
+  });
+
+  it("keeps runtime-specific C2 requirements in the C2 system prompt", () => {
+    const prompt = helpers.getArtPieceGenerationSystemPrompt("c2");
+
+    expect(prompt).toContain("const { c2, canvas, startFrame } = runtime");
+    expect(prompt).toContain("new c2.Renderer(canvas)");
+    expect(prompt).toContain("CALL `startFrame(handler)`");
+    expect(prompt).toContain("NEVER use: c2.Ellipse");
+  });
+
   it("includes container id requirement in Three.js system prompt", () => {
     const prompt = helpers.getArtPieceGenerationSystemPrompt("three");
 

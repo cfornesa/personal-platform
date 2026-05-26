@@ -580,6 +580,7 @@ export const AiVendorOptionId = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface AiVendorOption {
@@ -597,6 +598,7 @@ export const MyAiVendorSettingVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface MyAiVendorSetting {
@@ -617,6 +619,7 @@ export const MyAiSettingsPreferredArtPieceVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type MyAiSettingsPreferredVendorTextImprove = typeof MyAiSettingsPreferredVendorTextImprove[keyof typeof MyAiSettingsPreferredVendorTextImprove] | null;
@@ -629,6 +632,7 @@ export const MyAiSettingsPreferredVendorTextImprove = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type MyAiSettingsPreferredVendorAltText = typeof MyAiSettingsPreferredVendorAltText[keyof typeof MyAiSettingsPreferredVendorAltText] | null;
@@ -641,6 +645,7 @@ export const MyAiSettingsPreferredVendorAltText = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface MyAiSettings {
@@ -661,6 +666,7 @@ export const UpdateMyAiVendorSettingBodyVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface UpdateMyAiVendorSettingBody {
@@ -688,6 +694,7 @@ export const UpdateMyAiSettingsBodyPreferredArtPieceVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type UpdateMyAiSettingsBodyPreferredVendorTextImprove = typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove[keyof typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove] | null;
@@ -700,6 +707,7 @@ export const UpdateMyAiSettingsBodyPreferredVendorTextImprove = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type UpdateMyAiSettingsBodyPreferredVendorAltText = typeof UpdateMyAiSettingsBodyPreferredVendorAltText[keyof typeof UpdateMyAiSettingsBodyPreferredVendorAltText] | null;
@@ -712,6 +720,7 @@ export const UpdateMyAiSettingsBodyPreferredVendorAltText = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 /**
@@ -737,6 +746,7 @@ export const ProcessAiTextBodyVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type ProcessAiTextBodyMode = typeof ProcessAiTextBodyMode[keyof typeof ProcessAiTextBodyMode];
@@ -764,6 +774,7 @@ export const ProcessAiTextResponseVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface ProcessAiTextResponse {
@@ -794,6 +805,7 @@ export const ArtPieceVersionGenerationVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type ArtPieceVersionValidationStatus = typeof ArtPieceVersionValidationStatus[keyof typeof ArtPieceVersionValidationStatus];
@@ -878,6 +890,7 @@ export const GenerateArtPieceBodyVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export interface GenerateArtPieceBody {
@@ -911,6 +924,7 @@ export const GeneratedArtPieceDraftVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type GeneratedArtPieceDraftValidationStatus = typeof GeneratedArtPieceDraftValidationStatus[keyof typeof GeneratedArtPieceDraftValidationStatus];
@@ -1887,6 +1901,7 @@ export const DescribeImageBodyVendor = {
   google: 'google',
   mistral: 'mistral',
   'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
 } as const;
 
 export type DescribeImageBody = {

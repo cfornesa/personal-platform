@@ -2,9 +2,12 @@ import { logger } from "./logger";
 import type { AiVendor } from "./ai-settings";
 
 const AI_TIMEOUT_MS = 120_000;
+const DEFAULT_CHAT_MAX_TOKENS = 4096;
+const ART_PIECE_CHAT_MAX_TOKENS = 12000;
 
 type FailureClass = "timeout" | "upstream_http" | "network" | "parse" | "unknown_model";
 type EndpointFamily = "responses" | "chat_completions" | "messages" | "generate_content";
+type ProviderIntent = "text" | "art-piece";
 
 type ProcessTextInput = {
   plainText: string;
@@ -12,6 +15,7 @@ type ProcessTextInput = {
   apiKey: string;
   systemPrompt: string;
   vendor: AiVendor;
+  intent?: ProviderIntent;
   signal?: AbortSignal;
 };
 
@@ -44,6 +48,9 @@ type TransportResult =
       endpointFamily: EndpointFamily;
       url: string;
       upstreamStatus?: number;
+      finishReason?: string | null;
+      reasoningContentLength?: number;
+      rawResponsePreview?: string | null;
     };
 
 export class AiProviderError extends Error {
@@ -54,6 +61,9 @@ export class AiProviderError extends Error {
   endpointFamily?: EndpointFamily;
   url?: string;
   upstreamStatus?: number;
+  finishReason?: string | null;
+  reasoningContentLength?: number;
+  rawResponsePreview?: string | null;
 
   constructor(
     message: string,
@@ -65,6 +75,9 @@ export class AiProviderError extends Error {
       endpointFamily?: EndpointFamily;
       url?: string;
       upstreamStatus?: number;
+      finishReason?: string | null;
+      reasoningContentLength?: number;
+      rawResponsePreview?: string | null;
     } = {},
   ) {
     super(message);
@@ -76,6 +89,9 @@ export class AiProviderError extends Error {
     this.endpointFamily = input.endpointFamily;
     this.url = input.url;
     this.upstreamStatus = input.upstreamStatus;
+    this.finishReason = input.finishReason;
+    this.reasoningContentLength = input.reasoningContentLength;
+    this.rawResponsePreview = input.rawResponsePreview;
   }
 }
 
@@ -109,6 +125,8 @@ export async function processTextWithProvider(input: ProcessTextInput): Promise<
       failureClass: lastFailure?.ok ? undefined : lastFailure?.failureClass,
       url: lastFailure?.ok ? undefined : lastFailure?.url,
       upstreamStatus: lastFailure?.ok ? undefined : lastFailure?.upstreamStatus,
+      finishReason: lastFailure?.ok ? undefined : lastFailure?.finishReason,
+      reasoningContentLength: lastFailure?.ok ? undefined : lastFailure?.reasoningContentLength,
       retryable: lastFailure?.ok ? undefined : lastFailure?.retryable,
     },
     "AI provider request failed",
@@ -124,6 +142,9 @@ export async function processTextWithProvider(input: ProcessTextInput): Promise<
       endpointFamily: lastFailure?.ok ? undefined : lastFailure?.endpointFamily,
       url: lastFailure?.ok ? undefined : lastFailure?.url,
       upstreamStatus: lastFailure?.ok ? undefined : lastFailure?.upstreamStatus,
+      finishReason: lastFailure?.ok ? undefined : lastFailure?.finishReason,
+      reasoningContentLength: lastFailure?.ok ? undefined : lastFailure?.reasoningContentLength,
+      rawResponsePreview: lastFailure?.ok ? undefined : lastFailure?.rawResponsePreview,
     },
   );
 }
@@ -189,6 +210,9 @@ export async function processImageWithProvider(input: ProcessImageInput): Promis
       endpointFamily: lastFailure?.ok ? undefined : lastFailure?.endpointFamily,
       url: lastFailure?.ok ? undefined : lastFailure?.url,
       upstreamStatus: lastFailure?.ok ? undefined : lastFailure?.upstreamStatus,
+      finishReason: lastFailure?.ok ? undefined : lastFailure?.finishReason,
+      reasoningContentLength: lastFailure?.ok ? undefined : lastFailure?.reasoningContentLength,
+      rawResponsePreview: lastFailure?.ok ? undefined : lastFailure?.rawResponsePreview,
     },
   );
 }
@@ -308,6 +332,14 @@ function getTransportAttempts(input: ProcessTextInput): TransportAttempt[] {
         {
           kind: "chat-completions",
           url: "https://openrouter.ai/api/v1/chat/completions",
+          endpointFamily: "chat_completions",
+        },
+      ];
+    case "deepseek":
+      return [
+        {
+          kind: "chat-completions",
+          url: "https://api.deepseek.com/chat/completions",
           endpointFamily: "chat_completions",
         },
       ];
@@ -526,6 +558,7 @@ async function postOpenAiResponses(url: string, input: ProcessTextInput): Promis
 }
 
 async function postChatCompletions(url: string, input: ProcessTextInput): Promise<TransportResult> {
+  const isDeepSeekArtPieceRequest = input.vendor === "deepseek" && input.intent === "art-piece";
   const result = await postJson(url, {
     transportKind: "chat-completions",
     endpointFamily: "chat_completions",
@@ -545,7 +578,8 @@ async function postChatCompletions(url: string, input: ProcessTextInput): Promis
     },
     body: {
       model: input.model,
-      max_tokens: 4096,
+      max_tokens: isDeepSeekArtPieceRequest ? ART_PIECE_CHAT_MAX_TOKENS : DEFAULT_CHAT_MAX_TOKENS,
+      ...(isDeepSeekArtPieceRequest ? { thinking: { type: "disabled" } } : {}),
       messages: [
         { role: "system", content: input.systemPrompt },
         { role: "user", content: input.plainText },
@@ -559,15 +593,7 @@ async function postChatCompletions(url: string, input: ProcessTextInput): Promis
 
   const text = extractChatCompletionText(result.json);
   if (!text) {
-    return {
-      ok: false,
-      message: "The AI provider returned an unusable response. Try a different model or try again.",
-      retryable: false,
-      failureClass: "parse",
-      transportKind: "chat-completions",
-      endpointFamily: "chat_completions",
-      url,
-    };
+    return buildChatCompletionParseFailure(url, result.json, result.rawText);
   }
 
   return { ok: true, text };
@@ -665,7 +691,7 @@ async function postJson(
     signal?: AbortSignal;
   },
 ): Promise<
-  | { ok: true; json: unknown }
+  | { ok: true; json: unknown; rawText: string }
   | Extract<TransportResult, { ok: false }>
 > {
   const controller = new AbortController();
@@ -697,10 +723,11 @@ async function postJson(
         retryable: response.status >= 500 || response.status === 429,
         failureClass: "upstream_http",
         upstreamStatus: response.status,
+        rawResponsePreview: text.slice(0, 1200),
       };
     }
 
-    return { ok: true, json };
+    return { ok: true, json, rawText: text };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       if (input.signal?.aborted) {
@@ -807,6 +834,67 @@ function readErrorMessage(payload: unknown): string | null {
   return null;
 }
 
+function getFirstChatCompletionChoice(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const choices = Array.isArray((payload as Record<string, unknown>).choices)
+    ? (payload as Record<string, unknown>).choices as unknown[]
+    : [];
+  const first = choices[0];
+  return first && typeof first === "object" ? first as Record<string, unknown> : null;
+}
+
+function getChatCompletionFinishReason(payload: unknown): string | null {
+  const first = getFirstChatCompletionChoice(payload);
+  return typeof first?.finish_reason === "string" ? first.finish_reason : null;
+}
+
+function getChatCompletionReasoningContentLength(payload: unknown): number {
+  const first = getFirstChatCompletionChoice(payload);
+  const message = first?.message;
+  if (!message || typeof message !== "object") {
+    return 0;
+  }
+  const reasoningContent = (message as Record<string, unknown>).reasoning_content;
+  return typeof reasoningContent === "string" ? reasoningContent.trim().length : 0;
+}
+
+function buildChatCompletionParseFailure(
+  url: string,
+  payload: unknown,
+  rawText: string,
+): Extract<TransportResult, { ok: false }> {
+  const finishReason = getChatCompletionFinishReason(payload);
+  const reasoningContentLength = getChatCompletionReasoningContentLength(payload);
+  let message = "The AI provider returned an unusable response. Try a different model or try again.";
+
+  if (finishReason === "length") {
+    message = "The AI provider response was truncated before usable content was returned. Try again or choose a model with a larger output budget.";
+  } else if (finishReason === "content_filter") {
+    message = "The AI provider filtered the response before usable content was returned. Revise the prompt and try again.";
+  } else if (finishReason === "insufficient_system_resource") {
+    message = "The AI provider could not complete the request because of upstream resource limits. Try again later.";
+  } else if (reasoningContentLength > 0) {
+    message = "The AI provider returned reasoning but no usable final answer. Try again or use a non-thinking/code-generation model setting.";
+  }
+
+  return {
+    ok: false,
+    message,
+    retryable: finishReason !== null || reasoningContentLength > 0
+      ? finishReason !== "content_filter"
+      : false,
+    failureClass: "parse",
+    transportKind: "chat-completions",
+    endpointFamily: "chat_completions",
+    url,
+    finishReason,
+    reasoningContentLength,
+    rawResponsePreview: rawText.slice(0, 1200),
+  };
+}
+
 function extractOpenAiResponsesText(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -836,19 +924,12 @@ function extractOpenAiResponsesText(payload: unknown): string | null {
 }
 
 function extractChatCompletionText(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") {
+  const first = getFirstChatCompletionChoice(payload);
+  if (!first) {
     return null;
   }
 
-  const choices = Array.isArray((payload as Record<string, unknown>).choices)
-    ? (payload as Record<string, unknown>).choices as unknown[]
-    : [];
-  const first = choices[0];
-  if (!first || typeof first !== "object") {
-    return null;
-  }
-
-  const message = (first as Record<string, unknown>).message;
+  const message = first.message;
   if (!message || typeof message !== "object") {
     return null;
   }

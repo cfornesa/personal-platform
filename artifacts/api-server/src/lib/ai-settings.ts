@@ -8,15 +8,45 @@ export const AI_VENDOR_OPTIONS = [
   { id: "google", label: "Google" },
   { id: "mistral", label: "Mistral AI" },
   { id: "mistral-vibe", label: "Mistral Vibe" },
+  { id: "deepseek", label: "DeepSeek" },
 ] as const;
 
 export type AiVendor = (typeof AI_VENDOR_OPTIONS)[number]["id"];
 
-export const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe"] as const;
+export const TEXT_GENERATION_VENDORS = [
+  "openrouter",
+  "opencode-zen",
+  "opencode-go",
+  "google",
+  "mistral",
+  "mistral-vibe",
+  "deepseek",
+] as const;
+export type TextGenerationVendor = (typeof TEXT_GENERATION_VENDORS)[number];
+
+export const IMAGE_DESCRIPTION_VENDORS = [
+  "openrouter",
+  "opencode-zen",
+  "opencode-go",
+  "google",
+  "mistral",
+  "mistral-vibe",
+] as const;
+export type ImageDescriptionVendor = (typeof IMAGE_DESCRIPTION_VENDORS)[number];
+
+export const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe", "deepseek"] as const;
 export type PieceGenerationVendor = (typeof PIECE_GENERATION_VENDORS)[number];
+
+export function isTextGenerationVendor(vendor: string): vendor is TextGenerationVendor {
+  return (TEXT_GENERATION_VENDORS as readonly string[]).includes(vendor);
+}
 
 export function isPieceGenerationVendor(vendor: string): vendor is PieceGenerationVendor {
   return (PIECE_GENERATION_VENDORS as readonly string[]).includes(vendor);
+}
+
+export function isImageDescriptionVendor(vendor: string): vendor is ImageDescriptionVendor {
+  return (IMAGE_DESCRIPTION_VENDORS as readonly string[]).includes(vendor);
 }
 
 export type SafeAiVendorSetting = {

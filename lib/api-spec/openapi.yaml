@@ -550,6 +550,7 @@ paths:
                     - google
                     - mistral
                     - mistral-vibe
+                    - deepseek
                 existingAltText:
                   type: string
                   description: Optional existing alt text to use as context for refinement
@@ -2604,6 +2605,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         label:
           type: string
       required:
@@ -2622,6 +2624,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         vendorLabel:
           type: string
         enabled:
@@ -2658,6 +2661,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         preferredVendorTextImprove:
           type: string
           nullable: true
@@ -2668,6 +2672,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         preferredVendorAltText:
           type: string
           nullable: true
@@ -2678,6 +2683,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
       required:
         - availableVendors
         - settings
@@ -2697,6 +2703,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         enabled:
           type: boolean
         model:
@@ -2731,6 +2738,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         preferredVendorTextImprove:
           type: string
           nullable: true
@@ -2741,6 +2749,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         preferredVendorAltText:
           type: string
           nullable: true
@@ -2751,6 +2760,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
       required:
         - settings
 
@@ -2769,6 +2779,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         mode:
           type: string
           enum:
@@ -2792,6 +2803,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         vendorLabel:
           type: string
         model:
@@ -2835,6 +2847,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
           nullable: true
         generationModel:
           type: string
@@ -2944,6 +2957,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
       required:
         - prompt
         - engine
@@ -2983,6 +2997,7 @@ components:
             - google
             - mistral
             - mistral-vibe
+            - deepseek
         vendorLabel:
           type: string
         model:

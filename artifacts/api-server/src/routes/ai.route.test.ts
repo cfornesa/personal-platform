@@ -10,6 +10,8 @@ type AuthShape = {
         status: "active" | "blocked";
         role: "owner" | "member";
         preferredArtPieceVendor?: string | null;
+        preferredVendorTextImprove?: string | null;
+        preferredVendorAltText?: string | null;
       }
     | null;
 };
@@ -40,6 +42,7 @@ let authState: AuthShape = {
 let aiSettingsRows: AiSettingsRow[] = [];
 
 const processTextWithProvider = vi.fn();
+const processImageWithProvider = vi.fn();
 const mysqlPoolQuery = vi.fn();
 
 vi.mock("../lib/current-user", () => ({
@@ -48,6 +51,12 @@ vi.mock("../lib/current-user", () => ({
 }));
 
 vi.mock("../lib/ai-providers", () => ({
+  AiVisionNotSupportedError: class AiVisionNotSupportedError extends Error {
+    constructor(message = "This AI model does not support image analysis.") {
+      super(message);
+      this.name = "AiVisionNotSupportedError";
+    }
+  },
   AiProviderError: class AiProviderError extends Error {
     statusCode: number;
     retryable: boolean;
@@ -78,6 +87,7 @@ vi.mock("../lib/ai-providers", () => ({
     }
   },
   processTextWithProvider,
+  processImageWithProvider,
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -91,10 +101,24 @@ vi.mock("@workspace/db", () => ({
       set: (values: Record<string, unknown>) => ({
         where: async () => {
           if (authState.user) {
-            authState.user.preferredArtPieceVendor =
-              typeof values.preferredArtPieceVendor === "string" || values.preferredArtPieceVendor === null
-                ? (values.preferredArtPieceVendor as string | null)
-                : authState.user.preferredArtPieceVendor ?? null;
+            if (Object.prototype.hasOwnProperty.call(values, "preferredArtPieceVendor")) {
+              authState.user.preferredArtPieceVendor =
+                typeof values.preferredArtPieceVendor === "string" || values.preferredArtPieceVendor === null
+                  ? (values.preferredArtPieceVendor as string | null)
+                  : authState.user.preferredArtPieceVendor ?? null;
+            }
+            if (Object.prototype.hasOwnProperty.call(values, "preferredVendorTextImprove")) {
+              authState.user.preferredVendorTextImprove =
+                typeof values.preferredVendorTextImprove === "string" || values.preferredVendorTextImprove === null
+                  ? (values.preferredVendorTextImprove as string | null)
+                  : authState.user.preferredVendorTextImprove ?? null;
+            }
+            if (Object.prototype.hasOwnProperty.call(values, "preferredVendorAltText")) {
+              authState.user.preferredVendorAltText =
+                typeof values.preferredVendorAltText === "string" || values.preferredVendorAltText === null
+                  ? (values.preferredVendorAltText as string | null)
+                  : authState.user.preferredVendorAltText ?? null;
+            }
           }
         },
       }),
@@ -112,6 +136,8 @@ vi.mock("@workspace/db", () => ({
   usersTable: {
     id: "id",
     preferredArtPieceVendor: "preferred_art_piece_vendor",
+    preferredVendorTextImprove: "preferred_vendor_text_improve",
+    preferredVendorAltText: "preferred_vendor_alt_text",
   },
 }));
 
@@ -198,6 +224,7 @@ beforeEach(() => {
   };
   aiSettingsRows = [];
   processTextWithProvider.mockReset();
+  processImageWithProvider.mockReset();
   mysqlPoolQuery.mockReset();
   mysqlPoolQuery.mockImplementation(async (_sql: string, params?: unknown[]) => {
     const nextRow: AiSettingsRow = {
@@ -331,6 +358,53 @@ describe("AI routes", () => {
     expect(authState.user?.preferredArtPieceVendor).toBe("google");
   });
 
+  it("accepts DeepSeek for text and art piece preferences but not image descriptions", async () => {
+    const { res } = await runRoute("/users/me/ai-settings", "patch", {
+      body: {
+        settings: [
+          {
+            vendor: "deepseek",
+            enabled: true,
+            model: "deepseek-v4-flash",
+            apiKey: "sk-deepseek",
+          },
+        ],
+        preferredVendorTextImprove: "deepseek",
+        preferredArtPieceVendor: "deepseek",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      preferredVendorTextImprove: "deepseek",
+      preferredArtPieceVendor: "deepseek",
+      preferredVendorAltText: null,
+      settings: expect.arrayContaining([
+        expect.objectContaining({
+          vendor: "deepseek",
+          vendorLabel: "DeepSeek",
+          enabled: true,
+          configured: true,
+          model: "deepseek-v4-flash",
+        }),
+      ]),
+    });
+  });
+
+  it("rejects DeepSeek as an image description preference", async () => {
+    const { res } = await runRoute("/users/me/ai-settings", "patch", {
+      body: {
+        settings: [],
+        preferredVendorAltText: "deepseek",
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({
+      error: 'Unsupported image description AI vendor "deepseek"',
+    });
+  });
+
   it("allows re-enabling a saved vendor without re-sending the api key", async () => {
     aiSettingsRows = [
       {
@@ -429,6 +503,22 @@ describe("AI routes", () => {
     expect(res.body).toEqual({
       error: "Opencode Zen is not enabled and configured for this user",
     });
+  });
+
+  it("rejects DeepSeek for image alt text because API image input is not verified", async () => {
+    const { res } = await runRoute("/ai/describe-image", "post", {
+      body: {
+        imageUrl: "/api/media/example.png",
+        vendor: "deepseek",
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toEqual({
+      error: "DeepSeek is not supported for image alt text generation.",
+      code: "vision_not_supported",
+    });
+    expect(processImageWithProvider).not.toHaveBeenCalled();
   });
 
   it("returns stable JSON for provider failures", async () => {
