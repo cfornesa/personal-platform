@@ -37,5 +37,5 @@ export function getCanonicalOrigin(req?: Request): string {
   }
 
   // 4. Ultimate fallback
-  return "https://platform.creatrweb.com";
+  return "https://chrisfornesa.com";
 }

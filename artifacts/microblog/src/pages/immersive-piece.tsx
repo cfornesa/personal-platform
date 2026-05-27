@@ -532,6 +532,7 @@ function ImmersiveThreePieceStage({
 
     let controls: OrbitControls | null = null;
     let keyNav: ReturnType<typeof createKeyboardNavigation> | null = null;
+    let isOrbitActive = false;
     const _orbitCamPos = new THREE.Vector3();
     const _orbitTarget = new THREE.Vector3();
 
@@ -814,10 +815,12 @@ function ImmersiveThreePieceStage({
       // Re-assert canvas containment — AI startFrame handlers may call document.body.appendChild or set position:fixed every frame.
       reassertThreeCanvasContainment();
       if (controls && state.camera) {
-        // Restore OrbitControls camera state, overriding any camera changes made
-        // by the piece's startFrame handler (which fires first every RAF).
-        state.camera.position.copy(_orbitCamPos);
-        controls.target.copy(_orbitTarget);
+        // Restore OrbitControls camera state only when the user is not actively interacting.
+        // This allows OrbitControls' native touch gesture and zooming engine to function without being overridden.
+        if (!isOrbitActive) {
+          state.camera.position.copy(_orbitCamPos);
+          controls.target.copy(_orbitTarget);
+        }
         controls.update();
 
         if (threeAnimToTarget && threeAnimFromTarget) {
@@ -902,6 +905,16 @@ function ImmersiveThreePieceStage({
         canvas.addEventListener("pointerdown", onThreePointerDown);
         canvas.addEventListener("pointerup", onThreePointerUp);
         canvas.addEventListener("wheel", onThreeWheel, { passive: false, capture: true });
+
+        // Standardize touch zoom behavior to match other immersive stages.
+        // Listen to OrbitControls active user interactions to bypass frame coordinate resets.
+        controls.addEventListener("start", () => {
+          isOrbitActive = true;
+        });
+        controls.addEventListener("end", () => {
+          isOrbitActive = false;
+          saveOrbitState();
+        });
       } else {
         canvas.style.pointerEvents = "none";
       }
