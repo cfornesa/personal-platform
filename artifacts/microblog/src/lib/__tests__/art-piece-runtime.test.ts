@@ -80,8 +80,15 @@ describe("art-piece-runtime", () => {
     expect(srcDoc).toContain("function getViewerCamera(aspect)");
     expect(srcDoc).toContain("function prepareRendererForViewerRender()");
     expect(srcDoc).toContain("function prepareSceneForViewerRender()");
-    expect(srcDoc).toContain("state.renderer.render(state.scene, state.viewerCamera || state.camera)");
+    expect(srcDoc).toContain("function getManagedBackgroundFallback()");
+    expect(srcDoc).toContain("function _syncManagedBackdrop(color)");
+    expect(srcDoc).toContain("const renderCam = (state.camera.position.length() > 0.5)");
+    expect(srcDoc).toContain("state.renderer.render(state.scene, renderCam)");
+    expect(srcDoc).toContain("const previewBackground = state.scene?.background || 0x000000");
     expect(srcDoc).toContain("state.renderer.setScissorTest?.(false)");
+    expect(srcDoc).toContain("if (state.camera && 'aspect' in state.camera) {");
+    expect(srcDoc).toContain("state.camera.aspect = width / Math.max(height, 1);");
+    expect(srcDoc).toContain("state.camera.updateProjectionMatrix?.();");
     expect(srcDoc).toContain("state.viewerCamera.layers.enableAll?.()");
     expect(srcDoc).toContain("this.setAnimationLoop = function(callback)");
     expect(srcDoc).toContain("window.THREE = instrumentedThree");

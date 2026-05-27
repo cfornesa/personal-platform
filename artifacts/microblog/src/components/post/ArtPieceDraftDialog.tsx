@@ -61,9 +61,13 @@ export function ArtPieceDraftDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+        <div role="tablist" aria-label="Piece view" className="flex flex-wrap gap-2 border-b border-border pb-2">
           <button
             type="button"
+            role="tab"
+            id="piece-tab-preview"
+            aria-selected={viewTab === "preview"}
+            aria-controls="piece-panel-preview"
             onClick={() => setViewTab("preview")}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${viewTab === "preview" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
@@ -71,6 +75,10 @@ export function ArtPieceDraftDialog({
           </button>
           <button
             type="button"
+            role="tab"
+            id="piece-tab-html"
+            aria-selected={viewTab === "html"}
+            aria-controls="piece-panel-html"
             onClick={() => setViewTab("html")}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${viewTab === "html" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
@@ -78,6 +86,10 @@ export function ArtPieceDraftDialog({
           </button>
           <button
             type="button"
+            role="tab"
+            id="piece-tab-css"
+            aria-selected={viewTab === "css"}
+            aria-controls="piece-panel-css"
             onClick={() => setViewTab("css")}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${viewTab === "css" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
@@ -85,6 +97,10 @@ export function ArtPieceDraftDialog({
           </button>
           <button
             type="button"
+            role="tab"
+            id="piece-tab-js"
+            aria-selected={viewTab === "js"}
+            aria-controls="piece-panel-js"
             onClick={() => setViewTab("js")}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${viewTab === "js" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
@@ -94,7 +110,7 @@ export function ArtPieceDraftDialog({
 
         <div className="overflow-y-auto min-h-0 space-y-4">
           {open && draft && viewTab === "preview" ? (
-            <>
+            <div role="tabpanel" id="piece-panel-preview" aria-labelledby="piece-tab-preview" className="space-y-4">
               <div className="rounded-xl border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
                 <p><span className="font-medium text-foreground">Prompt:</span> {prompt}</p>
                 <p className="mt-1">
@@ -127,22 +143,28 @@ export function ArtPieceDraftDialog({
                   Preview warning: {previewWarning}
                 </p>
               ) : null}
-            </>
+            </div>
           ) : null}
           {open && draft && viewTab === "html" ? (
-            <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
-              {draft.htmlCode || "(No HTML code provided)"}
-            </pre>
+            <div role="tabpanel" id="piece-panel-html" aria-labelledby="piece-tab-html">
+              <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                {draft.htmlCode || "(No HTML code provided)"}
+              </pre>
+            </div>
           ) : null}
           {open && draft && viewTab === "css" ? (
-            <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
-              {draft.cssCode || "(No CSS code provided)"}
-            </pre>
+            <div role="tabpanel" id="piece-panel-css" aria-labelledby="piece-tab-css">
+              <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                {draft.cssCode || "(No CSS code provided)"}
+              </pre>
+            </div>
           ) : null}
           {open && draft && viewTab === "js" ? (
-            <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
-              {draft.generatedCode}
-            </pre>
+            <div role="tabpanel" id="piece-panel-js" aria-labelledby="piece-tab-js">
+              <pre className="p-4 text-xs font-mono bg-muted/50 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                {draft.generatedCode}
+              </pre>
+            </div>
           ) : null}
         </div>
 

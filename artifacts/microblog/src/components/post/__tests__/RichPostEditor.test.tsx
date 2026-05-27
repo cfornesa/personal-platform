@@ -106,6 +106,14 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
 
+vi.mock("@/hooks/use-site-settings", () => ({
+  useSiteSettings: () => ({
+    data: {
+      allowedOrigins: ["http://localhost:4000"],
+    },
+  }),
+}));
+
 vi.mock("../iframe-embed", () => ({
   IframeEmbed: {},
 }));

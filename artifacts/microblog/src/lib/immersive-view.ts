@@ -4,6 +4,8 @@ export type ImmersiveImageMetadata = {
   caption?: string | null;
 };
 
+const RESPONSIVE_EMBED_IFRAME_STYLE = "width:100%;aspect-ratio:16 / 9;display:block;";
+
 const IMAGE_QUERY_KEYS = {
   alt: "alt",
   title: "title",
@@ -81,10 +83,17 @@ export function readImmersiveImageMetadata(searchParams: URLSearchParams): Immer
   };
 }
 
-export function buildImmersivePieceHref(id: number, versionId?: number | null) {
-  const href = new URL(`/immersive/pieces/${id}`, window.location.origin);
+export function buildImmersivePieceHref(id: number, versionId?: number | null, origin?: string) {
+  const base = origin || window.location.origin;
+  const href = new URL(`/immersive/pieces/${id}`, base);
   if (versionId && Number.isFinite(versionId) && versionId > 0) {
     href.searchParams.set("version", String(versionId));
+  }
+  // Return a full absolute URL when an origin is explicitly provided
+  // to ensure links are robust when the HTML is moved to other sites
+  // (e.g. syndication, copy-paste, external embeds).
+  if (origin) {
+    return href.toString();
   }
   return `${href.pathname}${href.search}`;
 }
@@ -101,7 +110,7 @@ export function buildPieceGalleryEmbedHtml(
   }
   const src = `${origin}/immersive/pieces/${pieceId}?${params}`;
   const safeTitle = title.replace(/"/g, "&quot;");
-  return `<iframe src="${src}" width="100%" height="500" title="${safeTitle}" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  return `<iframe src="${src}" width="100%" style="${RESPONSIVE_EMBED_IFRAME_STYLE}" title="${safeTitle}" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
 }
 
 export function buildImageGalleryEmbedHtml(
@@ -115,7 +124,7 @@ export function buildImageGalleryEmbedHtml(
   if (metadata.caption?.trim()) params.set("caption", metadata.caption.trim());
   const src = `${origin}/immersive/images/${encodedRef}?${params}`;
   const safeTitle = (metadata.title || metadata.alt || "Immersive image").replace(/"/g, "&quot;");
-  return `<iframe src="${src}" width="100%" height="500" title="${safeTitle}" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  return `<iframe src="${src}" width="100%" style="${RESPONSIVE_EMBED_IFRAME_STYLE}" title="${safeTitle}" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
 }
 
 export function buildPlainImageEmbedHtml(
@@ -141,6 +150,9 @@ export function extractPieceEmbedMeta(src: string, origin = window.location.orig
     return {
       id,
       versionId: versionId && Number.isFinite(versionId) && versionId > 0 ? versionId : null,
+      // Preserve the source origin so cross-posted VR links point back to the
+      // site that owns the piece, not the current site.
+      pieceOrigin: url.origin,
     };
   } catch {
     return null;

@@ -5,6 +5,8 @@ import {
   buildImmersivePieceHref,
   extractPieceEmbedMeta,
 } from "@/lib/immersive-view";
+import { useSiteSettings } from "@/hooks/use-site-settings";
+import { normalizePieceEmbedUrls } from "@/lib/content-normalization";
 
 type PostContentProps = {
   content: string;
@@ -104,11 +106,50 @@ function createImmersiveAnchorMarkup(href: string, label: string) {
   return `<a href="${href}" aria-label="${label.replace(/"/g, "&quot;")}" class="absolute bottom-3 right-3 z-20 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-border/70 bg-background/90 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground shadow-lg backdrop-blur transition hover:border-primary hover:text-primary">${boxSvg}<span aria-hidden="true">VR</span></a>`;
 }
 
-function enhanceImmersiveHtml(html: string): string {
+function normalizePieceEmbedFrame(frame: HTMLIFrameElement, origin: string) {
+  const currentSrc = frame.getAttribute("src") || "";
+  // Ensure the iframe src is absolute and uses the canonical origin
+  // so it renders correctly on external embeds and across environments.
+  if (currentSrc.includes("/embed/pieces/")) {
+    const match = currentSrc.match(/\/embed\/pieces\/(\d+)/);
+    if (match) {
+      const pieceId = match[1];
+      const url = new URL(currentSrc, window.location.origin);
+      const version = url.searchParams.get("version");
+      const nextSrc = `${origin}/embed/pieces/${pieceId}${version ? `?version=${version}` : ""}`;
+      if (currentSrc !== nextSrc) {
+        frame.setAttribute("src", nextSrc);
+      }
+    }
+  }
+
+  frame.setAttribute("width", "100%");
+  frame.removeAttribute("height");
+  const existingStyle = frame.getAttribute("style") || "";
+  const preservedStyle = existingStyle
+    .replace(/(?:^|;)\s*(?:width|height|min-height|max-height|aspect-ratio)\s*:[^;]*/gi, "")
+    .trim()
+    .replace(/^;|;$/g, "");
+  const normalizedStyle = [
+    "width:100%",
+    "aspect-ratio:16 / 9",
+    "display:block",
+    preservedStyle,
+  ]
+    .filter(Boolean)
+    .join(";");
+  frame.setAttribute("style", normalizedStyle.endsWith(";") ? normalizedStyle : `${normalizedStyle};`);
+}
+
+function enhanceImmersiveHtml(html: string, canonicalOrigin: string): string {
   if (typeof DOMParser === "undefined") return html;
-  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  // First, normalize all piece embed URLs in the raw HTML to use the canonical origin.
+  // This ensures they render correctly even if the stored HTML has a different origin.
+  const normalizedHtml = normalizePieceEmbedUrls(html, canonicalOrigin);
+
+  const doc = new DOMParser().parseFromString(`<div>${normalizedHtml}</div>`, "text/html");
   const root = doc.body.firstChild as HTMLElement | null;
-  if (!root) return html;
+  if (!root) return normalizedHtml;
 
   Array.from(root.querySelectorAll("img[src]")).forEach((image) => {
     const src = image.getAttribute("src");
@@ -132,10 +173,12 @@ function enhanceImmersiveHtml(html: string): string {
   });
 
   Array.from(root.querySelectorAll("iframe[src]")).forEach((frame) => {
+    if (!(frame instanceof HTMLIFrameElement)) return;
     const src = frame.getAttribute("src");
     if (!src || frame.closest("[data-immersive-wrapper]")) return;
     const meta = extractPieceEmbedMeta(src);
     if (!meta) return;
+    normalizePieceEmbedFrame(frame, canonicalOrigin);
 
     const wrapper = doc.createElement("div");
     wrapper.setAttribute("data-immersive-wrapper", "piece");
@@ -145,7 +188,7 @@ function enhanceImmersiveHtml(html: string): string {
     wrapper.insertAdjacentHTML(
       "beforeend",
       createImmersiveAnchorMarkup(
-        buildImmersivePieceHref(meta.id, meta.versionId),
+        buildImmersivePieceHref(meta.id, meta.versionId, canonicalOrigin),
         "Open piece in immersive view",
       ),
     );
@@ -171,6 +214,12 @@ export const PostContent = memo(function PostContent({
   className,
   highlightQuery,
 }: PostContentProps) {
+  const { data: siteSettings } = useSiteSettings();
+  const canonicalOrigin = 
+    (window as any).__CANONICAL_ORIGIN__ || 
+    siteSettings?.allowedOrigins?.[0] || 
+    window.location.origin;
+
   const terms = useMemo(
     () => tokenizeQuery(highlightQuery ?? ""),
     [highlightQuery],
@@ -182,8 +231,8 @@ export const PostContent = memo(function PostContent({
     [content, contentFormat, regex],
   );
   const immersiveHtml = useMemo(
-    () => (contentFormat === "html" ? enhanceImmersiveHtml(renderedHtml) : renderedHtml),
-    [contentFormat, renderedHtml],
+    () => (contentFormat === "html" ? enhanceImmersiveHtml(renderedHtml, canonicalOrigin) : renderedHtml),
+    [contentFormat, renderedHtml, canonicalOrigin],
   );
 
   if (contentFormat === "plain") {

@@ -1,9 +1,11 @@
+import { useEffect, useMemo } from "react";
 import { useRoute } from "wouter";
 import {
   getGetEmbeddedArtPieceQueryKey,
   useGetEmbeddedArtPiece,
 } from "@workspace/api-client-react";
 import { ArtPieceRenderer } from "@/components/post/ArtPieceRenderer";
+import { buildImmersivePieceHref } from "@/lib/immersive-view";
 
 export default function PieceEmbed() {
   const [, params] = useRoute("/embed/pieces/:id");
@@ -11,6 +13,12 @@ export default function PieceEmbed() {
   const searchParams = new URLSearchParams(window.location.search);
   const version = searchParams.get("version");
   const versionId = version ? Number(version) : undefined;
+  const staticImmersiveHref = useMemo(() => {
+    const href = new URL(buildImmersivePieceHref(pieceId, versionId), window.location.origin);
+    href.searchParams.set("embed", "1");
+    href.searchParams.set("static", "1");
+    return href.toString();
+  }, [pieceId, versionId]);
 
   const { data, isLoading, error } = useGetEmbeddedArtPiece(
     pieceId,
@@ -26,13 +34,20 @@ export default function PieceEmbed() {
     },
   );
 
+  useEffect(() => {
+    if (data?.version.engine !== "three") {
+      return;
+    }
+    window.location.replace(staticImmersiveHref);
+  }, [data?.version.engine, staticImmersiveHref]);
+
   if (isLoading) {
-    return <div className="min-h-screen animate-pulse bg-card" />;
+    return <div className="min-h-screen animate-pulse bg-transparent" />;
   }
 
   if (!data || error || !Number.isFinite(pieceId) || pieceId <= 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-card p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-transparent p-8 text-center">
         <div>
           <h1 className="text-lg font-semibold">Piece not found</h1>
           <p className="text-sm text-muted-foreground">
@@ -43,14 +58,20 @@ export default function PieceEmbed() {
     );
   }
 
+  if (data.version.engine === "three") {
+    return <div className="min-h-screen bg-[#050b16]" />;
+  }
+
   return (
-    <div className="min-h-screen border border-border bg-card p-4">
+    <div className="min-h-screen bg-transparent">
       <ArtPieceRenderer
         engine={data.version.engine}
         code={data.version.generatedCode}
         htmlCode={data.version.htmlCode}
         cssCode={data.version.cssCode}
-        height={460}
+        className="h-screen"
+        iframeClassName="h-full w-full bg-transparent"
+        height={window.innerHeight || 460}
       />
     </div>
   );

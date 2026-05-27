@@ -49,7 +49,7 @@ export default function PostDetail() {
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
         {isLoading ? (
-          <div className="p-6 space-y-4 animate-pulse">
+          <div role="status" aria-label="Loading post" className="p-6 space-y-4 animate-pulse">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-muted"></div>
               <div className="space-y-2">

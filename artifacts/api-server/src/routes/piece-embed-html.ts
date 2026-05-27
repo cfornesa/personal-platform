@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { artPiecesTable, artPieceVersionsTable, db, eq } from "@workspace/db";
-import { z } from "zod/v4";
+import { z } from "zod";
+import { buildStaticImmersiveThreeEmbedHtml } from "./piece-embed-html.helpers";
+import { getCanonicalOrigin } from "../lib/origin";
 
 const router = Router();
 
@@ -46,7 +48,11 @@ router.get("/embed/pieces/:id", async (req: Request, res: Response) => {
     }
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.send(pieceEmbedHtml(piece.title, version.engine, version.generatedCode, version.htmlCode, version.cssCode));
+    const origin = getCanonicalOrigin(req);
+    if (version.engine === "three") {
+      return res.send(buildStaticImmersiveThreeEmbedHtml(piece.title, piece.id, version.id, origin));
+    }
+    return res.send(pieceEmbedHtml(piece.title, version.engine, version.generatedCode, version.htmlCode, version.cssCode, origin));
   } catch (err) {
     console.error("Failed to serve piece embed:", err);
     return res.status(500).send(notFoundHtml());
@@ -61,7 +67,8 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: string | null | undefined, cssCode: string | null | undefined): string {
+
+function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: string | null | undefined, cssCode: string | null | undefined, origin: string): string {
   const safeTitle = escapeHtml(title);
   const safeCss = cssCode || "";
   const safeHtml = htmlCode || "";
@@ -76,14 +83,16 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
 
   // Standard library paths based on express.static mounts in app.ts
   const libraryScripts: Record<string, string> = {
-    p5: '<script src="/api/runtimes/p5/p5.min.js"></script>',
-    three: '<script type="importmap">{"imports":{"three":"/api/runtimes/three/three.module.min.js"}}</script>',
-    c2: '<script src="/api/runtimes/c2/c2.min.js"></script>',
+    p5: `<script src="${origin}/api/runtimes/p5/p5.min.js"></script>`,
+    three: `<script type="importmap">{"imports":{"three":"${origin}/api/runtimes/three/three.module.min.js"}}</script>`,
+    c2: `<script src="${origin}/api/runtimes/c2/c2.min.js"></script>`,
   };
 
-  const engineInit = engine === "three" 
-    ? `
-      import * as THREE from '/api/runtimes/three/three.module.min.js';
+  let engineInit = "";
+
+  if (engine === "three") {
+    engineInit = `
+      import * as THREE from '${origin}/api/runtimes/three/three.module.min.js';
       window.THREE = THREE;
       
       const state = { scene: null, camera: null, objects: [] };
@@ -130,7 +139,7 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
           new Function(codeContent)();
           sketchFactory = window.sketch;
         }
-if (typeof sketchFactory === 'function') {
+        if (typeof sketchFactory === 'function') {
           let canvas = document.querySelector('canvas');
           if (!canvas) {
             canvas = document.createElement('canvas');
@@ -139,31 +148,29 @@ if (typeof sketchFactory === 'function') {
           }
           canvas.style.width = '100%'; canvas.style.height = '100%'; canvas.style.display = 'block';
 
-  // Instrumentation for autoFit: Create a local instrumented version of THREE
-  // since the module object itself is read-only.
-  const instrumentedThree = { ...THREE };
-  const originalScene = THREE.Scene;
-  instrumentedThree.Scene = class extends originalScene { 
-    constructor() { super(); state.scene = this; } 
-    add(...objs) {
-      objs.forEach(obj => { if (obj.geometry) state.objects.push(obj); });
-      return super.add(...objs);
-    }
-  };
-  const originalCamera = THREE.PerspectiveCamera;
-  instrumentedThree.PerspectiveCamera = class extends originalCamera { constructor(...args) { super(...args); state.camera = this; } };
+          const instrumentedThree = { ...THREE };
+          const originalScene = THREE.Scene;
+          instrumentedThree.Scene = class extends originalScene { 
+            constructor() { super(); state.scene = this; } 
+            add(...objs) {
+              objs.forEach(obj => { if (obj.geometry) state.objects.push(obj); });
+              return super.add(...objs);
+            }
+          };
+          const originalCamera = THREE.PerspectiveCamera;
+          instrumentedThree.PerspectiveCamera = class extends originalCamera { constructor(...args) { super(...args); state.camera = this; } };
 
-  sketchFactory({ THREE: instrumentedThree, canvas, startFrame });
-  window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
-} else {
+          sketchFactory({ THREE: instrumentedThree, canvas, startFrame });
+          window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
+        } else {
           throw new Error('Sketch factory not found. Ensure your JS assigns a function to window.sketch.');
         }
       } catch(err) {
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
-    `
-    : engine === "c2"
-    ? `
+    `;
+  } else if (engine === "c2") {
+    engineInit = `
       function startFrame(handler) {
         let frameCount = 0;
         function tick() {
@@ -195,8 +202,9 @@ if (typeof sketchFactory === 'function') {
       } catch(err) {
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
-    `
-    : `
+    `;
+  } else {
+    engineInit = `
       try {
         const codeContent = ${safeCode};
         let sketchFactory;
@@ -218,20 +226,15 @@ if (typeof sketchFactory === 'function') {
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
     `;
+  }
+
+  const scriptTag = engine === "three" 
+    ? `<script type="module">${engineInit}</script>`
+    : `<script type="text/javascript">${engineInit}</script>`;
 
   const bodyContent = htmlCode !== null && htmlCode !== undefined
-    ? `
-      ${safeHtml}
-      <script type="${engine === "three" ? "module" : "text/javascript"}">
-        ${engineInit}
-      </script>
-    `
-    : `
-      <div id="canvas-container"></div>
-      <script type="${engine === "three" ? "module" : "text/javascript"}">
-        ${engineInit}
-      </script>
-    `;
+    ? `${safeHtml}\n${scriptTag}`
+    : `<div id="canvas-container"></div>\n${scriptTag}`;
 
   return `<!DOCTYPE html>
 <html lang="en">

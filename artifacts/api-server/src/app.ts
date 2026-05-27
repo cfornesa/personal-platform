@@ -129,6 +129,10 @@ const staticPath = process.env.STATIC_FILES_PATH
 if (fs.existsSync(staticPath)) {
   const indexPath = path.join(staticPath, "index.html");
 
+  app.get("/robots.txt", (_req, res) => {
+    res.type("text/plain").send("User-agent: *\nAllow: /\n");
+  });
+
   // Site root: register an explicit handler before `express.static` so
   // `GET /` and `GET /index.html` always run through `injectThemeData`
   // and arrive at the browser with `<style id="site-settings-theme">`
@@ -138,8 +142,8 @@ if (fs.existsSync(staticPath)) {
   // direct `/index.html` request as a regular static file), and the
   // browser would briefly paint the bauhaus-white defaults baked into
   // the bundle's CSS before React's `ThemeInjector` runs.
-  app.get(["/", "/index.html"], async (_req, res) => {
-    const html = await injectThemeData(indexPath);
+  app.get(["/", "/index.html"], async (req, res) => {
+    const html = await injectThemeData(req, indexPath);
     res.send(html);
   });
 
@@ -147,7 +151,7 @@ if (fs.existsSync(staticPath)) {
   app.get(["/posts/:id", "/embed/posts/:id"], async (req, res, next) => {
     const id = req.params.id as string;
     if (id && id !== "index.html") {
-      const html = await injectPostMetadata(indexPath, id);
+      const html = await injectPostMetadata(req, indexPath, id);
       if (html) {
         res.send(html);
         return;
@@ -163,7 +167,7 @@ if (fs.existsSync(staticPath)) {
   app.get("/p/:slug", async (req, res, next) => {
     const slug = req.params.slug as string;
     if (slug && slug !== "index.html") {
-      const html = await injectPageFeedLinks(indexPath, slug);
+      const html = await injectPageFeedLinks(req, indexPath, slug);
       if (html) {
         res.send(html);
         return;
@@ -177,7 +181,7 @@ if (fs.existsSync(staticPath)) {
   app.get("/categories/:slug", async (req, res, next) => {
     const slug = req.params.slug as string;
     if (slug && slug !== "index.html") {
-      const html = await injectCategoryFeedLinks(indexPath, slug);
+      const html = await injectCategoryFeedLinks(req, indexPath, slug);
       if (html) {
         res.send(html);
         return;
@@ -192,7 +196,7 @@ if (fs.existsSync(staticPath)) {
   app.get("/users/:handle", async (req, res, next) => {
     const handle = req.params.handle as string;
     if (handle && handle !== "index.html") {
-      const html = await injectUserTheme(indexPath, handle);
+      const html = await injectUserTheme(req, indexPath, handle);
       if (html) {
         res.send(html);
         return;
@@ -202,8 +206,8 @@ if (fs.existsSync(staticPath)) {
   });
 
   app.use(express.static(staticPath));
-  app.use(async (_req: Request, res: Response) => {
-    const html = await injectThemeData(indexPath);
+  app.use(async (req: Request, res: Response) => {
+    const html = await injectThemeData(req, indexPath);
     res.send(html);
   });
 } else {

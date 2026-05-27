@@ -309,7 +309,7 @@ async function refreshOneSource(source: FeedSourceRow): Promise<RefreshResult> {
     result.fetched = items.length;
 
     for (const raw of items) {
-      const normalized = normalizeFeedItem(raw, source.name);
+      const normalized = normalizeFeedItem(raw, source.name, source.siteUrl ?? null);
       const outcome = await ingestOneItem(ops, source, normalized);
       if (outcome === "imported") {
         result.imported += 1;

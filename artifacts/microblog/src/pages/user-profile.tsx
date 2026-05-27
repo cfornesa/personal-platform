@@ -88,7 +88,7 @@ export default function UserProfile() {
 
       <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
         {isUserLoading ? (
-          <div className="flex items-center gap-6 animate-pulse">
+          <div role="status" aria-label="Loading profile" className="flex items-center gap-6 animate-pulse">
             <div className="h-20 w-20 rounded-full bg-muted"></div>
             <div className="space-y-3">
               <div className="h-8 w-48 bg-muted rounded"></div>
@@ -153,49 +153,49 @@ export default function UserProfile() {
               <div className="flex flex-wrap gap-2 pt-1">
                 {socialLinks.instagram && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" title="Instagram">
+                    <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram">
                       <Instagram className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.twitter && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.twitter} target="_blank" rel="noopener noreferrer" title="X (Twitter)">
+                    <a href={socialLinks.twitter} target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)">
                       <Twitter className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.youtube && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" title="YouTube">
+                    <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube">
                       <Youtube className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.tiktok && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.tiktok} target="_blank" rel="noopener noreferrer" title="TikTok">
+                    <a href={socialLinks.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok">
                       <Music2 className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.twitch && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.twitch} target="_blank" rel="noopener noreferrer" title="Twitch">
+                    <a href={socialLinks.twitch} target="_blank" rel="noopener noreferrer" aria-label="Twitch">
                       <Tv className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.github && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.github} target="_blank" rel="noopener noreferrer" title="GitHub">
+                    <a href={socialLinks.github} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
                       <Github className="h-5 w-5" />
                     </a>
                   </Button>
                 )}
                 {socialLinks.linkedin && (
                   <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full hover:text-primary hover:bg-primary/10">
-                    <a href={socialLinks.linkedin} target="_blank" rel="noopener noreferrer" title="LinkedIn">
+                    <a href={socialLinks.linkedin} target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
                       <Linkedin className="h-5 w-5" />
                     </a>
                   </Button>
@@ -218,7 +218,7 @@ export default function UserProfile() {
         </div>
 
         {isPostsLoading ? (
-          <div className="divide-y divide-border">
+          <div role="status" aria-label="Loading posts" className="divide-y divide-border">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="p-6 space-y-4 animate-pulse">
                 <div className="flex items-center gap-3">

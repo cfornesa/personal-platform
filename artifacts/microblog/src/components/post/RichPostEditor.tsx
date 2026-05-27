@@ -33,6 +33,11 @@ import {
   type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  normalizePieceEmbedUrls,
+  ensureNormalizedParagraphHtml as ensureParagraphHtml,
+} from "@/lib/content-normalization";
+import { useSiteSettings } from "@/hooks/use-site-settings";
 import { IframeEmbed } from "./iframe-embed";
 import { CategoryMultiSelect } from "./CategoryMultiSelect";
 import { PlatformMultiSelect } from "./PlatformMultiSelect";
@@ -110,68 +115,6 @@ type RichPostEditorProps = {
 
 function getEditorTextLength(html: string) {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
-}
-
-function ensureParagraphHtml(html: string) {
-  const trimmed = html.trim();
-  if (trimmed === "") {
-    return "<p></p>";
-  }
-  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
-    return normalizePieceEmbedUrls(trimmed);
-  }
-  return normalizePieceEmbedUrls(
-    trimmed
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
-    .join(""),
-  );
-}
-
-function normalizePieceEmbedSrc(src: string) {
-  const trimmed = src.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-
-  try {
-    const url = trimmed.startsWith("http://") || trimmed.startsWith("https://")
-      ? new URL(trimmed)
-      : new URL(trimmed, window.location.origin);
-    const match = url.pathname.match(/^\/embed\/pieces\/(\d+)$/);
-    if (!match) {
-      return trimmed;
-    }
-    return `${url.origin}/embed/pieces/${match[1]}`;
-  } catch {
-    const match = trimmed.match(/^(\/embed\/pieces\/\d+)(?:\?[^#]*)?(#.*)?$/);
-    if (!match) {
-      return trimmed;
-    }
-    return `${match[1]}${match[2] ?? ""}`;
-  }
-}
-
-function normalizePieceEmbedUrls(html: string) {
-  if (!/<iframe\b/i.test(html)) {
-    return html;
-  }
-
-  const document = new DOMParser().parseFromString(html, "text/html");
-  let mutated = false;
-  document.querySelectorAll("iframe[src]").forEach((iframe) => {
-    const currentSrc = iframe.getAttribute("src");
-    if (!currentSrc) {
-      return;
-    }
-    const normalizedSrc = normalizePieceEmbedSrc(currentSrc);
-    if (normalizedSrc !== currentSrc) {
-      iframe.setAttribute("src", normalizedSrc);
-      mutated = true;
-    }
-  });
-
-  return mutated ? document.body.innerHTML : html;
 }
 
 function extractFirstImageSrc(html: string): string | null {
@@ -263,6 +206,7 @@ export function RichPostEditor({
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
   const origPushStateRef = useRef(window.history.pushState.bind(window.history));
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkDialogInitialText, setLinkDialogInitialText] = useState("");
   const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
   const [youTubeDialogOpen, setYouTubeDialogOpen] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
@@ -297,6 +241,12 @@ export function RichPostEditor({
   const { mutateAsync: updateMediaAltText } = useUpdateMediaAltText();
   const { mutateAsync: updateArtPieceForBubble } = useUpdateArtPiece();
 
+  const { data: siteSettings } = useSiteSettings();
+  const canonicalOrigin = 
+    (window as any).__CANONICAL_ORIGIN__ || 
+    siteSettings?.allowedOrigins?.[0] || 
+    window.location.origin;
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -314,7 +264,7 @@ export function RichPostEditor({
       Underline,
       IframeEmbed,
     ],
-    content: ensureParagraphHtml(initialContent),
+    content: ensureParagraphHtml(initialContent, canonicalOrigin),
     editorProps: {
       attributes: {
         class:
@@ -332,11 +282,11 @@ export function RichPostEditor({
       return;
     }
 
-    const nextContent = ensureParagraphHtml(initialContent);
+    const nextContent = ensureParagraphHtml(initialContent, canonicalOrigin);
     if (editor.getHTML() !== nextContent) {
       editor.commands.setContent(nextContent, { emitUpdate: true });
     }
-  }, [editor, initialContent]);
+  }, [editor, initialContent, canonicalOrigin]);
 
   useEffect(() => {
     if (aiVendors.length === 0) {
@@ -379,7 +329,7 @@ export function RichPostEditor({
     pieceGenerationAbortRef.current = null;
   }, []);
 
-  const initialEditorContent = ensureParagraphHtml(initialContent);
+  const initialEditorContent = ensureParagraphHtml(initialContent, canonicalOrigin);
   const initialSocialNormalized = {
     bluesky: initialSocialPostDrafts?.bluesky ?? "",
     linkedin: initialSocialPostDrafts?.linkedin ?? "",
@@ -423,6 +373,11 @@ export function RichPostEditor({
 
   function handleInsertLink() {
     if (!editor) return;
+    const { selection } = editor.state;
+    const selected = selection.empty
+      ? ""
+      : editor.state.doc.textBetween(selection.from, selection.to, " ");
+    setLinkDialogInitialText(selected);
     setLinkDialogOpen(true);
   }
 
@@ -442,6 +397,9 @@ export function RichPostEditor({
     if (!editor.view.dom.contains(target)) return;
 
     if (target.closest("a")) {
+      const anchorEl = target.closest("a");
+      const existingText = anchorEl?.textContent?.trim() ?? "";
+      setLinkDialogInitialText(existingText);
       setLinkDialogOpen(true);
       return;
     }
@@ -496,7 +454,7 @@ export function RichPostEditor({
     }
 
     const rawHtml = isHtmlMode ? htmlSource : editor.getHTML();
-    const html = normalizePieceEmbedUrls(rawHtml);
+    const html = normalizePieceEmbedUrls(rawHtml, canonicalOrigin);
     const meaningfulHtml = html
       .replace(/<p><\/p>/g, "")
       .replace(/<p>\s*<\/p>/g, "")
@@ -698,7 +656,7 @@ export function RichPostEditor({
         });
 
         const reconstructed = preservedHtml + response.text;
-        editor.commands.setContent(reconstructed || ensureParagraphHtml(""), { emitUpdate: true });
+        editor.commands.setContent(reconstructed || ensureParagraphHtml("", canonicalOrigin), { emitUpdate: true });
         toast({
           title: "Draft improved",
           description: "The editor content has been replaced with the AI-assisted rewrite.",
@@ -729,9 +687,9 @@ export function RichPostEditor({
   const aiButtonClass =
     "rounded-none border-2 border-yellow-400 bg-zinc-100/95 text-zinc-950 shadow-[3px_3px_0_0_rgba(234,179,8,1)] hover:bg-yellow-200 dark:bg-zinc-950/95 dark:text-yellow-200 dark:hover:bg-zinc-900";
   const aiSelectClass =
-    "pointer-events-auto h-9 min-w-[11rem] rounded-none border-2 border-yellow-400 bg-zinc-100/95 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(234,179,8,1)] focus:outline-none focus:ring-0 dark:bg-zinc-950/95 dark:text-yellow-200";
+    "pointer-events-auto h-9 min-w-[11rem] rounded-none border-2 border-yellow-400 bg-zinc-100/95 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(234,179,8,1)] focus:outline-none focus:ring-2 focus:ring-ring dark:bg-zinc-950/95 dark:text-yellow-200";
   const aiModeSelectClass =
-    "pointer-events-auto h-9 min-w-[8rem] rounded-none border-2 border-black bg-white/95 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(0,0,0,0.95)] focus:outline-none focus:ring-0 dark:bg-zinc-900/95 dark:text-zinc-50";
+    "pointer-events-auto h-9 min-w-[8rem] rounded-none border-2 border-black bg-white/95 px-3 text-sm text-zinc-950 shadow-[3px_3px_0_0_rgba(0,0,0,0.95)] focus:outline-none focus:ring-2 focus:ring-ring dark:bg-zinc-900/95 dark:text-zinc-50";
   const headingLabel =
     editor.isActive("heading", { level: 1 }) ? "H1"
       : editor.isActive("heading", { level: 2 }) ? "H2"
@@ -1539,9 +1497,21 @@ export function RichPostEditor({
         open={linkDialogOpen}
         onOpenChange={setLinkDialogOpen}
         initialHref={editor?.getAttributes("link").href as string | undefined}
+        initialLinkText={linkDialogInitialText}
         initialOpenInNewTab={editor?.getAttributes("link").target === "_blank"}
-        onApply={(href, openInNewTab) => {
-          editor?.chain().focus().extendMarkRange("link").setLink({ href, target: openInNewTab ? "_blank" : null }).run();
+        onApply={(href, openInNewTab, linkText) => {
+          if (!editor) return;
+          const target = openInNewTab ? "_blank" : null;
+          const { selection } = editor.state;
+          if (selection.empty && linkText) {
+            editor.chain().focus().insertContent({
+              type: "text",
+              text: linkText,
+              marks: [{ type: "link", attrs: { href, target } }],
+            }).run();
+          } else if (!selection.empty) {
+            editor.chain().focus().extendMarkRange("link").setLink({ href, target }).run();
+          }
         }}
         onRemove={() => {
           editor?.chain().focus().extendMarkRange("link").unsetLink().run();

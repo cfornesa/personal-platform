@@ -124,6 +124,10 @@ export default defineConfig({
         target: apiOrigin,
         changeOrigin: false,
       },
+      "/embed/pieces/": {
+        target: apiOrigin,
+        changeOrigin: false,
+      },
       "/feed.xml": {
         target: apiOrigin,
         changeOrigin: false,

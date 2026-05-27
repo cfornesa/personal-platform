@@ -71,6 +71,20 @@ function detectIsHtml(value: string): boolean {
   return /<[a-z][\s\S]*?>/i.test(value);
 }
 
+function resolveRelativeSrcUrls(html: string, siteUrl: string): string {
+  try {
+    const origin = new URL(siteUrl).origin;
+    // Rewrite root-relative src/href values (starting with /) to absolute URLs
+    // so that piece iframes and images ingested from another site don't resolve
+    // against the local origin when the post is rendered here.
+    return html.replace(/\b(src|href)="(\/[^"]*)"/g, (_match, attr, path) => {
+      return `${attr}="${origin}${path}"`;
+    });
+  } catch {
+    return html;
+  }
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -98,6 +112,7 @@ export function pickOriginalAuthor(item: RawFeedItem): string | null {
 export function normalizeFeedItem(
   item: RawFeedItem,
   sourceName: string,
+  sourceSiteUrl?: string | null,
 ): NormalizedItem {
   const { hash, guid } = computeGuidHash(item);
   const title = (item.title ?? "Untitled").trim() || "Untitled";
@@ -150,7 +165,10 @@ export function normalizeFeedItem(
         )}" class="u-url u-syndication" rel="noopener noreferrer nofollow" target="_blank">Read original</a></em></p>`
       : `<p><em>${byline}via <strong>${escapeHtml(sourceName)}</strong></em></p>`;
 
-    const merged = `${titleBlock}\n${raw}\n${attribution}`;
+    // Resolve root-relative src/href attributes to absolute URLs so that piece
+    // iframes copied from the source site don't resolve against this site's origin.
+    const resolvedRaw = sourceSiteUrl ? resolveRelativeSrcUrls(raw, sourceSiteUrl) : raw;
+    const merged = `${titleBlock}\n${resolvedRaw}\n${attribution}`;
     return {
       guidHash: hash,
       guid,

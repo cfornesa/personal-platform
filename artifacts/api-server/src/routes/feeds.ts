@@ -12,6 +12,8 @@ import {
 import { stripHtmlToText } from "../lib/html";
 import { attachCategoriesToPosts, type HydratedCategory } from "../lib/post-categories";
 
+import { getCanonicalOrigin } from "../lib/origin";
+
 export type FeedPost = {
   id: number;
   authorName: string;
@@ -41,13 +43,7 @@ type FeedScope = {
 const router: IRouter = Router();
 
 export function getOrigin(req: Request): string {
-  const siteUrl = process.env.PUBLIC_SITE_URL?.trim();
-  if (siteUrl) return siteUrl.replace(/\/$/, "");
-  const forwardedProto = req.header("x-forwarded-proto");
-  const forwardedHost = req.header("x-forwarded-host");
-  const protocol = forwardedProto?.split(",")[0]?.trim() || req.protocol;
-  const host = forwardedHost?.split(",")[0]?.trim() || req.get("host");
-  return `${protocol}://${host}`;
+  return getCanonicalOrigin(req);
 }
 
 function getSiteTitle(): string {
@@ -162,6 +158,20 @@ export async function loadPosts(opts: { categoryId?: number } = {}): Promise<Fee
   return hydrated as FeedPost[];
 }
 
+function normalizePieceUrlsInHtml(html: string, origin: string): string {
+  if (!html.includes("/embed/pieces/") && !html.includes("/immersive/pieces/")) return html;
+
+  // Convert root-relative piece URLs to absolute canonical URLs
+  // Works for both src="/embed/pieces/1" and src="http://localhost:4000/embed/pieces/1"
+  return html.replace(
+    /src=["'](?:\/|https?:\/\/[^\/]+)?\/embed\/pieces\/(\d+)([^"']*)["']/g,
+    (_, id, query) => `src="${origin}/embed/pieces/${id}${query}"`
+  ).replace(
+    /href=["'](?:\/|https?:\/\/[^\/]+)?\/immersive\/pieces\/(\d+)([^"']*)["']/g,
+    (_, id, query) => `href="${origin}/immersive/pieces/${id}${query}"`
+  );
+}
+
 export function buildAtom(origin: string, scope: FeedScope, posts: FeedPost[]): string {
   const authorName = getAuthorName(posts);
   const updatedAt = posts[0]?.createdAt ?? new Date().toISOString();
@@ -174,8 +184,9 @@ export function buildAtom(origin: string, scope: FeedScope, posts: FeedPost[]): 
       const canonicalUrl = getCanonicalPostUrl(origin, post.id);
       const visibleText = toVisibleText(post);
       const summary = summarize(visibleText);
-      const contentHtml =
+      const rawContentHtml =
         post.contentFormat === "html" ? post.content : `<p>${xmlEscape(post.content)}</p>`;
+      const contentHtml = normalizePieceUrlsInHtml(rawContentHtml, origin);
       const categoryTags = post.categories
         .map(
           (c) =>
@@ -224,6 +235,9 @@ export function buildJsonFeed(origin: string, scope: FeedScope, posts: FeedPost[
       const canonicalUrl = getCanonicalPostUrl(origin, post.id);
       const visibleText = toVisibleText(post);
       const summary = summarize(visibleText);
+      const rawContentHtml =
+        post.contentFormat === "html" ? post.content : `<p>${xmlEscape(post.content)}</p>`;
+      const contentHtml = normalizePieceUrlsInHtml(rawContentHtml, origin);
 
       const tags = post.categories.map((c) => c.name);
       return {
@@ -231,8 +245,7 @@ export function buildJsonFeed(origin: string, scope: FeedScope, posts: FeedPost[
         url: canonicalUrl,
         title: post.title?.trim() || summary || `Post ${post.id}`,
         summary,
-        content_html:
-          post.contentFormat === "html" ? post.content : `<p>${xmlEscape(post.content)}</p>`,
+        content_html: contentHtml,
         content_text: visibleText,
         date_published: post.createdAt,
         ...(tags.length > 0 ? { tags } : {}),

@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  computeOrbitKeyboardMotion,
   computeThreeAutoFitView,
   computeMountedArtworkLayout,
   drawContainedIntoPresentationSurface,
   isCompactImmersiveViewport,
   NORMALIZED_PRESENTATION_GALLERY_PROFILE,
+  syncThreeRendererBackground,
 } from "../immersive-gallery";
 
 describe("immersive-gallery layout", () => {
@@ -67,6 +69,71 @@ describe("immersive-gallery layout", () => {
     expect(mobileView.camera.z).toBeGreaterThan(desktopView.camera.z);
     expect(desktopView.target.y).toBeGreaterThan(1);
     expect(desktopView.camera.y).toBeGreaterThan(desktopView.target.y);
+  });
+
+  it("moves forward/back along the full look vector while strafing horizontally", () => {
+    expect(
+      computeOrbitKeyboardMotion(
+        { x: 0, y: -0.6, z: -0.8 },
+        new Set(["ArrowUp"]),
+        0.5,
+      ),
+    ).toEqual({
+      dx: 0,
+      dy: -0.3,
+      dz: -0.4,
+    });
+
+    const strafe = computeOrbitKeyboardMotion(
+      { x: 0, y: -0.6, z: -0.8 },
+      new Set(["ArrowLeft"]),
+      0.5,
+    );
+    expect(strafe.dx).toBeCloseTo(-0.5);
+    expect(strafe.dy).toBeCloseTo(0);
+    expect(strafe.dz).toBeCloseTo(0);
+  });
+
+  it("falls back to a safe horizontal strafe when looking straight up or down", () => {
+    expect(
+      computeOrbitKeyboardMotion(
+        { x: 0, y: 1, z: 0 },
+        new Set(["ArrowRight"]),
+        0.4,
+      ),
+    ).toEqual({
+      dx: 0.4,
+      dy: 0,
+      dz: 0,
+    });
+  });
+
+  it("syncs the renderer clear color from the piece scene background", () => {
+    const setClearColor = vi.fn();
+    const setClearAlpha = vi.fn();
+
+    syncThreeRendererBackground(
+      { setClearColor, setClearAlpha },
+      { background: "#6a3f22" },
+      "#050b16",
+    );
+
+    expect(setClearColor).toHaveBeenCalledWith("#6a3f22", 1);
+    expect(setClearAlpha).toHaveBeenCalledWith(1);
+  });
+
+  it("falls back to a supplied canvas background when the piece scene has no background", () => {
+    const setClearColor = vi.fn();
+    const setClearAlpha = vi.fn();
+
+    syncThreeRendererBackground(
+      { setClearColor, setClearAlpha },
+      { background: null },
+      "rgb(20, 30, 40)",
+    );
+
+    expect(setClearColor).toHaveBeenCalledWith("rgb(20, 30, 40)", 1);
+    expect(setClearAlpha).toHaveBeenCalledWith(1);
   });
 
   it("centers contained media inside the presentation surface", () => {

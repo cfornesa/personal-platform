@@ -9,6 +9,7 @@ type ArtPieceRendererProps = {
   htmlCode?: string | null;
   cssCode?: string | null;
   className?: string;
+  iframeClassName?: string;
   height?: number;
   title?: string;
   onStatusChange?: (status: { valid: boolean; error: string | null; warning?: string | null }) => void;
@@ -22,6 +23,7 @@ export function ArtPieceRenderer({
   htmlCode,
   cssCode,
   className,
+  iframeClassName,
   height = 420,
   title,
   onStatusChange,
@@ -52,7 +54,7 @@ export function ArtPieceRenderer({
       ref={iframeRef}
       srcDoc={srcDoc}
       title={title}
-      className="w-full rounded-xl border border-border bg-black/5"
+      className={iframeClassName ?? "w-full rounded-xl border border-border bg-transparent"}
       style={{ height: height, minHeight: height }}
       sandbox="allow-scripts allow-same-origin"
       frameBorder="0"

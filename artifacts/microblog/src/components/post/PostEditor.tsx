@@ -294,9 +294,11 @@ export function PostEditor({
       : "Post";
 
   const modeToggle = (
-    <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-1 w-fit">
+    <div role="tablist" aria-label="Post mode" className="flex gap-1 rounded-lg border border-border bg-muted/30 p-1 w-fit">
       <button
         type="button"
+        role="tab"
+        aria-selected={mode === "publish"}
         onClick={() => { setMode("publish"); setScheduleError(null); }}
         className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
           mode === "publish" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -307,6 +309,8 @@ export function PostEditor({
       </button>
       <button
         type="button"
+        role="tab"
+        aria-selected={mode === "draft"}
         onClick={() => { setMode("draft"); setScheduleError(null); }}
         className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
           mode === "draft" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -317,6 +321,8 @@ export function PostEditor({
       </button>
       <button
         type="button"
+        role="tab"
+        aria-selected={mode === "schedule"}
         onClick={() => { setMode("schedule"); setScheduleError(null); }}
         className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
           mode === "schedule" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"

@@ -91,7 +91,7 @@ describe("feeds catalog", () => {
     expect(slugs).toContain(`category-${CATEGORY_SLUG}-atom`);
     expect(slugs).toContain(`category-${CATEGORY_SLUG}-json`);
     const atom = body.feeds.find((f) => f.slug === `category-${CATEGORY_SLUG}-atom`)!;
-    expect(atom.url).toContain(`/categories/${CATEGORY_SLUG}/feed.xml`);
+    expect(atom.url).toContain(`/api/categories/${CATEGORY_SLUG}/feeds/atom`);
   });
 
   it("appends per-category Atom + JSON entries when ?category=<slug> resolves", async () => {
@@ -103,7 +103,7 @@ describe("feeds catalog", () => {
     expect(slugs).toContain(`category-${CATEGORY_SLUG}-atom`);
     expect(slugs).toContain(`category-${CATEGORY_SLUG}-json`);
     const atom = body.feeds.find((f) => f.slug === `category-${CATEGORY_SLUG}-atom`)!;
-    expect(atom.url).toContain(`/categories/${CATEGORY_SLUG}/feed.xml`);
+    expect(atom.url).toContain(`/api/categories/${CATEGORY_SLUG}/feeds/atom`);
     expect(atom.mimeType).toMatch(/atom\+xml/);
   });
 
@@ -116,7 +116,7 @@ describe("feeds catalog", () => {
     expect(slugs).toContain(`page-${PAGE_SLUG}-atom`);
     expect(slugs).toContain(`page-${PAGE_SLUG}-json`);
     const json = body.feeds.find((f) => f.slug === `page-${PAGE_SLUG}-json`)!;
-    expect(json.url).toContain(`/p/${PAGE_SLUG}/feed.json`);
+    expect(json.url).toContain(`/api/p/${PAGE_SLUG}/feeds/json`);
     expect(json.mimeType).toMatch(/feed\+json/);
   });
 

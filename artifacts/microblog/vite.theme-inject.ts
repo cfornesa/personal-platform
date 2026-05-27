@@ -10,11 +10,11 @@ export interface ThemeInjectOptions {
    * imported and unit-tested without dragging in `@workspace/db` and
    * its eager mysql pool initialization.
    */
-  injectThemeData: (htmlPath: string) => Promise<string>;
+  injectThemeData: (req: any, htmlPath: string) => Promise<string>;
 }
 
 export interface RunThemeInjectionDeps {
-  injectThemeData: (htmlPath: string) => Promise<string>;
+  injectThemeData: (req: any, htmlPath: string) => Promise<string>;
   /**
    * Vite's `server.transformIndexHtml(url, html, originalUrl?)`.
    * Applies HMR/`@vitejs/plugin-react` transforms (the React refresh
@@ -35,13 +35,14 @@ export interface RunThemeInjectionDeps {
  * raw HTML on disk is used and the error is logged — vite stays up.
  */
 export async function runThemeInjection(
+  req: any,
   indexPath: string,
   url: string,
   deps: RunThemeInjectionDeps,
 ): Promise<string> {
   let injected: string;
   try {
-    injected = await deps.injectThemeData(indexPath);
+    injected = await deps.injectThemeData(req, indexPath);
   } catch (err) {
     console.error("[vite-theme-inject] injectThemeData failed:", err);
     injected = fs.readFileSync(indexPath, "utf-8");
@@ -83,7 +84,7 @@ export default function viteThemeInject(opts: ThemeInjectOptions): Plugin {
         if (!looksLikeHtml) return next();
 
         try {
-          const html = await runThemeInjection(opts.indexPath, url, {
+          const html = await runThemeInjection(req, opts.indexPath, url, {
             injectThemeData: opts.injectThemeData,
             transformIndexHtml: (u, h) => server.transformIndexHtml(u, h),
           });

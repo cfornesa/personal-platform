@@ -18,6 +18,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { ExternalLink } from "lucide-react";
+import { normalizePieceEmbedUrls } from "@/lib/content-normalization";
+import { useSiteSettings } from "@/hooks/use-site-settings";
 import { RichPostEditor } from "@/components/post/RichPostEditor";
 
 const ALL_QUERY_KEY = getListPagesQueryKey({ includeDrafts: "1" });
@@ -51,6 +53,12 @@ export default function AdminPageEditor() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const { data: siteSettings } = useSiteSettings();
+  const canonicalOrigin = 
+    (window as any).__CANONICAL_ORIGIN__ || 
+    siteSettings?.allowedOrigins?.[0] || 
+    window.location.origin;
 
   const list = useListPages(
     { includeDrafts: "1" },
@@ -129,6 +137,8 @@ export default function AdminPageEditor() {
       return;
     }
     const finalStatus = publish ? "published" : status;
+    const normalizedContent = normalizePieceEmbedUrls(content, canonicalOrigin);
+
     const onSuccess = (page: { id: number; slug: string }) => {
       queryClient.invalidateQueries({ queryKey: ALL_QUERY_KEY });
       queryClient.invalidateQueries({
@@ -170,7 +180,7 @@ export default function AdminPageEditor() {
           data: {
             title: finalTitle,
             slug: finalSlug,
-            content,
+            content: normalizedContent,
             status: finalStatus,
             ...(showInNavChanged ? { showInNav } : {}),
           },
@@ -183,7 +193,7 @@ export default function AdminPageEditor() {
           data: {
             title: finalTitle,
             slug: finalSlug,
-            content,
+            content: normalizedContent,
             status: finalStatus,
             showInNav,
           },

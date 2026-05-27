@@ -164,18 +164,18 @@ afterEach(async () => {
 describe("injectUserTheme — first-paint paths", () => {
   it("returns null for an unknown handle (caller falls back to site theme)", async () => {
     dbState.userByUsername = null;
-    const result = await injectUserTheme(htmlPath, "@nobody");
+    const result = await injectUserTheme({} as any, htmlPath, "@nobody");
     expect(result).toBeNull();
   });
 
   it("returns null for an empty handle", async () => {
-    expect(await injectUserTheme(htmlPath, "")).toBeNull();
-    expect(await injectUserTheme(htmlPath, "@")).toBeNull();
+    expect(await injectUserTheme({} as any, htmlPath, "")).toBeNull();
+    expect(await injectUserTheme({} as any, htmlPath, "@")).toBeNull();
   });
 
   it("returns html WITHOUT a user-scoped block when the user has no customization", async () => {
     dbState.userByUsername = emptyUser({ id: "abc-123", username: "noah" });
-    const result = await injectUserTheme(htmlPath, "@noah");
+    const result = await injectUserTheme({} as any, htmlPath, "@noah");
     expect(result).not.toBeNull();
     expect(result).not.toContain("user-theme-server-style");
     expect(result).not.toContain("user-theme-bootstrap");
@@ -192,7 +192,7 @@ describe("injectUserTheme — first-paint paths", () => {
       colorBackground: "200 100% 90%",
       colorPrimary: "180 60% 40%",
     });
-    const result = await injectUserTheme(htmlPath, "@fan");
+    const result = await injectUserTheme({} as any, htmlPath, "@fan");
     expect(result).not.toBeNull();
     // Site theme block is always present so navbar/footer keep matching
     // the rest of the site even on a per-user profile page.
@@ -220,7 +220,7 @@ describe("injectUserTheme — first-paint paths", () => {
       theme: "nature",
       colorBackground: "200 100% 90%",
     });
-    const result = await injectUserTheme(htmlPath, id);
+    const result = await injectUserTheme({} as any, htmlPath, id);
     expect(result).not.toBeNull();
     // Both blocks ride along on the UUID path too — the lookup just
     // switches columns; the injection contract is identical.
@@ -238,7 +238,7 @@ describe("injectUserTheme — first-paint paths", () => {
       colorPrimary: "180 60% 40%",
       colorBackgroundDark: "200 30% 10%",
     });
-    const result = await injectUserTheme(htmlPath, "@fan");
+    const result = await injectUserTheme({} as any, htmlPath, "@fan");
     expect(result).not.toBeNull();
     // Carve out the SSR'd user-theme block and assert it never targets :root.
     const block = result!.match(

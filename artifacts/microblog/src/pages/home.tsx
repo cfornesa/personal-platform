@@ -219,7 +219,7 @@ export default function Home() {
             ) : null}
 
             {isLoading ? (
-              <div className="divide-y divide-border/50">
+              <div role="status" aria-label="Loading posts" className="divide-y divide-border/50">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="p-6 space-y-4 animate-pulse">
                     <div className="flex items-center gap-3">
@@ -255,7 +255,7 @@ export default function Home() {
             <div ref={sentinelRef} />
 
             {isFetchingNextPage && (
-              <div className="p-6 text-center text-sm text-muted-foreground animate-pulse">
+              <div aria-live="polite" role="status" className="p-6 text-center text-sm text-muted-foreground animate-pulse">
                 Loading more posts…
               </div>
             )}

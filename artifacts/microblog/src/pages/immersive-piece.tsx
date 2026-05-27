@@ -15,6 +15,7 @@ import {
   createKeyboardNavigation,
   createPresentationSurface,
   createMountedGalleryShell,
+  syncThreeRendererBackground,
   disposeObjectMaterial,
   drawContainedIntoPresentationSurface,
   fitMountedGalleryCamera,
@@ -26,6 +27,7 @@ import {
   createImmersiveHost,
   DEFAULT_IMMERSIVE_RUNTIME_SIZE,
   getCanvasMetrics,
+  resolveImmersiveElementBackground,
   resolveSketchFactory,
   type ImmersiveRuntimeSize,
 } from "@/lib/immersive-piece-runtime";
@@ -67,6 +69,19 @@ function ImmersiveGalleryPieceStage({
   onError,
 }: PieceStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
+
+  function sampleCanvasBackground(canvas: HTMLCanvasElement) {
+    try {
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) {
+        return null;
+      }
+      const pixel = context.getImageData(0, 0, 1, 1).data;
+      return `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${(pixel[3] / 255).toFixed(3)})`;
+    } catch {
+      return null;
+    }
+  }
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -112,6 +127,15 @@ function ImmersiveGalleryPieceStage({
         shell.artMaterial.needsUpdate = true;
       }
       if (presentationSurface) {
+        const presentationBackground =
+          resolveImmersiveElementBackground([
+            nextCanvas,
+            nextCanvas.parentElement,
+            host.querySelector("#canvas-container"),
+            host,
+          ])
+          ?? sampleCanvasBackground(nextCanvas)
+          ?? "#05070f";
         drawContainedIntoPresentationSurface(
           presentationSurface,
           nextCanvas.width || runtimeSize.width,
@@ -119,7 +143,7 @@ function ImmersiveGalleryPieceStage({
           (ctx, x, y, width, height) => {
             ctx.drawImage(nextCanvas, x, y, width, height);
           },
-          "#05070f",
+          presentationBackground,
         );
       }
       const metrics = getCanvasMetrics(displayCanvas, runtimeSize);
@@ -338,7 +362,8 @@ function ImmersiveThreePieceStage({
   cssCode,
   title,
   onError,
-}: Omit<PieceStageProps, "engine">) {
+  interactive = true,
+}: Omit<PieceStageProps, "engine"> & { interactive?: boolean }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -365,17 +390,19 @@ function ImmersiveThreePieceStage({
     canvas.style.display = "block";
     canvas.style.touchAction = "none";
 
+    stageEl.innerHTML = "";
+    const hostChildren = Array.from(host.childNodes).map((node) => node.cloneNode(true));
+    hostChildren.forEach((child) => stageEl.appendChild(child));
     const mount =
-      host.querySelector("#container") ||
-      host.querySelector("#canvas-container") ||
-      host.querySelector("#sketch-container") ||
-      host;
-    if (!canvas.parentNode) {
+      stageEl.querySelector("#container") ||
+      stageEl.querySelector("#canvas-container") ||
+      stageEl.querySelector("#sketch-container") ||
+      stageEl.querySelector(":scope > div") ||
+      stageEl;
+    stageEl.querySelectorAll("canvas").forEach((existingCanvas) => existingCanvas.remove());
+    if (canvas.parentElement !== mount) {
       mount.appendChild(canvas);
     }
-
-    stageEl.innerHTML = "";
-    stageEl.appendChild(canvas);
 
     let cleanup: (() => void) | void;
     let frameId = 0;
@@ -438,6 +465,50 @@ function ImmersiveThreePieceStage({
         this.setPixelRatio?.(Math.min(window.devicePixelRatio, 2));
       }
     };
+    (window as any).THREE = instrumentedThree;
+
+    function autoFitCamera(viewportWidth = stageEl.clientWidth || window.innerWidth) {
+      if (!state.scene || !state.camera) {
+        return;
+      }
+      const box = getRenderableBounds();
+      if (box.isEmpty()) {
+        try { box.setFromObject(state.scene); } catch { return; }
+      }
+      if (box.isEmpty()) {
+        return;
+      }
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const nextView = computeThreeAutoFitView(
+        center,
+        size,
+        state.camera.aspect || 1,
+        state.camera.fov || 45,
+        isCompactImmersiveViewport(viewportWidth),
+      );
+      state.camera.position.set(
+        nextView.camera.x,
+        nextView.camera.y,
+        nextView.camera.z,
+      );
+      state.camera.lookAt(nextView.target.x, nextView.target.y, nextView.target.z);
+      
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const dist = state.camera.position.distanceTo(center);
+      state.camera.near = Math.max(0.01, dist / 1000);
+      state.camera.far = Math.max(1000, dist * 100 + maxDim * 100);
+      
+      state.camera.updateProjectionMatrix?.();
+      state.camera.updateMatrixWorld?.(true);
+      if (controls) {
+        controls.target.set(nextView.target.x, nextView.target.y, nextView.target.z);
+        controls.update();
+        saveOrbitState();
+      }
+    }
 
     const startFrame = (handler: (frameCount: number) => void) => {
       let frameCount = 0;
@@ -445,6 +516,9 @@ function ImmersiveThreePieceStage({
       function tick() {
         frameCount += 1;
         handler(frameCount);
+        if (frameCount === 15) {
+          autoFitCamera();
+        }
         rafId = window.requestAnimationFrame(tick);
       }
       rafId = window.requestAnimationFrame(tick);
@@ -457,6 +531,7 @@ function ImmersiveThreePieceStage({
     };
 
     let controls: OrbitControls | null = null;
+    let keyNav: ReturnType<typeof createKeyboardNavigation> | null = null;
     const _orbitCamPos = new THREE.Vector3();
     const _orbitTarget = new THREE.Vector3();
 
@@ -469,9 +544,7 @@ function ImmersiveThreePieceStage({
     let threeDownY = 0;
     let threeDownButton = 0;
     const threeRaycaster = new THREE.Raycaster();
-    const threeKeys = new Set<string>();
-    const _threeFwd = new THREE.Vector3();
-    const _threeRight = new THREE.Vector3();
+    const _activePointerIds = new Set<number>();
 
     function saveOrbitState() {
       if (!controls || !state.camera) return;
@@ -490,10 +563,10 @@ function ImmersiveThreePieceStage({
     }
 
     function reassertThreeCanvasContainment() {
-      if (canvas.parentElement !== stageEl) {
-        stageEl.appendChild(canvas);
+      if (canvas.parentElement !== mount) {
+        mount.appendChild(canvas);
       }
-      if (canvas.style.position || canvas.style.zIndex) {
+      if (canvas.style.position || canvas.style.zIndex || canvas.style.width !== "100%" || canvas.style.height !== "100%") {
         canvas.style.position = "";
         canvas.style.top = "";
         canvas.style.left = "";
@@ -501,35 +574,58 @@ function ImmersiveThreePieceStage({
         canvas.style.right = "";
         canvas.style.zIndex = "";
         canvas.style.pointerEvents = "";
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
       }
       canvas.style.touchAction = "none";
+
+      // Hide any other canvases that might have been created by the sketch
+      stageEl.querySelectorAll("canvas").forEach((candidate) => {
+        if (candidate !== canvas) {
+          candidate.style.display = "none";
+          candidate.setAttribute("aria-hidden", "true");
+        }
+      });
+
+      const resolvedBg = resolveThreeBackgroundFallback();
+      stageEl.style.background = typeof resolvedBg === "string" 
+        ? resolvedBg 
+        : `#${resolvedBg.toString(16).padStart(6, "0")}`;
+    }
+
+    function getRenderableBounds() {
+      const box = new THREE.Box3();
+      if (!state.scene?.traverse) return box;
+      state.scene.traverse((obj: any) => {
+        if (obj.isHelper || obj.isLight || obj.isCamera) return;
+        if ((obj.isMesh || obj.isLine || obj.isPoints || obj.isSprite) && obj.geometry) {
+          obj.geometry.computeBoundingBox?.();
+          if (obj.geometry.boundingBox) {
+            box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
+          }
+        }
+      });
+      return box;
     }
 
     function getThreeNavigationLimit() {
       if (!state.scene || state.objects.length === 0) {
         return 5;
       }
-      const box = new THREE.Box3().setFromObject(state.scene);
+      const box = getRenderableBounds();
+      if (box.isEmpty()) {
+        try {
+          box.setFromObject(state.scene);
+        } catch {
+          return 5;
+        }
+      }
       if (box.isEmpty()) {
         return 5;
       }
       const size = new THREE.Vector3();
       box.getSize(size);
       return Math.max(size.x, size.z, 1) * 0.7;
-    }
-
-    function panThreeOrbitBy(dx: number, dz: number) {
-      if (!controls || !state.camera) return;
-      const maxOffset = getThreeNavigationLimit();
-      const clampedDx = Math.max(-maxOffset, Math.min(maxOffset, dx));
-      const clampedDz = Math.max(-maxOffset, Math.min(maxOffset, dz));
-      if (Math.abs(clampedDx) < 1e-6 && Math.abs(clampedDz) < 1e-6) return;
-      controls.target.x += clampedDx;
-      controls.target.z += clampedDz;
-      state.camera.position.x += clampedDx;
-      state.camera.position.z += clampedDz;
-      controls.update();
-      saveOrbitState();
     }
 
     function moveThreeOrbitTo(hitPoint: any) {
@@ -570,27 +666,19 @@ function ImmersiveThreePieceStage({
       saveOrbitState();
     }
 
-    function onThreeKeyDown(e: KeyboardEvent) {
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        threeKeys.add(e.key);
-      }
-    }
-
-    function onThreeKeyUp(e: KeyboardEvent) {
-      threeKeys.delete(e.key);
-    }
-
     function onThreePointerDown(e: PointerEvent) {
+      _activePointerIds.add(e.pointerId);
       threeDownButton = e.button;
       threeDownX = e.clientX;
       threeDownY = e.clientY;
-      canvas.setPointerCapture?.(e.pointerId);
     }
 
     function onThreePointerUp(e: PointerEvent) {
       if (!controls || !state.camera) return;
-      canvas.releasePointerCapture?.(e.pointerId);
+      // If more than one finger was active this gesture is a pinch — skip floor-click.
+      const wasMultiTouch = _activePointerIds.size > 1;
+      _activePointerIds.delete(e.pointerId);
+      if (wasMultiTouch) return;
       if (threeDownButton !== 0 || e.button !== 0) return;
       if (Math.hypot(e.clientX - threeDownX, e.clientY - threeDownY) >= 6) return;
 
@@ -628,10 +716,6 @@ function ImmersiveThreePieceStage({
       zoomThreeOrbit(e.deltaY);
     }
 
-    function onThreeStageClick() {
-      stageEl.focus();
-    }
-
     function resize() {
       const width = stageEl.clientWidth || window.innerWidth;
       const height = stageEl.clientHeight || window.innerHeight;
@@ -646,38 +730,83 @@ function ImmersiveThreePieceStage({
       }
     }
 
-    function autoFitCamera(viewportWidth = stageEl.clientWidth || window.innerWidth) {
-      if (!state.scene || !state.camera || state.objects.length === 0) {
-        return;
-      }
-      state.objects.forEach((object) => {
-        object.geometry?.computeBoundingBox?.();
+    function resolveThreeBackgroundFallback() {
+      return resolveImmersiveElementBackground([
+        canvas,
+        mount,
+        stageEl.querySelector("div"),
+        stageEl,
+        host.querySelector("#container"),
+        host,
+      ]) ?? 0x000000;
+    }
+
+    function ensureThreeFallbackLighting() {
+      if (!state.scene?.traverse) return;
+      let hasRealLight = false;
+      let hasFallback = false;
+      const fallbacks: any[] = [];
+      state.scene.traverse((obj: any) => {
+        if (!obj.isLight) return;
+        if (obj.name?.startsWith("__viewer_fallback_")) {
+          hasFallback = true;
+          fallbacks.push(obj);
+        } else {
+          hasRealLight = true;
+        }
       });
-      const box = new THREE.Box3().setFromObject(state.scene);
-      if (box.isEmpty()) {
+
+      if (hasRealLight) {
+        fallbacks.forEach((obj) => state.scene.remove(obj));
         return;
       }
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const nextView = computeThreeAutoFitView(
-        center,
-        size,
-        state.camera.aspect || 1,
-        state.camera.fov || 45,
-        isCompactImmersiveViewport(viewportWidth),
-      );
-      state.camera.position.set(
-        nextView.camera.x,
-        nextView.camera.y,
-        nextView.camera.z,
-      );
-      state.camera.lookAt(nextView.target.x, nextView.target.y, nextView.target.z);
-      state.camera.updateProjectionMatrix?.();
-      state.camera.updateMatrixWorld?.(true);
-      controls?.target.set?.(nextView.target.x, nextView.target.y, nextView.target.z);
-      controls?.update();
+      if (hasFallback) return;
+
+      const amb = new THREE.AmbientLight(0xffffff, 0.7);
+      amb.name = "__viewer_fallback_ambient__";
+      state.scene.add(amb);
+
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(5, 10, 7.5);
+      dir.name = "__viewer_fallback_dir__";
+      state.scene.add(dir);
+    }
+
+    function prepareThreeSceneForImmersiveRender() {
+      if (!state.scene?.traverse) return;
+      ensureThreeFallbackLighting();
+      state.scene.traverse((object: any) => {
+        object.frustumCulled = false;
+        object.layers?.enableAll?.();
+        if (
+          (object.isMesh || object.isLine || object.isPoints || object.isSprite) &&
+          object.visible === false
+        ) {
+          object.visible = true;
+        }
+        if (object.material) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach((material: any) => {
+            if (!material) return;
+            material.clippingPlanes = null;
+            material.clipIntersection = false;
+            material.visible = true;
+            if (material.opacity !== undefined && material.opacity < 0.05) {
+              material.opacity = 1;
+              material.transparent = false;
+            }
+          });
+        }
+      });
+    }
+
+    function prepareThreeRendererForImmersiveRender() {
+      if (!state.renderer) return;
+      state.renderer.autoClear = true;
+      state.renderer.localClippingEnabled = false;
+      if (state.renderer.shadowMap) {
+        state.renderer.shadowMap.enabled = false;
+      }
     }
 
     function animateControls() {
@@ -702,32 +831,29 @@ function ImmersiveThreePieceStage({
             threeAnimFromTarget = threeAnimToTarget = threeAnimFromCam = threeAnimToCam = null;
             saveOrbitState();
           }
-        } else if (threeKeys.size > 0) {
-          const speed = Math.max(0.05, controls.target.distanceTo(state.camera.position) * 0.03);
-          let fwdScale = 0;
-          let rightScale = 0;
-          if (threeKeys.has("ArrowUp")) fwdScale += speed;
-          if (threeKeys.has("ArrowDown")) fwdScale -= speed;
-          if (threeKeys.has("ArrowLeft")) rightScale -= speed;
-          if (threeKeys.has("ArrowRight")) rightScale += speed;
-          if (fwdScale !== 0 || rightScale !== 0) {
-            state.camera.getWorldDirection(_threeFwd);
-            _threeFwd.y = 0;
-            const len = _threeFwd.length();
-            if (len > 1e-6) {
-              _threeFwd.divideScalar(len);
-              _threeRight.set(-_threeFwd.z, 0, _threeFwd.x);
-              const dx = _threeFwd.x * fwdScale + _threeRight.x * rightScale;
-              const dz = _threeFwd.z * fwdScale + _threeRight.z * rightScale;
-              panThreeOrbitBy(dx, dz);
-            }
-          }
         }
+        keyNav?.update();
 
         // Save OrbitControls state; restored at top of next frame.
         saveOrbitState();
       }
       if (state.renderer && state.scene && state.camera) {
+        if ("aspect" in state.camera) {
+          const width = stageEl.clientWidth || window.innerWidth;
+          const height = stageEl.clientHeight || window.innerHeight;
+          const aspect = width / Math.max(height, 1);
+          if (Math.abs(state.camera.aspect - aspect) > 0.001) {
+            state.camera.aspect = aspect;
+            state.camera.updateProjectionMatrix?.();
+          }
+        }
+        prepareThreeRendererForImmersiveRender();
+        prepareThreeSceneForImmersiveRender();
+        syncThreeRendererBackground(
+          state.renderer,
+          state.scene,
+          resolveThreeBackgroundFallback(),
+        );
         state.renderer.render(state.scene, state.camera);
       }
     }
@@ -751,42 +877,35 @@ function ImmersiveThreePieceStage({
       // or sets position:fixed on the canvas. Because renderer.domElement IS our injected canvas,
       // either action pulls it out of stageEl and overlays the page header, blocking Back and other
       // shell controls. Re-assert containment before resize() so the stage dimensions are correct.
-      stageEl.innerHTML = "";
-      stageEl.appendChild(canvas);
-      canvas.style.position = "";
-      canvas.style.top = "";
-      canvas.style.left = "";
-      canvas.style.bottom = "";
-      canvas.style.right = "";
-      canvas.style.zIndex = "";
-      canvas.style.pointerEvents = "";
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
-      canvas.style.touchAction = "none";
+      reassertThreeCanvasContainment();
 
       resize();
-      controls = new OrbitControls(state.camera, canvas);
-      controls.enableDamping = true;
-      controls.enablePan = true;
-      controls.minDistance = 0.6;
-      const _initDir = new THREE.Vector3();
-      state.camera.getWorldDirection(_initDir);
-      const initialCamDist = state.camera.position.length();
-      const targetDist = Math.max(initialCamDist * 0.8, 3);
-      controls.target.copy(state.camera.position).addScaledVector(_initDir, targetDist);
-      const initialTargetDist = state.camera.position.distanceTo(controls.target);
-      controls.maxDistance = Math.max(40, initialTargetDist * 4);
-      controls.update();
-      _orbitCamPos.copy(state.camera.position);
-      _orbitTarget.copy(controls.target);
+      if (interactive) {
+        controls = new OrbitControls(state.camera, canvas);
+        controls.enableDamping = true;
+        controls.enablePan = true;
+        controls.minDistance = 0.6;
+        const _initDir = new THREE.Vector3();
+        state.camera.getWorldDirection(_initDir);
+        const initialCamDist = state.camera.position.length();
+        const targetDist = Math.max(initialCamDist * 0.8, 3);
+        controls.target.copy(state.camera.position).addScaledVector(_initDir, targetDist);
+        const initialTargetDist = state.camera.position.distanceTo(controls.target);
+        controls.maxDistance = Math.max(40, initialTargetDist * 4);
+        controls.update();
+        keyNav = createKeyboardNavigation(controls, {
+          container: stageEl,
+          speed: (activeControls) => Math.max(0.05, activeControls.target.distanceTo(activeControls.object.position) * 0.03),
+        });
+        _orbitCamPos.copy(state.camera.position);
+        _orbitTarget.copy(controls.target);
+        canvas.addEventListener("pointerdown", onThreePointerDown);
+        canvas.addEventListener("pointerup", onThreePointerUp);
+        canvas.addEventListener("wheel", onThreeWheel, { passive: false, capture: true });
+      } else {
+        canvas.style.pointerEvents = "none";
+      }
       animateControls();
-      canvas.addEventListener("pointerdown", onThreePointerDown);
-      canvas.addEventListener("pointerup", onThreePointerUp);
-      canvas.addEventListener("wheel", onThreeWheel, { passive: false, capture: true });
-      stageEl.tabIndex = 0;
-      window.addEventListener("keydown", onThreeKeyDown);
-      window.addEventListener("keyup", onThreeKeyUp);
-      stageEl.addEventListener("click", onThreeStageClick, { passive: true } as AddEventListenerOptions);
       onError(null);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Immersive runtime failed to boot.");
@@ -801,10 +920,8 @@ function ImmersiveThreePieceStage({
       canvas.removeEventListener("pointerdown", onThreePointerDown);
       canvas.removeEventListener("pointerup", onThreePointerUp);
       canvas.removeEventListener("wheel", onThreeWheel, { capture: true });
-      window.removeEventListener("keydown", onThreeKeyDown);
-      window.removeEventListener("keyup", onThreeKeyUp);
-      stageEl.removeEventListener("click", onThreeStageClick);
-      threeKeys.clear();
+      keyNav?.dispose();
+      _activePointerIds.clear();
       if (controls) controls.enabled = true;
       controls?.dispose();
       stopFrameHandles.forEach((stop) => stop());
@@ -820,7 +937,7 @@ function ImmersiveThreePieceStage({
       canvas.remove();
       stageEl.innerHTML = "";
     };
-  }, [code, cssCode, htmlCode, onError, title]);
+  }, [code, cssCode, htmlCode, interactive, onError, title]);
 
   return <div ref={stageRef} className="h-full w-full overflow-hidden" />;
 }
@@ -845,6 +962,7 @@ export default function ImmersivePiecePage() {
   const versionRaw = searchParams.get("version");
   const versionId = versionRaw ? Number(versionRaw) : undefined;
   const isEmbedMode = searchParams.get("embed") === "1";
+  const isStaticEmbed = searchParams.get("static") === "1";
 
   const canonicalHref = useMemo(
     () => `${window.location.origin}${buildImmersivePieceHref(pieceId, versionId)}`,
@@ -913,7 +1031,7 @@ export default function ImmersivePiecePage() {
   const isThree = data.version.engine === "three";
   const engineLabel = formatEngineLabel(data.version.engine);
 
-  const plainEmbedCode = `<iframe src="${window.location.origin}/embed/pieces/${pieceId}${versionId ? `?version=${versionId}` : ""}" width="100%" height="480" title="${title.replace(/"/g, "&quot;")}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  const plainEmbedCode = `<iframe src="${window.location.origin}/embed/pieces/${pieceId}${versionId ? `?version=${versionId}` : ""}" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="${title.replace(/"/g, "&quot;")}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
   const galleryEmbedCode = buildPieceGalleryEmbedHtml(pieceId, versionId, title, window.location.origin);
 
   return (
@@ -922,6 +1040,7 @@ export default function ImmersivePiecePage() {
       onBack={goBack}
       isFullscreen={isFullscreen}
       isEmbedMode={isEmbedMode}
+      showEmbedFullscreenControl={!isStaticEmbed}
       canonicalHref={canonicalHref}
       embedCodes={{
         plain: { label: "Embed Piece", code: plainEmbedCode },
@@ -1000,6 +1119,7 @@ export default function ImmersivePiecePage() {
             cssCode={data.version.cssCode}
             title={title}
             onError={setRuntimeError}
+            interactive={!isStaticEmbed}
           />
         ) : (
           <ImmersiveGalleryPieceStage

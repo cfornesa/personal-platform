@@ -702,7 +702,7 @@ export function buildInteractivePieceIframeHtml(input: {
 }): string {
   const src = `${input.origin.replace(/\/$/, "")}/embed/pieces/${input.pieceId}`;
   const title = escapeHtml(input.title || "Interactive piece");
-  return `<iframe src="${src}" width="100%" height="480" title="${title}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  return `<iframe src="${src}" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="${title}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
 }
 
 function compileP5StructuredSpec(spec: StructuredP5ArtPieceSpec): string {

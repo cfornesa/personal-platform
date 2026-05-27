@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { z } from "zod/v4";
 
 /**
  * Integration test for the site-root theme-injection wired up in
@@ -115,6 +116,18 @@ vi.mock("@workspace/db", () => {
     isNotNull: stub,
     inArray: stub,
     notInArray: stub,
+    // Schemas used by art-pieces route
+    artPieceEngineSchema: z.enum(["p5", "c2", "three"]),
+    artPieceStatusSchema: z.enum(["published", "pending", "draft", "scheduled"]),
+    aiVendorSchema: z.enum([
+      "openrouter",
+      "opencode-zen",
+      "opencode-go",
+      "google",
+      "mistral",
+      "mistral-vibe",
+      "deepseek",
+    ]),
   };
 });
 

@@ -3,6 +3,7 @@ import {
   createImmersiveHost,
   DEFAULT_IMMERSIVE_RUNTIME_SIZE,
   getCanvasMetrics,
+  resolveImmersiveElementBackground,
   resolveSketchFactory,
 } from "../immersive-piece-runtime";
 
@@ -54,12 +55,24 @@ describe("immersive-piece-runtime helpers", () => {
     );
 
     expect(host.querySelector("canvas#piece-canvas")).toBeTruthy();
-    expect(host.querySelectorAll("style")).toHaveLength(1);
-    expect(host.innerHTML).not.toContain("html, body { overflow: hidden");
+    expect(host.querySelectorAll("style")).toHaveLength(2);
+    expect(host.innerHTML).toContain("html, body { overflow: hidden; }");
     expect(host.querySelector("script")).toBeNull();
     expect(host.querySelector("link")).toBeNull();
     expect(host.querySelector("canvas")?.getAttribute("style")).toBeNull();
 
     host.remove();
+  });
+
+  it("resolves the first visible background from immersive elements", () => {
+    const outer = document.createElement("div");
+    outer.style.backgroundColor = "rgb(10, 20, 30)";
+    const inner = document.createElement("div");
+    outer.appendChild(inner);
+    document.body.appendChild(outer);
+
+    expect(resolveImmersiveElementBackground([inner, outer])).toBe("rgb(10, 20, 30)");
+
+    outer.remove();
   });
 });

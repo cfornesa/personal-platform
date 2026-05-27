@@ -39,6 +39,7 @@ describe("ImmersiveRouteShell", () => {
     expect(screen.getByText("Description")).toBeTruthy();
     expect(screen.getByLabelText("Expand immersive view")).toBeTruthy();
     expect(renderScene).toHaveBeenCalledWith({ fullscreen: false, isMobile: true });
+    expect(screen.getByTestId("scene").parentElement?.className).toContain("aspect-video");
   });
 
   it("keeps the stacked shell even on wide desktop viewports", () => {
@@ -91,5 +92,32 @@ describe("ImmersiveRouteShell", () => {
 
     expect(screen.getByLabelText("Return to gallery view")).toBeTruthy();
     expect(renderScene).toHaveBeenCalledWith({ fullscreen: true, isMobile: true });
+  });
+
+  it("hides the fullscreen control in static embed mode", () => {
+    setDocumentFlow(true);
+    const renderScene = vi.fn(() => <div data-testid="scene">Scene</div>);
+
+    render(
+      <ImmersiveRouteShell
+        title="Static Embed"
+        onBack={() => undefined}
+        isFullscreen={false}
+        isEmbedMode
+        showEmbedFullscreenControl={false}
+        onToggleFullscreen={() => undefined}
+        renderScene={renderScene}
+        metadataCard={
+          <ImmersiveMetadataCard
+            title="Static Embed"
+            description="Description"
+            fields={[{ label: "Engine", value: "Three.js" }]}
+          />
+        }
+      />,
+    );
+
+    expect(screen.queryByLabelText("Expand immersive view")).toBeNull();
+    expect(renderScene).toHaveBeenCalledWith({ fullscreen: false, isMobile: false });
   });
 });

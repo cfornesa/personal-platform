@@ -43,6 +43,10 @@ describe("PostContent", () => {
     );
     const trigger = container.querySelector('a[href="/immersive/pieces/7?version=9"]');
     expect(trigger).not.toBeNull();
+    const frame = container.querySelector('iframe[src="/embed/pieces/7?version=9"]');
+    expect(frame?.getAttribute("width")).toBe("100%");
+    expect(frame?.getAttribute("height")).toBeNull();
+    expect(frame?.getAttribute("style")).toContain("aspect-ratio:16 / 9");
   });
 
   it("preserves whitespace in plain content", () => {

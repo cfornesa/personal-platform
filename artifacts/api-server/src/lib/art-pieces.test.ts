@@ -451,5 +451,13 @@ describe("art piece helpers", () => {
         title: "Orbit Bloom",
       }),
     ).not.toContain("?version=");
+    expect(
+      helpers.buildInteractivePieceIframeHtml({
+        origin: "https://creatr.example",
+        pieceId: 12,
+        versionId: 34,
+        title: "Orbit Bloom",
+      }),
+    ).toContain('aspect-ratio:16 / 9');
   });
 });

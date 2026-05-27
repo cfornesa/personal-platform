@@ -133,6 +133,37 @@ export function buildArtPieceSrcDoc(
         requestAnimationFrame(_tickCanvasSafety);
       });
     }
+    function _isVisibleBackground(value) {
+      if (!value) return false;
+      const normalized = String(value).trim().toLowerCase();
+      return normalized !== '' && normalized !== 'transparent' && normalized !== 'rgba(0, 0, 0, 0)';
+    }
+    function _resolveManagedBackground(elements) {
+      for (const element of elements) {
+        if (!(element instanceof HTMLElement)) continue;
+        const inlineBackground = element.style.backgroundColor || element.style.background;
+        if (_isVisibleBackground(inlineBackground)) return inlineBackground;
+        const computedBackground = window.getComputedStyle(element).backgroundColor;
+        if (_isVisibleBackground(computedBackground)) return computedBackground;
+      }
+      return null;
+    }
+    function _syncManagedBackdrop(color) {
+      if (_isVisibleBackground(color)) {
+        document.documentElement.style.background = color;
+        document.body.style.background = color;
+        const mount = document.getElementById('container')
+          || document.getElementById('canvas-container')
+          || document.getElementById('sketch-container');
+        if (mount instanceof HTMLElement) {
+          mount.style.background = color;
+        }
+        return color;
+      }
+      document.documentElement.style.background = 'transparent';
+      document.body.style.background = 'transparent';
+      return null;
+    }
   `;
 
   const engineInit =
@@ -166,6 +197,17 @@ export function buildArtPieceSrcDoc(
         _managedCanvas.setAttribute('data-art-piece-managed-canvas', 'true');
         _reassertManagedCanvas(_managedCanvas);
         return _managedCanvas;
+      }
+
+      function getManagedBackgroundFallback() {
+        const managedCanvas = getManagedCanvas();
+        return _resolveManagedBackground([
+          managedCanvas,
+          managedCanvas?.parentElement,
+          getThreeMount(),
+          document.body,
+          document.documentElement,
+        ]);
       }
 
       function normalizeThreeCanvases() {
@@ -318,7 +360,6 @@ export function buildArtPieceSrcDoc(
                 material.opacity = 1;
                 material.transparent = false;
               }
-              material.needsUpdate = true;
             });
           }
         });
@@ -331,7 +372,17 @@ export function buildArtPieceSrcDoc(
         state.renderer.setSize?.(width, height, false);
         state.renderer.setViewport?.(0, 0, width, height);
         state.renderer.setScissorTest?.(false);
-        state.renderer.setClearColor?.(state.scene?.background || 0xf5f5f5, 1);
+        if (state.camera && 'aspect' in state.camera) {
+          state.camera.aspect = width / Math.max(height, 1);
+          state.camera.updateProjectionMatrix?.();
+        }
+        const previewBackground = state.scene?.background || 0x000000;
+        state.renderer.setClearColor?.(previewBackground, 1);
+        if (state.scene?.background?.getStyle) {
+          _syncManagedBackdrop(state.scene.background.getStyle());
+        } else {
+          _syncManagedBackdrop(typeof previewBackground === 'string' ? previewBackground : null);
+        }
         state.renderer.autoClear = true;
         state.renderer.localClippingEnabled = false;
         state.renderer.shadowMap && (state.renderer.shadowMap.enabled = false);
@@ -369,6 +420,13 @@ export function buildArtPieceSrcDoc(
         viewerCamera.far = Math.max(1000, cameraZ * 100 + maxDim * 100);
         viewerCamera.updateProjectionMatrix?.();
         viewerCamera.updateMatrixWorld(true);
+
+        if (state.camera) {
+          state.camera.near = Math.max(0.01, cameraZ / 1000);
+          state.camera.far = Math.max(1000, cameraZ * 100 + maxDim * 100);
+          state.camera.updateProjectionMatrix?.();
+        }
+
         state.fitCount++;
         return true;
       }
@@ -380,7 +438,14 @@ export function buildArtPieceSrcDoc(
           prepareRendererForViewerRender();
           prepareSceneForViewerRender();
           autoFit();
-          state.renderer.render(state.scene, state.viewerCamera || state.camera);
+          // Prefer the piece's own camera when it is positioned away from the world origin —
+          // that means the AI set a meaningful camera position and the preview should match VR.
+          // Fall back to the auto-fit viewer camera only when the piece camera is missing or
+          // stuck at (0,0,0), which indicates the scene hasn't initialised yet.
+          const renderCamera = (state.camera && state.camera.position.length() > 0.5)
+            ? state.camera
+            : (state.viewerCamera || state.camera);
+          state.renderer.render(state.scene, renderCamera);
           state.lastRenderAt = performance.now();
           postThreeDiagnostics(true);
         } finally {
@@ -409,10 +474,13 @@ export function buildArtPieceSrcDoc(
           _managedFrame++;
           if (_managedFrame <= 120 || _managedFrame % 30 === 0) {
             forceManagedRender();
-          } else if (state.renderer && state.scene && (state.viewerCamera || state.camera)) {
+          } else if (state.renderer && state.scene && state.camera) {
             prepareRendererForViewerRender();
             prepareSceneForViewerRender();
-            state.renderer.render(state.scene, state.viewerCamera || state.camera);
+            const renderCam = (state.camera.position.length() > 0.5)
+              ? state.camera
+              : (state.viewerCamera || state.camera);
+            state.renderer.render(state.scene, renderCam);
             state.lastRenderAt = performance.now();
           }
           if (_managedFrame % 60 === 0) postThreeDiagnostics(Boolean(state.renderer && state.scene && state.camera));

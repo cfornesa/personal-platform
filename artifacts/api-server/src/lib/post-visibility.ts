@@ -5,5 +5,6 @@ export function isPostVisibleToReader(
   user: { role?: string | null } | null,
 ): boolean {
   if (postStatus === "published") return true;
+  if (postStatus === null || postStatus === undefined) return true;
   return user?.role === "owner";
 }

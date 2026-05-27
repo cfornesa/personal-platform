@@ -29,6 +29,7 @@ type ImmersiveRouteShellProps = {
   metadataCard: ReactNode;
   sceneHeightClassName?: string;
   isEmbedMode?: boolean;
+  showEmbedFullscreenControl?: boolean;
   canonicalHref?: string;
   embedCodes?: EmbedCodes;
 };
@@ -122,8 +123,9 @@ export function ImmersiveRouteShell({
   onToggleFullscreen,
   renderScene,
   metadataCard,
-  sceneHeightClassName = "h-[40svh] min-h-[16rem]",
+  sceneHeightClassName = "h-[40svh] min-h-[300px]",
   isEmbedMode = false,
+  showEmbedFullscreenControl = true,
   canonicalHref,
   embedCodes,
 }: ImmersiveRouteShellProps) {
@@ -170,10 +172,12 @@ export function ImmersiveRouteShell({
         {renderScene({ fullscreen: false, isMobile: false })}
         <div className="pointer-events-none absolute inset-0 z-10">
           <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
-            <FullscreenToggleButton
-              isFullscreen={isEmbedFullscreen}
-              onToggle={handleEmbedToggle}
-            />
+            {showEmbedFullscreenControl ? (
+              <FullscreenToggleButton
+                isFullscreen={isEmbedFullscreen}
+                onToggle={handleEmbedToggle}
+              />
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,5 +1,7 @@
 import fs from "fs";
+import type { Request } from "express";
 import { db, postsTable, categoriesTable, pagesTable, siteSettingsTable, usersTable, eq, and, siteSettingsDefaults } from "@workspace/db";
+import { getCanonicalOrigin } from "./origin";
 
 const _htmlCache = new Map<string, string>();
 function readHtml(htmlPath: string): string {
@@ -59,6 +61,7 @@ type PartialSettings = {
   colorDestructive?: string | null;
   colorDestructiveForeground?: string | null;
   siteTitle?: string | null;
+  heroSubheading?: string | null;
 };
 
 function buildThemeInjection(settings: PartialSettings): { themeId: string; css: string } {
@@ -137,7 +140,19 @@ const FEED_ALTERNATE_LINKS =
   '<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/feed.xml">\n' +
   '  <link rel="alternate" type="application/feed+json" title="JSON Feed" href="/feed.json">';
 
-function applyThemeToHtml(html: string, themeId: string, css: string): string {
+function safeDescription(value: unknown, maxLen = 160): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const truncated = trimmed.length > maxLen ? trimmed.slice(0, maxLen - 1) + "…" : trimmed;
+  return truncated
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function applyThemeToHtml(html: string, themeId: string, css: string, description?: string | null): string {
   html = html.replace(
     /(<html\b[^>]*?)(?:\s+data-theme="[^"]*")?(\s*>)/,
     `$1 data-theme="${themeId}"$2`,
@@ -145,19 +160,37 @@ function applyThemeToHtml(html: string, themeId: string, css: string): string {
   const linkBlock = html.includes('rel="alternate" type="application/atom+xml"')
     ? ""
     : `  ${FEED_ALTERNATE_LINKS}\n`;
+  const hasDescription = /<meta\s[^>]*name=["']description["']/i.test(html);
+  const safeDesc = description ? safeDescription(description) : null;
+  const descBlock = !hasDescription && safeDesc
+    ? `  <meta name="description" content="${safeDesc}">\n`
+    : "";
   html = html.replace(
     "</head>",
-    `${linkBlock}  <style id="site-settings-theme">${css}</style>\n  </head>`,
+    `${linkBlock}${descBlock}  <style id="site-settings-theme">${css}</style>\n  </head>`,
   );
   return html;
 }
 
-export async function injectThemeData(htmlPath: string): Promise<string> {
+export async function injectThemeData(
+  req: Request,
+  htmlPath: string,
+): Promise<string> {
   const html = readHtml(htmlPath);
   try {
     const settings = await loadSettings();
     const { themeId, css } = buildThemeInjection(settings);
-    return applyThemeToHtml(html, themeId, css);
+    const canonicalOrigin = getCanonicalOrigin(req);
+
+    const injectedHtml = applyThemeToHtml(html, themeId, css, settings.heroSubheading);
+
+    const globalScripts = `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
+  </script>
+    `;
+
+    return injectedHtml.replace("</head>", `${globalScripts}\n  </head>`);
   } catch (err) {
     console.error("Theme injection failed:", err);
     return html;
@@ -316,6 +349,7 @@ export function buildScopeKey(userId: string): string | null {
  * Returns null when no user is found (caller falls back to site theme).
  */
 export async function injectUserTheme(
+  req: Request,
   htmlPath: string,
   handle: string,
 ): Promise<string | null> {
@@ -338,8 +372,16 @@ export async function injectUserTheme(
 
     const settings = await loadSettings();
     const { themeId, css } = buildThemeInjection(settings);
+    const canonicalOrigin = getCanonicalOrigin(req);
+
     let html = readHtml(htmlPath);
-    html = applyThemeToHtml(html, themeId, css);
+    html = applyThemeToHtml(html, themeId, css, settings.heroSubheading);
+    
+    const globalScripts = `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
+  </script>
+    `;
 
     if (userHasCustomization(user) && typeof user.id === "string") {
       const scopeKey = buildScopeKey(user.id);
@@ -376,8 +418,9 @@ export async function injectUserTheme(
 
         html = html.replace(
           "</head>",
-          `${styleBlock}${scriptBlock}  </head>`,
+          `${styleBlock}${scriptBlock}${globalScripts}\n  </head>`,
         );
+
       }
     }
 
@@ -396,6 +439,7 @@ export async function injectUserTheme(
  * links injected by `injectThemeData`.
  */
 export async function injectCategoryFeedLinks(
+  req: Request,
   htmlPath: string,
   rawSlug: string,
 ): Promise<string | null> {
@@ -412,8 +456,17 @@ export async function injectCategoryFeedLinks(
 
     const settings = await loadSettings();
     const { themeId, css } = buildThemeInjection(settings);
+    const canonicalOrigin = getCanonicalOrigin(req);
+
     let html = readHtml(htmlPath);
-    html = applyThemeToHtml(html, themeId, css);
+    const categoryDescription = `Posts in the ${cat.name} category`;
+    html = applyThemeToHtml(html, themeId, css, categoryDescription);
+    
+    const globalScripts = `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
+  </script>
+    `;
 
     const safeName = cat.name
       .replace(/&/g, "&amp;")
@@ -424,7 +477,7 @@ export async function injectCategoryFeedLinks(
     const categoryAlternates =
       `  <link rel="alternate" type="application/atom+xml" data-scope="category" title="Atom feed — ${safeName}" href="${base}/feed.xml">\n` +
       `  <link rel="alternate" type="application/feed+json" data-scope="category" title="JSON Feed — ${safeName}" href="${base}/feed.json">\n`;
-    html = html.replace("</head>", `${categoryAlternates}  </head>`);
+    html = html.replace("</head>", `${categoryAlternates}${globalScripts}\n  </head>`);
     return html;
   } catch (err) {
     console.error("Category feed-link injection failed:", err);
@@ -439,6 +492,7 @@ export async function injectCategoryFeedLinks(
  * slug doesn't resolve to a published page.
  */
 export async function injectPageFeedLinks(
+  req: Request,
   htmlPath: string,
   rawSlug: string,
 ): Promise<string | null> {
@@ -455,8 +509,16 @@ export async function injectPageFeedLinks(
 
     const settings = await loadSettings();
     const { themeId, css } = buildThemeInjection(settings);
+    const canonicalOrigin = getCanonicalOrigin(req);
+
     let html = readHtml(htmlPath);
-    html = applyThemeToHtml(html, themeId, css);
+    html = applyThemeToHtml(html, themeId, css, page.title);
+    
+    const globalScripts = `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
+  </script>
+    `;
 
     const safeTitle = page.title
       .replace(/&/g, "&amp;")
@@ -467,7 +529,7 @@ export async function injectPageFeedLinks(
     const pageAlternates =
       `  <link rel="alternate" type="application/atom+xml" data-scope="page" title="Atom feed — ${safeTitle}" href="${base}/feed.xml">\n` +
       `  <link rel="alternate" type="application/feed+json" data-scope="page" title="JSON Feed — ${safeTitle}" href="${base}/feed.json">\n`;
-    html = html.replace("</head>", `${pageAlternates}  </head>`);
+    html = html.replace("</head>", `${pageAlternates}\n${globalScripts}\n  </head>`);
     return html;
   } catch (err) {
     console.error("Page feed-link injection failed:", err);
@@ -475,7 +537,7 @@ export async function injectPageFeedLinks(
   }
 }
 
-export async function injectPostMetadata(htmlPath: string, postId: string): Promise<string | null> {
+export async function injectPostMetadata(req: Request, htmlPath: string, postId: string): Promise<string | null> {
   try {
     const id = parseInt(postId, 10);
     if (isNaN(id)) return null;
@@ -486,7 +548,7 @@ export async function injectPostMetadata(htmlPath: string, postId: string): Prom
     const settingsRows = await db.select().from(siteSettingsTable).where(eq(siteSettingsTable.id, 1)).limit(1);
     const settings: PartialSettings = settingsRows[0] ?? {};
     const siteTitle = settings.siteTitle ?? "Microblog";
-    const siteUrl = process.env.PUBLIC_SITE_URL || "https://chrisfornesa.com";
+    const siteUrl = getCanonicalOrigin(req);
     const authorName = post[0].authorName;
     const description = post[0].contentFormat === "html"
       ? post[0].content.replace(/<[^>]*>?/gm, "").substring(0, 200) + "..."
@@ -515,8 +577,14 @@ export async function injectPostMetadata(htmlPath: string, postId: string): Prom
 
     const { themeId, css } = buildThemeInjection(settings);
     html = applyThemeToHtml(html, themeId, css);
+    
+    const globalScripts = `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(siteUrl)};
+  </script>
+    `;
 
-    html = html.replace("</head>", `${metaTags}\n  </head>`);
+    html = html.replace("</head>", `${metaTags}\n${globalScripts}\n  </head>`);
 
     return html;
   } catch (err) {

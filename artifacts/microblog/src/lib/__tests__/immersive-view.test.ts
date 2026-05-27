@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPieceGalleryEmbedHtml,
   buildImmersiveImageHref,
   buildImmersivePieceHref,
   encodeImmersiveImageRef,
@@ -31,6 +32,13 @@ describe("immersive-view helpers", () => {
     expect(extractPieceEmbedMeta("/embed/pieces/9?version=3")).toEqual({
       id: 9,
       versionId: 3,
+      pieceOrigin: "http://localhost:3000",
     });
+  });
+
+  it("builds interactive embeds from the immersive route contract", () => {
+    expect(buildPieceGalleryEmbedHtml(7, 9, "Orbit Bloom")).toBe(
+      '<iframe src="http://localhost:3000/immersive/pieces/7?embed=1&version=9" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="Orbit Bloom" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>',
+    );
   });
 });

@@ -99,7 +99,8 @@ export function createMountedGalleryShell(
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.enablePan = true;
-  controls.maxPolarAngle = Math.PI * 0.64;
+  controls.minPolarAngle = 0.01;
+  controls.maxPolarAngle = Math.PI - 0.01;
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.38));
 
@@ -233,8 +234,8 @@ export function fitMountedGalleryCamera(
   shell.controls.target.copy(target);
   shell.controls.minDistance = Math.max(1.25, distance * 0.34);
   shell.controls.maxDistance = Math.max(18, distance * 5.5);
-  shell.controls.minPolarAngle = Math.PI * 0.18;
-  shell.controls.maxPolarAngle = Math.PI * 0.82;
+  shell.controls.minPolarAngle = 0.01;
+  shell.controls.maxPolarAngle = Math.PI - 0.01;
   shell.controls.update();
 }
 
@@ -391,18 +392,83 @@ export type KeyboardNavigation = {
   dispose: () => void;
 };
 
+export type OrbitKeyboardMotion = {
+  dx: number;
+  dy: number;
+  dz: number;
+};
+
+export function computeOrbitKeyboardMotion(
+  forward: { x: number; y: number; z: number },
+  keys: Iterable<string>,
+  speed: number,
+): OrbitKeyboardMotion {
+  const activeKeys = keys instanceof Set ? keys : new Set(keys);
+  let fwdScale = 0;
+  let rightScale = 0;
+  if (activeKeys.has("ArrowUp")) fwdScale += speed;
+  if (activeKeys.has("ArrowDown")) fwdScale -= speed;
+  if (activeKeys.has("ArrowLeft")) rightScale -= speed;
+  if (activeKeys.has("ArrowRight")) rightScale += speed;
+  if (fwdScale === 0 && rightScale === 0) {
+    return { dx: 0, dy: 0, dz: 0 };
+  }
+
+  const horizontalLength = Math.sqrt(forward.x ** 2 + forward.z ** 2);
+  const right =
+    horizontalLength > 1e-6
+      ? { x: -forward.z / horizontalLength, y: 0, z: forward.x / horizontalLength }
+      : { x: 1, y: 0, z: 0 };
+
+  return {
+    dx: (forward.x * fwdScale) + (right.x * rightScale),
+    dy: forward.y * fwdScale,
+    dz: (forward.z * fwdScale) + (right.z * rightScale),
+  };
+}
+
+export function syncThreeRendererBackground(
+  renderer: {
+    setClearAlpha?: (alpha: number) => void;
+    setClearColor?: (color: unknown, alpha?: number) => void;
+  } | null | undefined,
+  scene: { background?: unknown } | null | undefined,
+  fallbackColor?: string | number | null,
+) {
+  if (!renderer?.setClearColor) {
+    return;
+  }
+
+  const background = scene?.background;
+  if (background) {
+    renderer.setClearColor(background, 1);
+    renderer.setClearAlpha?.(1);
+    return;
+  }
+
+  if (fallbackColor != null) {
+    renderer.setClearColor(fallbackColor, 1);
+    renderer.setClearAlpha?.(1);
+    return;
+  }
+
+  renderer.setClearAlpha?.(0);
+}
+
 export function createKeyboardNavigation(
   controls: OrbitControls,
   options: {
-    speed?: number;
+    speed?: number | ((controls: OrbitControls) => number);
     minX?: number;
     maxX?: number;
+    minY?: number;
+    maxY?: number;
     minZ?: number;
     maxZ?: number;
     container?: HTMLElement;
   } = {},
 ): KeyboardNavigation {
-  const { speed = 0.05, minX = -8, maxX = 8, minZ = 0.5, maxZ = Infinity, container } = options;
+  const { speed = 0.05, minX = -8, maxX = 8, minY = -Infinity, maxY = Infinity, minZ = 0.5, maxZ = Infinity, container } = options;
   const keys = new Set<string>();
 
   function onKeyDown(e: KeyboardEvent) {
@@ -417,33 +483,24 @@ export function createKeyboardNavigation(
   }
 
   const _fwd = new THREE.Vector3();
-  const _right = new THREE.Vector3();
 
   function update() {
-    if (keys.size === 0) return;
-    let fwdScale = 0;
-    let rightScale = 0;
-    if (keys.has("ArrowUp")) fwdScale += speed;
-    if (keys.has("ArrowDown")) fwdScale -= speed;
-    if (keys.has("ArrowLeft")) rightScale -= speed;
-    if (keys.has("ArrowRight")) rightScale += speed;
-    if (fwdScale === 0 && rightScale === 0) return;
+    if (!controls.enabled || keys.size === 0) return;
     controls.object.getWorldDirection(_fwd);
-    _fwd.y = 0;
-    const fwdLen = _fwd.length();
-    if (fwdLen < 1e-6) return;
-    _fwd.divideScalar(fwdLen);
-    _right.set(-_fwd.z, 0, _fwd.x);
-    const dx = _fwd.x * fwdScale + _right.x * rightScale;
-    const dz = _fwd.z * fwdScale + _right.z * rightScale;
+    const resolvedSpeed = typeof speed === "function" ? speed(controls) : speed;
+    const { dx, dy, dz } = computeOrbitKeyboardMotion(_fwd, keys, resolvedSpeed);
     const newCamX = Math.max(minX, Math.min(maxX, controls.object.position.x + dx));
+    const newCamY = Math.max(minY, Math.min(maxY, controls.object.position.y + dy));
     const newCamZ = Math.max(minZ, Math.min(maxZ, controls.object.position.z + dz));
     const actualDx = newCamX - controls.object.position.x;
+    const actualDy = newCamY - controls.object.position.y;
     const actualDz = newCamZ - controls.object.position.z;
-    if (Math.abs(actualDx) < 1e-6 && Math.abs(actualDz) < 1e-6) return;
+    if (Math.abs(actualDx) < 1e-6 && Math.abs(actualDy) < 1e-6 && Math.abs(actualDz) < 1e-6) return;
     controls.object.position.x = newCamX;
+    controls.object.position.y = newCamY;
     controls.object.position.z = newCamZ;
     controls.target.x += actualDx;
+    controls.target.y += actualDy;
     controls.target.z += actualDz;
     // No controls.update() here — the main animate loop calls it once per frame.
     // Calling it here too would double-process sphericalDelta.

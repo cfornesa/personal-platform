@@ -74,8 +74,14 @@ function AppShell() {
     <QueryClientProvider client={queryClient}>
       <ThemeInjector />
       <div className="flex min-h-[100dvh] flex-col bg-background">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:left-4 focus:top-4 focus:rounded focus:border focus:border-border focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-md"
+        >
+          Skip to main content
+        </a>
         <Navbar />
-        <main className="flex-1">
+        <main id="main-content" className="flex-1">
           <Switch>
             <Route path="/" component={Home} />
             <Route path="/settings" component={SettingsPage} />

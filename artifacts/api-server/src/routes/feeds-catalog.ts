@@ -168,14 +168,14 @@ router.get("/feeds", async (req: Request, res: Response) => {
           slug: `category-${cat.slug}-atom`,
           title: `Atom feed — ${cat.name}`,
           description: `Posts in the "${cat.name}" category, in Atom 1.0.`,
-          url: `${origin}/categories/${cat.slug}/feed.xml`,
+          url: `${origin}/api/categories/${cat.slug}/feeds/atom`,
           mimeType: "application/atom+xml",
         },
         {
           slug: `category-${cat.slug}-json`,
           title: `JSON Feed — ${cat.name}`,
           description: `Posts in the "${cat.name}" category, in JSON Feed 1.1.`,
-          url: `${origin}/categories/${cat.slug}/feed.json`,
+          url: `${origin}/api/categories/${cat.slug}/feeds/json`,
           mimeType: "application/feed+json",
         },
       );

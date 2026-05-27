@@ -39,7 +39,7 @@ const EMPTY_NAV_LINKS: NavLinkRecord[] = [];
 export function Navbar() {
   const { currentUser, isAuthenticated, isOwner } = useCurrentUser();
   const { data: siteSettings } = useSiteSettings();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const navLinksQuery = useListNavLinks(
     {},
     { query: { queryKey: getListNavLinksQueryKey(), staleTime: 60_000 } },
@@ -226,6 +226,7 @@ export function Navbar() {
         ? `/p/${link.pageSlug}`
         : link.url;
     const isInternal = href.startsWith("/");
+    const isActive = isInternal && location === href;
     const safeNewTab = link.openInNewTab && !isInternal;
     const className =
       opts.variant === "inline"
@@ -244,6 +245,7 @@ export function Navbar() {
           href={href}
           onClick={opts.onClick}
           className={className}
+          aria-current={isActive ? "page" : undefined}
           data-testid={`nav-link-${link.id}-${opts.variant}`}
         >
           <span>{link.label}</span>

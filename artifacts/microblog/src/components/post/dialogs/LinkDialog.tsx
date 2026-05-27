@@ -14,26 +14,29 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialHref?: string;
+  initialLinkText?: string;
   initialOpenInNewTab?: boolean;
-  onApply: (href: string, openInNewTab: boolean) => void;
+  onApply: (href: string, openInNewTab: boolean, linkText: string) => void;
   onRemove?: () => void;
 };
 
-export function LinkDialog({ open, onOpenChange, initialHref, initialOpenInNewTab, onApply, onRemove }: Props) {
+export function LinkDialog({ open, onOpenChange, initialHref, initialLinkText, initialOpenInNewTab, onApply, onRemove }: Props) {
   const [href, setHref] = useState(initialHref ?? "https://");
+  const [linkText, setLinkText] = useState(initialLinkText ?? "");
   const [openInNewTab, setOpenInNewTab] = useState(initialOpenInNewTab ?? false);
 
   useEffect(() => {
     if (open) {
       setHref(initialHref ?? "https://");
+      setLinkText(initialLinkText ?? "");
       setOpenInNewTab(initialOpenInNewTab ?? false);
     }
-  }, [open, initialHref, initialOpenInNewTab]);
+  }, [open, initialHref, initialLinkText, initialOpenInNewTab]);
 
   function handleApply() {
     const trimmed = href.trim();
     if (!trimmed) return;
-    onApply(trimmed, openInNewTab);
+    onApply(trimmed, openInNewTab, linkText.trim());
     onOpenChange(false);
   }
 
@@ -45,6 +48,19 @@ export function LinkDialog({ open, onOpenChange, initialHref, initialOpenInNewTa
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
+            <Label htmlFor="link-text">Link text</Label>
+            <input
+              id="link-text"
+              type="text"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleApply()}
+              placeholder="Descriptive link text"
+              autoFocus
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="link-url">URL</Label>
             <input
               id="link-url"
@@ -53,7 +69,6 @@ export function LinkDialog({ open, onOpenChange, initialHref, initialOpenInNewTa
               onChange={(e) => setHref(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleApply()}
               placeholder="https://example.com"
-              autoFocus
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
