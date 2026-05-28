@@ -46,6 +46,7 @@ import type { EnabledPlatformConnection } from "@/hooks/use-enabled-platform-con
 import { ArtPieceDraftDialog } from "./ArtPieceDraftDialog";
 import { ArtPieceGenerationDialog, type ArtPieceGenerationState } from "./ArtPieceGenerationDialog";
 import { ArtPieceLibraryDialog } from "./ArtPieceLibraryDialog";
+import { ExhibitLibraryDialog } from "./ExhibitLibraryDialog";
 import { FeaturedImagePicker } from "@/components/media/FeaturedImagePicker";
 import { partitionEditorContent } from "@/lib/editor-utils";
 import { LinkDialog } from "./dialogs/LinkDialog";
@@ -150,6 +151,18 @@ function buildPieceIframeAttrs(piece: {
   };
 }
 
+function buildExhibitIframeAttrs(exhibit: { slug: string; name: string }) {
+  return {
+    src: `/immersive/exhibits/${exhibit.slug}?embed=1&static=1`,
+    width: "100%",
+    height: "480",
+    title: exhibit.name,
+    loading: "lazy",
+    frameborder: "0",
+    sandbox: "allow-scripts allow-same-origin",
+  };
+}
+
 const MAX_PIECE_GENERATION_ATTEMPTS = 3;
 
 export function RichPostEditor({
@@ -200,6 +213,7 @@ export function RichPostEditor({
   const [pieceDraftPrompt, setPieceDraftPrompt] = useState("");
   const [isPieceDraftOpen, setIsPieceDraftOpen] = useState(false);
   const [isPieceLibraryOpen, setIsPieceLibraryOpen] = useState(false);
+  const [isExhibitLibraryOpen, setIsExhibitLibraryOpen] = useState(false);
   const [pieceGenerationState, setPieceGenerationState] = useState<ArtPieceGenerationState | null>(null);
   const [isFeaturedPickerOpen, setIsFeaturedPickerOpen] = useState(false);
   const [isCancelWarningOpen, setIsCancelWarningOpen] = useState(false);
@@ -1071,6 +1085,9 @@ export function RichPostEditor({
                 <DropdownMenuItem onSelect={() => setIsPieceLibraryOpen(true)}>
                   Insert saved piece
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsExhibitLibraryOpen(true)}>
+                  Insert saved exhibit
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1389,6 +1406,19 @@ export function RichPostEditor({
           toast({
             title: "Piece inserted",
             description: "The saved piece embed has been added to this post.",
+          });
+        }}
+      />
+
+      <ExhibitLibraryDialog
+        open={isExhibitLibraryOpen}
+        onOpenChange={setIsExhibitLibraryOpen}
+        onInsert={(exhibit) => {
+          if (!editor) return;
+          editor.chain().focus().insertIframe(buildExhibitIframeAttrs(exhibit)).run();
+          toast({
+            title: "Exhibit inserted",
+            description: "The exhibit embed has been added to this post.",
           });
         }}
       />

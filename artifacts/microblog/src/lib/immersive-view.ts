@@ -135,6 +135,21 @@ export function buildPlainImageEmbedHtml(
   return `<img src="${imageSrc}" alt="${safeAlt}" style="max-width:100%;height:auto;display:block;" />`;
 }
 
+export function buildImmersiveExhibitHref(slug: string, origin?: string): string {
+  const base = origin || window.location.origin;
+  return `${base}/immersive/exhibits/${slug}`;
+}
+
+export function buildExhibitGalleryEmbedHtml(
+  slug: string,
+  name: string,
+  origin = window.location.origin,
+): string {
+  const src = `${origin}/immersive/exhibits/${slug}?embed=1`;
+  const safeTitle = name.replace(/"/g, "&quot;");
+  return `<iframe src="${src}" width="100%" style="${RESPONSIVE_EMBED_IFRAME_STYLE}" title="${safeTitle}" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
+}
+
 export function extractPieceEmbedMeta(src: string, origin = window.location.origin) {
   try {
     const url = new URL(src, origin);

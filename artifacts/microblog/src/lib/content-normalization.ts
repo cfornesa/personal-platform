@@ -28,6 +28,21 @@ export function normalizePieceEmbedSrc(src: string, origin = window.location.ori
   }
 }
 
+export function normalizeExhibitEmbedSrc(src: string, origin = window.location.origin) {
+  const trimmed = src.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const url = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? new URL(trimmed)
+      : new URL(trimmed, window.location.origin);
+    const match = url.pathname.match(/^\/immersive\/exhibits\/([^/]+)$/);
+    if (!match) return trimmed;
+    return `${origin}/immersive/exhibits/${match[1]}${url.search}${url.hash}`;
+  } catch {
+    return trimmed;
+  }
+}
+
 /**
  * Scans HTML for iframe embeds and normalizes their src URLs.
  */
@@ -43,7 +58,10 @@ export function normalizePieceEmbedUrls(html: string, origin = window.location.o
     if (!currentSrc) {
       return;
     }
-    const normalizedSrc = normalizePieceEmbedSrc(currentSrc, origin);
+    const normalizedPiece = normalizePieceEmbedSrc(currentSrc, origin);
+    const normalizedSrc = normalizedPiece !== currentSrc
+      ? normalizedPiece
+      : normalizeExhibitEmbedSrc(currentSrc, origin);
     if (normalizedSrc !== currentSrc) {
       iframe.setAttribute("src", normalizedSrc);
       mutated = true;

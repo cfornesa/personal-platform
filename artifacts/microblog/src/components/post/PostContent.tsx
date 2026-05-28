@@ -3,6 +3,7 @@ import type { PostContentFormat } from "@workspace/api-client-react";
 import {
   buildImmersiveImageHref,
   buildImmersivePieceHref,
+  buildImmersiveExhibitHref,
   extractPieceEmbedMeta,
 } from "@/lib/immersive-view";
 import { useSiteSettings } from "@/hooks/use-site-settings";
@@ -190,6 +191,37 @@ function enhanceImmersiveHtml(html: string, canonicalOrigin: string): string {
       createImmersiveAnchorMarkup(
         buildImmersivePieceHref(meta.id, meta.versionId, canonicalOrigin),
         "Open piece in immersive view",
+      ),
+    );
+  });
+
+  Array.from(root.querySelectorAll("iframe[src]")).forEach((frame) => {
+    if (!(frame instanceof HTMLIFrameElement)) return;
+    const src = frame.getAttribute("src");
+    if (!src || frame.closest("[data-immersive-wrapper]")) return;
+    const match = src.match(/\/immersive\/exhibits\/([^/?#]+)/);
+    if (!match) return;
+    const slug = match[1];
+    try {
+      const url = new URL(src, window.location.origin);
+      frame.setAttribute("src", `${canonicalOrigin}/immersive/exhibits/${slug}${url.search}${url.hash}`);
+    } catch {
+      frame.setAttribute("src", `${canonicalOrigin}/immersive/exhibits/${slug}`);
+    }
+    frame.setAttribute("width", "100%");
+    frame.removeAttribute("height");
+    frame.setAttribute("style", "width:100%;aspect-ratio:16 / 9;display:block;");
+
+    const wrapper = doc.createElement("div");
+    wrapper.setAttribute("data-immersive-wrapper", "exhibit");
+    wrapper.className = "not-prose group/immersive relative my-4";
+    frame.parentNode?.insertBefore(wrapper, frame);
+    wrapper.appendChild(frame);
+    wrapper.insertAdjacentHTML(
+      "beforeend",
+      createImmersiveAnchorMarkup(
+        buildImmersiveExhibitHref(slug, canonicalOrigin),
+        "Open exhibit in immersive view",
       ),
     );
   });

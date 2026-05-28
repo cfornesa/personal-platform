@@ -142,6 +142,18 @@ export function ImmersiveRouteShell({
   }, [isEmbedMode]);
 
   useEffect(() => {
+    if (!isEmbedMode) return;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, [isEmbedMode]);
+
+  useEffect(() => {
     if (!isFullscreen || isEmbedMode) {
       return;
     }
@@ -171,7 +183,19 @@ export function ImmersiveRouteShell({
       >
         {renderScene({ fullscreen: false, isMobile: false })}
         <div className="pointer-events-none absolute inset-0 z-10">
-          <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
+          <div className="pointer-events-auto absolute bottom-4 right-4 z-20 flex items-center gap-2">
+            {canonicalHref && !showEmbedFullscreenControl ? (
+              <a
+                href={canonicalHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open in immersive view"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white shadow-lg backdrop-blur transition hover:bg-black/70"
+              >
+                <Box className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                <span aria-hidden="true">VR</span>
+              </a>
+            ) : null}
             {showEmbedFullscreenControl ? (
               <FullscreenToggleButton
                 isFullscreen={isEmbedFullscreen}
