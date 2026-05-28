@@ -14,9 +14,11 @@ import {
   useProcessAiText,
   useUpdateMyAiSettings,
   useUpdateArtPiece,
+  useSetArtPieceExhibits,
   type GeneratedArtPieceDraft,
   type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
+import { ExhibitMultiSelect } from "@/components/post/ExhibitMultiSelect";
 import { Code, Sparkles, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -148,6 +150,7 @@ export default function AdminPiecesPage() {
   const [generationState, setGenerationState] = useState<ArtPieceGenerationState | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   const [isImprovingText, setIsImprovingText] = useState(false);
+  const [pieceExhibitIds, setPieceExhibitIds] = useState<number[]>([]);
 
   const pieces = useListArtPieces();
   const filtered = useMemo(() => {
@@ -193,6 +196,7 @@ export default function AdminPiecesPage() {
       setTitle(selected.title);
       setPrompt(selected.prompt);
       setSelectedEngine(selected.engine);
+      setPieceExhibitIds(selected.exhibitIds ?? []);
     }
   }, [selected?.id, creationMode]);
 
@@ -307,6 +311,7 @@ canvas { display: block; }`;
         setHtmlCode(response.version.htmlCode || "");
         setCssCode(response.version.cssCode || "");
         setGeneratedCode(response.version.generatedCode || "");
+        setArtPieceExhibits.mutate({ id: response.piece.id, data: { exhibitIds: pieceExhibitIds } });
         queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetArtPieceQueryKey(response.piece.id) });
         setDraftOpen(false);
@@ -322,6 +327,9 @@ canvas { display: block; }`;
   const createPiece = useCreateArtPiece({
     mutation: {
       onSuccess: (response) => {
+        if (pieceExhibitIds.length > 0) {
+          setArtPieceExhibits.mutate({ id: response.id, data: { exhibitIds: pieceExhibitIds } });
+        }
         queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
         setSelectedId(response.id);
         setCreationMode(null);
@@ -334,6 +342,8 @@ canvas { display: block; }`;
       },
     },
   });
+
+  const setArtPieceExhibits = useSetArtPieceExhibits();
 
   const updateAiSettings = useUpdateMyAiSettings({
     mutation: {
@@ -767,6 +777,13 @@ canvas { display: block; }`;
                           value={prompt}
                           onChange={(event) => setPrompt(event.target.value)}
                           rows={4}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Exhibits</Label>
+                        <ExhibitMultiSelect
+                          value={pieceExhibitIds}
+                          onChange={setPieceExhibitIds}
                         />
                       </div>
                     </div>

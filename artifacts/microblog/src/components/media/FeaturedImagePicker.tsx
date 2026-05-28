@@ -106,6 +106,7 @@ export function FeaturedImagePicker({
       mimeType: input.mimeType,
       altText: input.altText ?? null,
       uploadedAt: new Date().toISOString(),
+      exhibitIds: [],
     };
   }
 

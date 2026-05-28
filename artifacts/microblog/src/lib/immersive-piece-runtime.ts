@@ -117,3 +117,67 @@ export function createImmersiveHost(
   document.body.appendChild(host);
   return host;
 }
+
+export function normalizeManagedCanvasStyles(
+  canvas: HTMLCanvasElement,
+  size: ImmersiveRuntimeSize,
+) {
+  canvas.style.position = "";
+  canvas.style.top = "";
+  canvas.style.left = "";
+  canvas.style.bottom = "";
+  canvas.style.right = "";
+  canvas.style.zIndex = "";
+  canvas.style.pointerEvents = "";
+  canvas.style.width = `${size.width}px`;
+  canvas.style.height = `${size.height}px`;
+}
+
+export function observeManagedCanvasContainment(
+  canvas: HTMLCanvasElement,
+  host: HTMLElement,
+  size: ImmersiveRuntimeSize,
+) {
+  normalizeManagedCanvasStyles(canvas, size);
+
+  function reassert() {
+    if (canvas.parentElement !== host) {
+      host.appendChild(canvas);
+    }
+    normalizeManagedCanvasStyles(canvas, size);
+  }
+
+  const styleObserver = new MutationObserver(() => {
+    if (
+      canvas.style.position
+      || canvas.style.zIndex
+      || canvas.style.top
+      || canvas.style.left
+      || canvas.style.right
+      || canvas.style.bottom
+    ) {
+      reassert();
+    }
+  });
+  styleObserver.observe(canvas, { attributes: true, attributeFilter: ["style"] });
+
+  const bodyObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node === canvas) {
+          reassert();
+          return;
+        }
+      }
+    }
+  });
+  bodyObserver.observe(document.body, { childList: true });
+
+  return {
+    reassert,
+    dispose() {
+      styleObserver.disconnect();
+      bodyObserver.disconnect();
+    },
+  };
+}

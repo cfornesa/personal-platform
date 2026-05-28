@@ -525,6 +525,235 @@ export function createKeyboardNavigation(
   return { update, dispose };
 }
 
+const WALL_FRAME_ART_WIDTH = 2.2;
+const WALL_FRAME_ART_HEIGHT = 1.65;
+const WALL_FRAME_SLOT_WIDTH = 3.2;
+const WALL_FRAME_SLOT_HEIGHT = 2.4;
+const WALL_LABEL_HEIGHT = WALL_FRAME_ART_WIDTH * (80 / 512);
+const WALL_LABEL_GAP = 0.08;
+const EXHIBIT_FLOOR_CLEARANCE = 0.2;
+
+export type ExhibitFrameSlot = {
+  artMesh: any;
+  artMaterial: any;
+  frameMesh: any;
+  framePanel: any;
+  labelMesh?: any;
+  labelMaterial?: any;
+};
+
+export type ExhibitWallShell = {
+  canvas: HTMLCanvasElement;
+  renderer: any;
+  scene: any;
+  camera: any;
+  controls: OrbitControls;
+  floor: any;
+  backWall: any;
+  slots: ExhibitFrameSlot[];
+  gridRows: number;
+  gridCols: number;
+  gridCenterY: number;
+};
+
+export function computeExhibitGridCenterY(rows: number) {
+  const gridRows = Math.max(1, rows);
+  const minBottomSlotCenterY =
+    (WALL_FRAME_ART_HEIGHT / 2)
+    + (WALL_LABEL_HEIGHT / 2)
+    + WALL_LABEL_GAP
+    + EXHIBIT_FLOOR_CLEARANCE;
+  return Math.max(
+    WALL_CENTER.y,
+    ((gridRows - 1) / 2) * WALL_FRAME_SLOT_HEIGHT + minBottomSlotCenterY,
+  );
+}
+
+export function computeExhibitBottomVisibleY(rows: number) {
+  const gridRows = Math.max(1, rows);
+  const gridCenterY = computeExhibitGridCenterY(gridRows);
+  const bottomSlotCenterY =
+    gridCenterY - (((gridRows - 1) / 2) * WALL_FRAME_SLOT_HEIGHT);
+  return bottomSlotCenterY
+    - (WALL_FRAME_ART_HEIGHT / 2)
+    - (WALL_LABEL_HEIGHT / 2)
+    - WALL_LABEL_GAP;
+}
+
+function createFrameLabel(title: string, subtitle: string): { mesh: any; material: any } {
+  const cw = 512;
+  const ch = 80;
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = "rgba(255,255,255,0.82)";
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = "rgba(0,0,0,0.82)";
+  ctx.font = "bold 22px sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title.slice(0, 38), 16, ch * 0.38);
+  ctx.fillStyle = "rgba(0,0,0,0.52)";
+  ctx.font = "16px sans-serif";
+  ctx.fillText(subtitle.slice(0, 42), 16, ch * 0.72);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+  const labelHeight = WALL_LABEL_HEIGHT;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(WALL_FRAME_ART_WIDTH, labelHeight), material);
+  return { mesh, material };
+}
+
+export function createMultiFrameExhibitWall(
+  stage: HTMLDivElement,
+  frameCount: number,
+  rows = 1,
+  cols = frameCount,
+  labels?: Array<{ title: string; subtitle: string } | null>,
+): ExhibitWallShell {
+  const n = Math.max(1, frameCount);
+  const gridRows = Math.max(1, rows);
+  const gridCols = Math.max(1, cols);
+
+  const wallWidth = Math.max(22, gridCols * WALL_FRAME_SLOT_WIDTH + 2);
+  const wallMeshHeight = Math.max(11, gridRows * WALL_FRAME_SLOT_HEIGHT + 5);
+  const gridCenterY = computeExhibitGridCenterY(gridRows);
+
+  const canvas = document.createElement("canvas");
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.display = "block";
+  canvas.style.touchAction = "none";
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  stage.innerHTML = "";
+  stage.appendChild(canvas);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#f1ece2");
+  scene.fog = new THREE.Fog("#f1ece2", Math.max(20, wallWidth + 4), Math.max(40, wallWidth * 3));
+
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  const controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.enablePan = true;
+  controls.minPolarAngle = 0.01;
+  controls.maxPolarAngle = Math.PI - 0.01;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.38));
+  const keyLight = new THREE.DirectionalLight(0xfffcf6, 0.9);
+  keyLight.position.set(0.8, 4.8, 5.2);
+  scene.add(keyLight);
+  const fillLight = new THREE.DirectionalLight(0xf3ede2, 0.35);
+  fillLight.position.set(-3.1, 2.4, 1.8);
+  scene.add(fillLight);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(wallWidth + 8, 18),
+    new THREE.MeshStandardMaterial({ color: "#d7d0c4", roughness: 0.98, metalness: 0 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, 1.9);
+  scene.add(floor);
+
+  const backWall = new THREE.Mesh(
+    new THREE.PlaneGeometry(wallWidth + 4, wallMeshHeight),
+    new THREE.MeshStandardMaterial({ color: "#f8f5ee", roughness: 1, metalness: 0 }),
+  );
+  backWall.position.set(0, gridCenterY, -1.35);
+  scene.add(backWall);
+
+  const wallCenterZ = WALL_CENTER.z;
+  const slots: ExhibitFrameSlot[] = [];
+  const labelHeight = WALL_LABEL_HEIGHT;
+
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / gridCols);
+    const col = i % gridCols;
+    const slotX = (col - (gridCols - 1) / 2) * WALL_FRAME_SLOT_WIDTH;
+    const slotY = gridCenterY + ((gridRows - 1) / 2 - row) * WALL_FRAME_SLOT_HEIGHT;
+
+    const framePanel = new THREE.Mesh(
+      new THREE.BoxGeometry(WALL_FRAME_ART_WIDTH + 0.3, WALL_FRAME_ART_HEIGHT + 0.3, 0.05),
+      new THREE.MeshStandardMaterial({ color: "#fcfaf6", roughness: 0.96, metalness: 0 }),
+    );
+    framePanel.position.set(slotX, slotY, -1.16);
+    scene.add(framePanel);
+
+    const artMaterial = new THREE.MeshBasicMaterial({ color: "#e8e4de" });
+    const artMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(WALL_FRAME_ART_WIDTH, WALL_FRAME_ART_HEIGHT),
+      artMaterial,
+    );
+    artMesh.position.set(slotX, slotY, wallCenterZ);
+    scene.add(artMesh);
+
+    const frameMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(WALL_FRAME_ART_WIDTH + 0.12, WALL_FRAME_ART_HEIGHT + 0.12, 0.03),
+      new THREE.MeshStandardMaterial({ color: "#d8d1c7", roughness: 0.92, metalness: 0 }),
+    );
+    frameMesh.position.set(slotX, slotY, -1.12);
+    scene.add(frameMesh);
+
+    const slot: ExhibitFrameSlot = { artMesh, artMaterial, frameMesh, framePanel };
+
+    const label = labels?.[i];
+    if (label) {
+      const { mesh: labelMesh, material: labelMaterial } = createFrameLabel(label.title, label.subtitle);
+      labelMesh.position.set(
+        slotX,
+        slotY - WALL_FRAME_ART_HEIGHT / 2 - labelHeight / 2 - WALL_LABEL_GAP,
+        wallCenterZ + 0.01,
+      );
+      scene.add(labelMesh);
+      slot.labelMesh = labelMesh;
+      slot.labelMaterial = labelMaterial;
+    }
+
+    slots.push(slot);
+  }
+
+  const shell: ExhibitWallShell = {
+    canvas, renderer, scene, camera, controls, floor, backWall, slots,
+    gridRows, gridCols, gridCenterY,
+  };
+  fitMultiFrameExhibitCamera(shell, stage);
+  return shell;
+}
+
+export function fitMultiFrameExhibitCamera(
+  shell: ExhibitWallShell,
+  stage: HTMLDivElement,
+) {
+  const width = stage.clientWidth || window.innerWidth;
+  const height = stage.clientHeight || window.innerHeight;
+  shell.camera.aspect = width / Math.max(height, 1);
+  shell.camera.updateProjectionMatrix();
+  shell.renderer.setSize(width, height, false);
+
+  const { gridRows, gridCols, gridCenterY } = shell;
+  const totalWidth = Math.max(WALL_FRAME_ART_WIDTH, (gridCols - 1) * WALL_FRAME_SLOT_WIDTH + WALL_FRAME_ART_WIDTH);
+  const totalHeight = Math.max(WALL_FRAME_ART_HEIGHT, (gridRows - 1) * WALL_FRAME_SLOT_HEIGHT + WALL_FRAME_ART_HEIGHT);
+
+  const target = new THREE.Vector3(0, gridCenterY - 0.16, WALL_CENTER.z);
+  const verticalFov = THREE.MathUtils.degToRad(shell.camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * shell.camera.aspect);
+  const distanceForHeight = (totalHeight / 2) / Math.tan(verticalFov / 2);
+  const distanceForWidth = (totalWidth / 2) / Math.tan(horizontalFov / 2);
+  const distance = Math.max(distanceForHeight, distanceForWidth) * 1.45;
+
+  shell.camera.position.set(0, gridCenterY + 0.2, WALL_CENTER.z + distance);
+  shell.camera.lookAt(target);
+  shell.controls.target.copy(target);
+  shell.controls.minDistance = Math.max(1.2, distance * 0.25);
+  shell.controls.maxDistance = Math.max(20, distance * 6);
+  shell.controls.minAzimuthAngle = -Math.PI;
+  shell.controls.maxAzimuthAngle = Math.PI;
+  shell.controls.update();
+}
+
 export function computeThreeAutoFitView(
   center: { x: number; y: number; z: number },
   size: { x: number; y: number; z: number },

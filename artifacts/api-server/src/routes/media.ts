@@ -11,9 +11,23 @@ import {
   RemoteMediaImportError,
   storeUploadedImage,
 } from "../lib/media";
+import { loadExhibitMembershipMap } from "../lib/exhibit-memberships";
 import { db, mediaAssetsTable, desc, eq } from "@workspace/db";
 
 const router: IRouter = Router();
+
+async function attachMediaExhibitIds<T extends { id: number }>(
+  items: T[],
+): Promise<Array<T & { exhibitIds: number[] }>> {
+  if (items.length === 0) return items.map((i) => ({ ...i, exhibitIds: [] }));
+  const map = await loadExhibitMembershipMap({
+    tableName: "media_asset_exhibits",
+    ownerColumn: "media_asset_id",
+    ownerIds: items.map((i) => i.id),
+  });
+  return items.map((i) => ({ ...i, exhibitIds: map.get(i.id) ?? [] }));
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -118,7 +132,7 @@ router.get(
   requireAuth,
   requireOwner,
   async (_req: Request, res: Response) => {
-    const assets = await db
+    const rows = await db
       .select({
         id: mediaAssetsTable.id,
         url: mediaAssetsTable.url,
@@ -130,6 +144,7 @@ router.get(
       })
       .from(mediaAssetsTable)
       .orderBy(desc(mediaAssetsTable.uploadedAt));
+    const assets = await attachMediaExhibitIds(rows);
     return res.json(assets);
   },
 );
@@ -180,7 +195,7 @@ router.patch(
 
     void updated;
 
-    const [fresh] = await db
+    const [freshRow] = await db
       .select({
         id: mediaAssetsTable.id,
         url: mediaAssetsTable.url,
@@ -194,6 +209,7 @@ router.patch(
       .where(eq(mediaAssetsTable.filename, fileName))
       .limit(1);
 
+    const [fresh] = await attachMediaExhibitIds(freshRow ? [freshRow] : []);
     return res.json(fresh);
   },
 );

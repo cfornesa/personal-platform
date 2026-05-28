@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireAuth, requireOwner } from "../middlewares/auth";
+import { loadExhibitMembershipMap } from "../lib/exhibit-memberships";
 import {
   ArtPieceGenerationError,
   StructuredArtPieceParseError,
@@ -68,6 +69,7 @@ const UpdateArtPieceBody = z.object({
   prompt: z.string().trim().min(1).max(4000).optional(),
   status: artPieceStatusSchema.optional(),
   thumbnailUrl: z.string().trim().url().max(2048).nullable().optional(),
+  description: z.string().nullable().optional(),
 });
 
 const CreateArtPieceVersionBody = z.object({
@@ -87,6 +89,18 @@ const PieceIdParams = z.object({
 const PieceEmbedQuery = z.object({
   version: z.coerce.number().int().positive().optional(),
 });
+
+async function attachExhibitIds<T extends { id: number }>(
+  items: T[],
+): Promise<Array<T & { exhibitIds: number[] }>> {
+  if (items.length === 0) return items.map((i) => ({ ...i, exhibitIds: [] }));
+  const map = await loadExhibitMembershipMap({
+    tableName: "piece_exhibits",
+    ownerColumn: "art_piece_id",
+    ownerIds: items.map((i) => i.id),
+  });
+  return items.map((i) => ({ ...i, exhibitIds: map.get(i.id) ?? [] }));
+}
 
 async function loadOwnerAiSettings(userId: string) {
   return db
@@ -357,7 +371,8 @@ async function generateValidatedDraft(input: {
 
 router.get("/art-pieces", requireAuth, requireOwner, async (req: Request, res: Response) => {
   try {
-    const pieces = await loadPiecesWithVersions(req.currentUser!.id);
+    const serialized = await loadPiecesWithVersions(req.currentUser!.id);
+    const pieces = await attachExhibitIds(serialized);
     return res.json({ pieces });
   } catch (error) {
     console.error("Failed to list art pieces:", error);
@@ -383,8 +398,9 @@ router.get("/art-pieces/:id", requireAuth, requireOwner, async (req: Request, re
       .where(eq(artPieceVersionsTable.artPieceId, piece.id))
       .orderBy(desc(artPieceVersionsTable.createdAt));
 
+    const [withGalleries] = await attachExhibitIds([serializeArtPiece(piece, currentVersion)]);
     return res.json({
-      ...serializeArtPiece(piece, currentVersion),
+      ...withGalleries,
       versions: versions.map(serializeArtPieceVersion),
     });
   } catch (error) {
@@ -699,6 +715,9 @@ router.patch("/art-pieces/:id", requireAuth, requireOwner, async (req: Request, 
     }
     if (Object.prototype.hasOwnProperty.call(parsed.data, "thumbnailUrl")) {
       updates.thumbnailUrl = parsed.data.thumbnailUrl ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "description")) {
+      updates.description = parsed.data.description ?? null;
     }
 
     if (Object.keys(updates).length > 0) {

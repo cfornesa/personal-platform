@@ -669,6 +669,7 @@ export function serializeArtPiece(piece: ArtPiece, version: ArtPieceVersion | nu
     status: piece.status,
     currentVersionId: piece.currentVersionId ?? null,
     thumbnailUrl: piece.thumbnailUrl ?? null,
+    description: piece.description ?? null,
     createdAt: piece.createdAt,
     updatedAt: piece.updatedAt,
     currentVersion: version ? serializeArtPieceVersion(version) : null,

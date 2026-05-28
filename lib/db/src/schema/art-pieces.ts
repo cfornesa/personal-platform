@@ -22,6 +22,7 @@ export const artPiecesTable = mysqlTable(
     status: varchar("status", { length: 16 }).notNull().default("active"),
     currentVersionId: int("current_version_id"),
     thumbnailUrl: varchar("thumbnail_url", { length: 2048 }),
+    description: text("description"),
     createdAt: datetime("created_at", { mode: "string", fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`),

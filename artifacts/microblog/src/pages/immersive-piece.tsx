@@ -27,6 +27,8 @@ import {
   createImmersiveHost,
   DEFAULT_IMMERSIVE_RUNTIME_SIZE,
   getCanvasMetrics,
+  normalizeManagedCanvasStyles,
+  observeManagedCanvasContainment,
   resolveImmersiveElementBackground,
   resolveSketchFactory,
   type ImmersiveRuntimeSize,
@@ -107,8 +109,9 @@ function ImmersiveGalleryPieceStage({
     );
 
     let sourceCanvas: HTMLCanvasElement | null = null;
-    let mcStyleObserver: MutationObserver | null = null;
-    let mcBodyObserver: MutationObserver | null = null;
+    let managedCanvasContainment:
+      | ReturnType<typeof observeManagedCanvasContainment>
+      | null = null;
     let artTexture: any = null;
     let frameId = 0;
     let detectCanvasTimer: number | null = null;
@@ -120,6 +123,15 @@ function ImmersiveGalleryPieceStage({
     function syncCanvas(nextCanvas: HTMLCanvasElement) {
       sourceCanvas = nextCanvas;
       const displayCanvas = presentationSurface?.canvas ?? nextCanvas;
+      if (!managedCanvasContainment) {
+        const canvasHost =
+          nextCanvas.parentElement instanceof HTMLElement ? nextCanvas.parentElement : host;
+        managedCanvasContainment = observeManagedCanvasContainment(
+          nextCanvas,
+          canvasHost,
+          runtimeSize,
+        );
+      }
       if (!artTexture) {
         artTexture = new THREE.CanvasTexture(displayCanvas);
         artTexture.colorSpace = THREE.SRGBColorSpace;
@@ -195,14 +207,7 @@ function ImmersiveGalleryPieceStage({
         managedCanvas.width = runtimeSize.width;
         managedCanvas.height = runtimeSize.height;
         // Clear any AI-generated inline position:fixed that would escape the host's off-screen placement
-        managedCanvas.style.position = "";
-        managedCanvas.style.top = "";
-        managedCanvas.style.left = "";
-        managedCanvas.style.bottom = "";
-        managedCanvas.style.right = "";
-        managedCanvas.style.zIndex = "";
-        managedCanvas.style.width = `${runtimeSize.width}px`;
-        managedCanvas.style.height = `${runtimeSize.height}px`;
+        normalizeManagedCanvasStyles(managedCanvas, runtimeSize);
         if (!managedCanvas.parentNode) {
           host.appendChild(managedCanvas);
         }
@@ -224,34 +229,6 @@ function ImmersiveGalleryPieceStage({
           rafId = window.requestAnimationFrame(tick);
           return () => window.cancelAnimationFrame(rafId);
         };
-
-        // MutationObserver fires as microtask after each RAF callback but before browser paint —
-        // clears any position:fixed the sketch sets before it becomes visible.
-        const mc = managedCanvas;
-        mcStyleObserver = new MutationObserver(() => {
-          if (mc.style.position || mc.style.zIndex || mc.style.top || mc.style.left || mc.style.right || mc.style.bottom) {
-            mc.style.position = "";
-            mc.style.top = "";
-            mc.style.left = "";
-            mc.style.bottom = "";
-            mc.style.right = "";
-            mc.style.zIndex = "";
-            mc.style.pointerEvents = "";
-            mc.style.width = `${runtimeSize.width}px`;
-            mc.style.height = `${runtimeSize.height}px`;
-          }
-        });
-        mcStyleObserver.observe(mc, { attributes: true, attributeFilter: ["style"] });
-
-        // If sketch code moves managedCanvas to document.body, pull it back into host.
-        mcBodyObserver = new MutationObserver((mutations) => {
-          for (const m of mutations) {
-            for (const node of m.addedNodes) {
-              if (node === mc) host.appendChild(mc);
-            }
-          }
-        });
-        mcBodyObserver.observe(document.body, { childList: true });
 
         const cleanup = sketchFactory({
           c2,
@@ -346,8 +323,7 @@ function ImmersiveGalleryPieceStage({
       p5Instance?.remove?.();
       floorNav.dispose();
       keyNav.dispose();
-      mcStyleObserver?.disconnect();
-      mcBodyObserver?.disconnect();
+      managedCanvasContainment?.dispose();
       host.remove();
       stageEl.innerHTML = "";
     };

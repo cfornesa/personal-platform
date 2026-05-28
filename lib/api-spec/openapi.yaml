@@ -1862,6 +1862,221 @@ paths:
         "404":
           description: Not found
 
+  /exhibits:
+    get:
+      operationId: listExhibits
+      tags: [exhibits]
+      summary: List all exhibits with item counts
+      description: Public read. Returns all exhibits ordered by name, each with pieceCount and imageCount.
+      responses:
+        "200":
+          description: Exhibits list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExhibitsList"
+    post:
+      operationId: createExhibit
+      tags: [exhibits]
+      summary: Create a new exhibit (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExhibitBody"
+      responses:
+        "201":
+          description: Created exhibit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exhibit"
+        "400":
+          description: Invalid body
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "409":
+          description: Slug already exists
+
+  /exhibits/{slug}:
+    get:
+      operationId: getExhibit
+      tags: [exhibits]
+      summary: Get a single exhibit by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Exhibit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExhibitWithCounts"
+        "404":
+          description: Not found
+
+  /exhibits/{id}:
+    patch:
+      operationId: updateExhibit
+      tags: [exhibits]
+      summary: Update an exhibit by id (owner only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExhibitBody"
+      responses:
+        "200":
+          description: Updated exhibit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exhibit"
+        "400":
+          description: Invalid body
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+        "409":
+          description: Slug already exists
+    delete:
+      operationId: deleteExhibit
+      tags: [exhibits]
+      summary: Delete an exhibit by id (owner only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /exhibits/{slug}/items:
+    get:
+      operationId: getExhibitItems
+      tags: [exhibits]
+      summary: Get pieces and images in an exhibit (for the exhibit wall)
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Exhibit wall items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExhibitWallItems"
+        "404":
+          description: Not found
+
+  /art-pieces/{id}/exhibits:
+    put:
+      operationId: setArtPieceExhibits
+      tags: [exhibits]
+      summary: Replace the exhibit memberships of an art piece (owner only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetExhibitMembershipsBody"
+      responses:
+        "200":
+          description: Updated exhibit membership list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exhibitIds:
+                    type: array
+                    items:
+                      type: integer
+                required:
+                  - exhibitIds
+        "400":
+          description: Invalid body
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /media/{fileName}/exhibits:
+    put:
+      operationId: setMediaExhibits
+      tags: [exhibits]
+      summary: Replace the exhibit memberships of a media asset (owner only)
+      parameters:
+        - in: path
+          name: fileName
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetExhibitMembershipsBody"
+      responses:
+        "200":
+          description: Updated exhibit membership list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exhibitIds:
+                    type: array
+                    items:
+                      type: integer
+                required:
+                  - exhibitIds
+        "400":
+          description: Invalid body
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -1965,6 +2180,214 @@ components:
         description:
           type: string
           nullable: true
+
+    Exhibit:
+      type: object
+      description: Owner-curated collection of art pieces and images shown as a Three.js exhibit wall.
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - slug
+        - name
+        - createdAt
+        - updatedAt
+
+    ExhibitWithCounts:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        artistStatement:
+          type: string
+          nullable: true
+        biography:
+          type: string
+          nullable: true
+        rows:
+          type: integer
+          default: 1
+        cols:
+          type: integer
+          default: 1
+        pieceCount:
+          type: integer
+        imageCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - slug
+        - name
+        - rows
+        - cols
+        - pieceCount
+        - imageCount
+        - createdAt
+        - updatedAt
+
+    ExhibitsList:
+      type: object
+      properties:
+        exhibits:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExhibitWithCounts"
+      required:
+        - exhibits
+
+    CreateExhibitBody:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          maxLength: 191
+          description: Optional. When omitted the server derives one from `name`.
+        description:
+          type: string
+          nullable: true
+      required:
+        - name
+
+    UpdateExhibitBody:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          maxLength: 191
+        description:
+          type: string
+          nullable: true
+        artistStatement:
+          type: string
+          nullable: true
+        biography:
+          type: string
+          nullable: true
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 4
+        cols:
+          type: integer
+          minimum: 1
+          maximum: 8
+
+    SetExhibitMembershipsBody:
+      type: object
+      properties:
+        exhibitIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - exhibitIds
+
+    ExhibitWallPieceItem:
+      type: object
+      description: Art piece data needed to render a frame on the exhibit wall.
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        engine:
+          type: string
+          enum: [p5, c2, three]
+        thumbnailUrl:
+          type: string
+          nullable: true
+        generatedCode:
+          type: string
+        htmlCode:
+          type: string
+          nullable: true
+        cssCode:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+      required:
+        - id
+        - title
+        - engine
+        - thumbnailUrl
+        - generatedCode
+
+    ExhibitWallImageItem:
+      type: object
+      description: Image data needed to render a frame on the exhibit wall.
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        filename:
+          type: string
+        altText:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+      required:
+        - id
+        - url
+        - filename
+
+    ExhibitWallItems:
+      type: object
+      properties:
+        pieces:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExhibitWallPieceItem"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExhibitWallImageItem"
+        rows:
+          type: integer
+        cols:
+          type: integer
+      required:
+        - pieces
+        - images
+        - rows
+        - cols
 
     Post:
       type: object
@@ -2895,6 +3318,9 @@ components:
         thumbnailUrl:
           type: string
           nullable: true
+        description:
+          type: string
+          nullable: true
         createdAt:
           type: string
         updatedAt:
@@ -2903,6 +3329,11 @@ components:
           allOf:
             - $ref: "#/components/schemas/ArtPieceVersion"
           nullable: true
+        exhibitIds:
+          type: array
+          items:
+            type: integer
+          description: IDs of exhibits this piece belongs to.
       required:
         - id
         - ownerUserId
@@ -2915,6 +3346,7 @@ components:
         - createdAt
         - updatedAt
         - currentVersion
+        - exhibitIds
 
     ArtPieceDetail:
       allOf:
@@ -3095,6 +3527,9 @@ components:
           format: uri
           maxLength: 2048
           nullable: true
+        description:
+          type: string
+          nullable: true
 
     CreateArtPieceVersionBody:
       type: object
@@ -3185,12 +3620,18 @@ components:
           nullable: true
         uploadedAt:
           type: string
+        exhibitIds:
+          type: array
+          items:
+            type: integer
+          description: IDs of exhibits this image belongs to.
       required:
         - id
         - url
         - filename
         - mimeType
         - uploadedAt
+        - exhibitIds
 
     ImportMediaBody:
       type: object

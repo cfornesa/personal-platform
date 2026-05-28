@@ -55,6 +55,113 @@ export interface UpdateCategoryBody {
   description?: string | null;
 }
 
+/**
+ * Owner-curated collection of art pieces and images shown as a Three.js exhibit wall.
+ */
+export interface Exhibit {
+  id: number;
+  slug: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExhibitWithCounts {
+  id: number;
+  slug: string;
+  name: string;
+  description?: string | null;
+  artistStatement?: string | null;
+  biography?: string | null;
+  rows: number;
+  cols: number;
+  pieceCount: number;
+  imageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExhibitsList {
+  exhibits: ExhibitWithCounts[];
+}
+
+export interface CreateExhibitBody {
+  /** @maxLength 255 */
+  name: string;
+  /**
+     * Optional. When omitted the server derives one from `name`.
+     * @maxLength 191
+     */
+  slug?: string;
+  description?: string | null;
+}
+
+export interface UpdateExhibitBody {
+  /** @maxLength 255 */
+  name?: string;
+  /** @maxLength 191 */
+  slug?: string;
+  description?: string | null;
+  artistStatement?: string | null;
+  biography?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 4
+     */
+  rows?: number;
+  /**
+     * @minimum 1
+     * @maximum 8
+     */
+  cols?: number;
+}
+
+export interface SetExhibitMembershipsBody {
+  exhibitIds: number[];
+}
+
+export type ExhibitWallPieceItemEngine = typeof ExhibitWallPieceItemEngine[keyof typeof ExhibitWallPieceItemEngine];
+
+
+export const ExhibitWallPieceItemEngine = {
+  p5: 'p5',
+  c2: 'c2',
+  three: 'three',
+} as const;
+
+/**
+ * Art piece data needed to render a frame on the exhibit wall.
+ */
+export interface ExhibitWallPieceItem {
+  id: number;
+  title: string;
+  engine: ExhibitWallPieceItemEngine;
+  thumbnailUrl: string | null;
+  generatedCode: string;
+  htmlCode?: string | null;
+  cssCode?: string | null;
+  description?: string | null;
+}
+
+/**
+ * Image data needed to render a frame on the exhibit wall.
+ */
+export interface ExhibitWallImageItem {
+  id: number;
+  url: string;
+  filename: string;
+  altText?: string | null;
+  title?: string | null;
+}
+
+export interface ExhibitWallItems {
+  pieces: ExhibitWallPieceItem[];
+  images: ExhibitWallImageItem[];
+  rows: number;
+  cols: number;
+}
+
 export type PostContentFormat = typeof PostContentFormat[keyof typeof PostContentFormat];
 
 
@@ -858,9 +965,12 @@ export interface ArtPiece {
   status: ArtPieceStatus;
   currentVersionId: number | null;
   thumbnailUrl: string | null;
+  description?: string | null;
   createdAt: string;
   updatedAt: string;
   currentVersion: ArtPieceVersion | null;
+  /** IDs of exhibits this piece belongs to. */
+  exhibitIds: number[];
 }
 
 export type ArtPieceDetail = ArtPiece & {
@@ -1013,6 +1123,7 @@ export interface UpdateArtPieceBody {
   status?: UpdateArtPieceBodyStatus;
   /** @maxLength 2048 */
   thumbnailUrl?: string | null;
+  description?: string | null;
 }
 
 export interface CreateArtPieceVersionBody {
@@ -1073,6 +1184,8 @@ export interface MediaAsset {
   mimeType: string;
   altText?: string | null;
   uploadedAt: string;
+  /** IDs of exhibits this image belongs to. */
+  exhibitIds: number[];
 }
 
 export interface ImportMediaBody {
@@ -1990,5 +2103,13 @@ category?: string;
  * Optional CMS page slug; appends per-page feeds when set.
  */
 page?: string;
+};
+
+export type SetArtPieceExhibits200 = {
+  exhibitIds: number[];
+};
+
+export type SetMediaExhibits200 = {
+  exhibitIds: number[];
 };
 

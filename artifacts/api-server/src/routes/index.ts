@@ -16,6 +16,7 @@ import platformConnectionsRouter from "./platform-connections";
 import platformOAuthRouter from "./platform-oauth";
 import platformOAuthAppsRouter from "./platform-oauth-apps";
 import artPiecesRouter from "./art-pieces";
+import exhibitsRouter from "./exhibits";
 
 const router: IRouter = Router();
 
@@ -35,6 +36,7 @@ router.use(mediaRouter);
 router.use(usersRouter);
 router.use(aiRouter);
 router.use(artPiecesRouter);
+router.use(exhibitsRouter);
 router.use(siteSettingsRouter);
 router.use(feedSourcesRouter);
 router.use(navLinksRouter);

@@ -11,6 +11,20 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast }),
 }));
 
+vi.mock("@/components/post/ExhibitMultiSelect", () => ({
+  ExhibitMultiSelect: ({
+    value,
+    onChange,
+  }: {
+    value: number[];
+    onChange: (next: number[]) => void;
+  }) => (
+    <button type="button" onClick={() => onChange(value.length > 0 ? [] : [42])}>
+      Exhibits mock
+    </button>
+  ),
+}));
+
 const asset: MediaAsset = {
   id: 1,
   url: "/api/media/test.png",
@@ -18,6 +32,7 @@ const asset: MediaAsset = {
   title: "Test image",
   mimeType: "image/png",
   altText: "Existing alt",
+  exhibitIds: [7],
   uploadedAt: "2026-05-22T12:00:00.000Z",
 };
 
@@ -48,12 +63,14 @@ describe("MediaGrid", () => {
     await user.type(screen.getByLabelText("Title"), "Updated title");
     await user.clear(screen.getByLabelText("Alt text"));
     await user.type(screen.getByLabelText("Alt text"), "Updated alt");
+    await user.click(screen.getByRole("button", { name: "Exhibits mock" }));
     await user.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => {
       expect(onSaveDetails).toHaveBeenCalledWith(asset, {
         title: "Updated title",
         altText: "Updated alt",
+        exhibitIds: [],
       });
     });
   });
@@ -104,5 +121,19 @@ describe("MediaGrid", () => {
 
     expect(screen.getByText("Discard unsaved image details?")).toBeInTheDocument();
     expect(screen.getByText(/Closing now will discard them/)).toBeInTheDocument();
+  });
+
+  it("opens the manage dialog with exhibit controls without crashing", async () => {
+    const user = userEvent.setup();
+
+    render(<MediaGrid assets={[asset]} mode="manage" />);
+
+    await user.click(screen.getByRole("button", { name: "Open Test image" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByLabelText("Alt text")).toBeInTheDocument();
+    expect(screen.getByText("Exhibits")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exhibits mock" })).toBeInTheDocument();
   });
 });

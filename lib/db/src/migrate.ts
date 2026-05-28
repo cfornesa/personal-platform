@@ -147,6 +147,104 @@ async function ensureForeignKey(
   );
 }
 
+async function dropForeignKeyIfExists(
+  tableName: string,
+  constraintName: string,
+): Promise<void> {
+  const constraints = await getConstraintNames(tableName);
+  if (!constraints.has(constraintName)) {
+    return;
+  }
+
+  await mysqlPool.query(
+    `ALTER TABLE \`${tableName}\` DROP FOREIGN KEY \`${constraintName}\``,
+  );
+}
+
+async function dropIndexIfExists(
+  tableName: string,
+  indexName: string,
+): Promise<void> {
+  if (indexName === "PRIMARY") {
+    return;
+  }
+
+  const indexes = await getIndexNames(tableName);
+  if (!indexes.has(indexName)) {
+    return;
+  }
+
+  await mysqlPool.query(`ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\``);
+}
+
+async function normalizeLegacyExhibitJoinTable(input: {
+  tableName: "piece_exhibits" | "media_asset_exhibits";
+  ownerColumn: "art_piece_id" | "media_asset_id";
+  desiredOwnerIndexName: string;
+  desiredExhibitIndexName: string;
+  desiredOwnerFkName: string;
+  desiredExhibitFkName: string;
+  ownerTable: "art_pieces" | "media_assets";
+}) {
+  const columns = await getColumnNames(input.tableName);
+  if (!columns.has("gallery_id") || columns.has("exhibit_id")) {
+    return;
+  }
+
+  const legacyExhibitFkName =
+    input.tableName === "piece_exhibits"
+      ? "piece_galleries_gallery_id_fk"
+      : "media_asset_galleries_gallery_id_fk";
+  const legacyOwnerFkName =
+    input.tableName === "piece_exhibits"
+      ? "piece_galleries_art_piece_id_fk"
+      : "media_asset_galleries_media_asset_id_fk";
+  const legacyExhibitIndexName =
+    input.tableName === "piece_exhibits"
+      ? "piece_galleries_gallery_idx"
+      : "media_asset_galleries_gallery_idx";
+  const legacyOwnerIndexName =
+    input.tableName === "piece_exhibits"
+      ? "piece_galleries_art_piece_id_fk"
+      : "media_asset_galleries_media_asset_id_fk";
+
+  await dropForeignKeyIfExists(input.tableName, legacyExhibitFkName);
+  await dropForeignKeyIfExists(input.tableName, legacyOwnerFkName);
+  await dropForeignKeyIfExists(input.tableName, input.desiredExhibitFkName);
+  await dropForeignKeyIfExists(input.tableName, input.desiredOwnerFkName);
+
+  await dropIndexIfExists(input.tableName, legacyExhibitIndexName);
+  await dropIndexIfExists(input.tableName, legacyOwnerIndexName);
+  await dropIndexIfExists(input.tableName, input.desiredExhibitIndexName);
+  await dropIndexIfExists(input.tableName, input.desiredOwnerIndexName);
+
+  await mysqlPool.query(
+    `ALTER TABLE \`${input.tableName}\` CHANGE COLUMN \`gallery_id\` \`exhibit_id\` INT NOT NULL`,
+  );
+
+  await ensureIndex(
+    input.tableName,
+    input.desiredExhibitIndexName,
+    `CREATE INDEX ${input.desiredExhibitIndexName} ON \`${input.tableName}\` (\`exhibit_id\`)`,
+  );
+  await ensureIndex(
+    input.tableName,
+    input.desiredOwnerIndexName,
+    `CREATE INDEX ${input.desiredOwnerIndexName} ON \`${input.tableName}\` (\`${input.ownerColumn}\`)`,
+  );
+
+  await ensureForeignKey(
+    input.tableName,
+    input.desiredExhibitFkName,
+    "FOREIGN KEY (`exhibit_id`) REFERENCES `exhibits`(`id`) ON DELETE CASCADE",
+  );
+  await ensureForeignKey(
+    input.tableName,
+    input.desiredOwnerFkName,
+    `FOREIGN KEY (\`${input.ownerColumn}\`) REFERENCES \`${input.ownerTable}\`(\`id\`) ON DELETE CASCADE`,
+  );
+}
+
 export async function ensureTables(): Promise<void> {
   await mysqlPool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -1005,4 +1103,83 @@ export async function ensureTables(): Promise<void> {
     "preferred_vendor_alt_text",
     "preferred_vendor_alt_text VARCHAR(64) NULL",
   );
+
+  // Rename old "galleries" tables to "exhibits" if they still exist under the old names.
+  // Each rename is wrapped in a silent try/catch: it's a no-op if the source is missing
+  // or the target already exists (covers both first-run and already-migrated installs).
+  try { await mysqlPool.query(`RENAME TABLE piece_galleries TO piece_exhibits`); } catch { /* already renamed or never existed */ }
+  try { await mysqlPool.query(`RENAME TABLE media_asset_galleries TO media_asset_exhibits`); } catch { /* already renamed or never existed */ }
+  try { await mysqlPool.query(`RENAME TABLE galleries TO exhibits`); } catch { /* already renamed or never existed */ }
+
+  // Exhibits — owner-curated collections of art pieces and images,
+  // displayed as a Three.js museum-style wall at /immersive/exhibits/:slug.
+  // Separate from post `categories` so the two taxonomies remain distinct.
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS exhibits (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      slug VARCHAR(191) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE KEY exhibits_slug_unique (slug)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS piece_exhibits (
+      exhibit_id INT NOT NULL,
+      art_piece_id INT NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (exhibit_id, art_piece_id),
+      KEY piece_exhibits_exhibit_idx (exhibit_id),
+      CONSTRAINT piece_exhibits_exhibit_id_fk
+        FOREIGN KEY (exhibit_id) REFERENCES exhibits(id)
+        ON DELETE CASCADE,
+      CONSTRAINT piece_exhibits_art_piece_id_fk
+        FOREIGN KEY (art_piece_id) REFERENCES art_pieces(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS media_asset_exhibits (
+      exhibit_id INT NOT NULL,
+      media_asset_id INT NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (exhibit_id, media_asset_id),
+      KEY media_asset_exhibits_exhibit_idx (exhibit_id),
+      CONSTRAINT media_asset_exhibits_exhibit_id_fk
+        FOREIGN KEY (exhibit_id) REFERENCES exhibits(id)
+        ON DELETE CASCADE,
+      CONSTRAINT media_asset_exhibits_media_asset_id_fk
+        FOREIGN KEY (media_asset_id) REFERENCES media_assets(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await normalizeLegacyExhibitJoinTable({
+    tableName: "piece_exhibits",
+    ownerColumn: "art_piece_id",
+    desiredOwnerIndexName: "piece_exhibits_art_piece_idx",
+    desiredExhibitIndexName: "piece_exhibits_exhibit_idx",
+    desiredOwnerFkName: "piece_exhibits_art_piece_id_fk",
+    desiredExhibitFkName: "piece_exhibits_exhibit_id_fk",
+    ownerTable: "art_pieces",
+  });
+  await normalizeLegacyExhibitJoinTable({
+    tableName: "media_asset_exhibits",
+    ownerColumn: "media_asset_id",
+    desiredOwnerIndexName: "media_asset_exhibits_media_asset_idx",
+    desiredExhibitIndexName: "media_asset_exhibits_exhibit_idx",
+    desiredOwnerFkName: "media_asset_exhibits_media_asset_id_fk",
+    desiredExhibitFkName: "media_asset_exhibits_exhibit_id_fk",
+    ownerTable: "media_assets",
+  });
+
+  await ensureColumn("exhibits", "rows", "`rows` TINYINT NOT NULL DEFAULT 1");
+  await ensureColumn("exhibits", "cols", "`cols` TINYINT NOT NULL DEFAULT 1");
+  await ensureColumn("exhibits", "artist_statement", "`artist_statement` TEXT NULL");
+  await ensureColumn("exhibits", "biography", "`biography` TEXT NULL");
+  await ensureColumn("art_pieces", "description", "`description` TEXT NULL");
 }

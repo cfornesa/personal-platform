@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Copy, Loader2, Save, Sparkles, Trash2 } from "lucide-react";
 import type { MediaAsset } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { ImmersiveMediaFrame } from "@/components/immersive/ImmersiveMediaFrame"
 import { useToast } from "@/hooks/use-toast";
 import { buildImmersiveImageHref } from "@/lib/immersive-view";
 import { cn } from "@/lib/utils";
+import { ExhibitMultiSelect } from "@/components/post/ExhibitMultiSelect";
 
 type Props = {
   assets: MediaAsset[];
@@ -35,7 +36,7 @@ type Props = {
   onSelect?: (asset: MediaAsset) => void;
   onDelete?: (asset: MediaAsset) => void;
   isDeleting?: boolean;
-  onSaveDetails?: (asset: MediaAsset, values: { title: string; altText: string }) => Promise<void>;
+  onSaveDetails?: (asset: MediaAsset, values: { title: string; altText: string; exhibitIds: number[] }) => Promise<void>;
   onGenerateAltText?: (asset: MediaAsset, currentAltText: string) => Promise<string>;
 };
 
@@ -49,7 +50,7 @@ type MediaDetailsDialogProps = {
   isDeleting?: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete?: (asset: MediaAsset) => void;
-  onSaveDetails?: (asset: MediaAsset, values: { title: string; altText: string }) => Promise<void>;
+  onSaveDetails?: (asset: MediaAsset, values: { title: string; altText: string; exhibitIds: number[] }) => Promise<void>;
   onGenerateAltText?: (asset: MediaAsset, currentAltText: string) => Promise<string>;
 };
 
@@ -67,6 +68,8 @@ function MediaDetailsDialog({
   const [altText, setAltText] = useState("");
   const [savedTitle, setSavedTitle] = useState("");
   const [savedAltText, setSavedAltText] = useState("");
+  const [exhibitIds, setExhibitIds] = useState<number[]>([]);
+  const [savedExhibitIds, setSavedExhibitIds] = useState<number[]>([]);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -77,10 +80,13 @@ function MediaDetailsDialog({
     if (!asset || !open) return;
     const nextTitle = asset.title ?? "";
     const nextAltText = asset.altText ?? "";
+    const nextExhibitIds = asset.exhibitIds ?? [];
     setTitle(nextTitle);
     setAltText(nextAltText);
+    setExhibitIds(nextExhibitIds);
     setSavedTitle(nextTitle);
     setSavedAltText(nextAltText);
+    setSavedExhibitIds(nextExhibitIds);
     setDimensions(null);
     setSavingId(null);
     setGeneratingId(null);
@@ -88,18 +94,23 @@ function MediaDetailsDialog({
     setIsCloseConfirmOpen(false);
   }, [asset, open]);
 
+  const exhibitIdsChanged = useCallback(
+    () => exhibitIds.length !== savedExhibitIds.length || exhibitIds.some((id, i) => id !== savedExhibitIds[i]),
+    [exhibitIds, savedExhibitIds],
+  );
+
   if (!asset) return null;
   const currentAsset = asset;
-
-  const isDirty = title !== savedTitle || altText !== savedAltText;
+  const isDirty = title !== savedTitle || altText !== savedAltText || exhibitIdsChanged();
 
   async function handleSave() {
     if (!onSaveDetails) return;
     setSavingId(currentAsset.id);
     try {
-      await onSaveDetails(currentAsset, { title, altText });
+      await onSaveDetails(currentAsset, { title, altText, exhibitIds });
       setSavedTitle(title);
       setSavedAltText(altText);
+      setSavedExhibitIds(exhibitIds);
     } finally {
       setSavingId(null);
     }
@@ -209,6 +220,11 @@ function MediaDetailsDialog({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor={`media-exhibits-${asset.id}`}>Exhibits</Label>
+              <ExhibitMultiSelect value={exhibitIds} onChange={setExhibitIds} />
+            </div>
+
             <dl className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
               <div>
                 <dt className="font-medium text-muted-foreground">Filename</dt>
@@ -286,7 +302,7 @@ function MediaDetailsDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Discard unsaved image details?</AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved title or alt text changes for this image. Closing now will discard them.
+              You have unsaved title, alt text, or exhibit changes for this image. Closing now will discard them.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

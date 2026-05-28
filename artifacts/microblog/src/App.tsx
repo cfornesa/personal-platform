@@ -13,6 +13,7 @@ import PostEmbed from "@/pages/post-embed";
 import PieceEmbed from "@/pages/piece-embed";
 import ImmersiveImagePage from "@/pages/immersive-image";
 import ImmersivePiecePage from "@/pages/immersive-piece";
+import ImmersiveExhibitWallPage from "@/pages/immersive-exhibit-wall";
 import UserProfile from "@/pages/user-profile";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
@@ -20,6 +21,7 @@ import AdminFeedsPage from "@/pages/admin-feeds";
 import AdminPendingPage from "@/pages/admin-pending";
 import AdminIndexPage from "@/pages/admin/admin-index";
 import AdminCategoriesPage from "@/pages/admin/admin-categories";
+import AdminExhibitsPage from "@/pages/admin/admin-exhibits";
 import AdminNavigationPage from "@/pages/admin/admin-navigation";
 import AdminPagesPage from "@/pages/admin/admin-pages";
 import AdminPageEditor from "@/pages/admin/admin-page-editor";
@@ -54,8 +56,9 @@ function AppShell() {
   const [isPieceEmbed] = useRoute("/embed/pieces/:id");
   const [isImmersiveImage] = useRoute("/immersive/images/:encodedRef");
   const [isImmersivePiece] = useRoute("/immersive/pieces/:id");
+  const [isImmersiveExhibit] = useRoute("/immersive/exhibits/:slug");
 
-  if (isPostEmbed || isPieceEmbed || isImmersiveImage || isImmersivePiece) {
+  if (isPostEmbed || isPieceEmbed || isImmersiveImage || isImmersivePiece || isImmersiveExhibit) {
     return (
       <QueryClientProvider client={queryClient}>
         <ThemeInjector />
@@ -64,6 +67,7 @@ function AppShell() {
           <Route path="/embed/pieces/:id" component={PieceEmbed} />
           <Route path="/immersive/images/:encodedRef" component={ImmersiveImagePage} />
           <Route path="/immersive/pieces/:id" component={ImmersivePiecePage} />
+          <Route path="/immersive/exhibits/:slug" component={ImmersiveExhibitWallPage} />
         </Switch>
         <Toaster />
       </QueryClientProvider>
@@ -92,6 +96,7 @@ function AppShell() {
             <Route path="/admin/pieces" component={AdminPiecesPage} />
             <Route path="/admin/library" component={AdminLibraryPage} />
             <Route path="/admin/platforms" component={AdminPlatformsPage} />
+            <Route path="/admin/exhibits" component={AdminExhibitsPage} />
             <Route path="/admin/categories" component={AdminCategoriesPage} />
             <Route path="/admin/navigation" component={AdminNavigationPage} />
             <Route path="/admin/pages" component={AdminPagesPage} />

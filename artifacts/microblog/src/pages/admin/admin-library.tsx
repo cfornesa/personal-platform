@@ -6,6 +6,7 @@ import {
   useDescribeImage,
   useListMedia,
   useUpdateMediaAltText,
+  useSetMediaExhibits,
   getListMediaQueryKey,
   type MediaAsset,
 } from "@workspace/api-client-react";
@@ -52,17 +53,21 @@ export default function AdminLibraryPage() {
   });
 
   const { mutateAsync: describeImage } = useDescribeImage();
+  const { mutateAsync: setMediaExhibits } = useSetMediaExhibits();
 
   const altTextVendor = preferredVendorAltText ?? imageDescriptionVendors[0]?.id ?? null;
 
-  async function handleSaveDetails(asset: MediaAsset, values: { title: string; altText: string }) {
-    await updateAltText({
-      fileName: asset.filename,
-      data: {
-        title: values.title.trim() || null,
-        altText: values.altText.trim() || null,
-      },
-    });
+  async function handleSaveDetails(asset: MediaAsset, values: { title: string; altText: string; exhibitIds: number[] }) {
+    await Promise.all([
+      updateAltText({
+        fileName: asset.filename,
+        data: {
+          title: values.title.trim() || null,
+          altText: values.altText.trim() || null,
+        },
+      }),
+      setMediaExhibits({ fileName: asset.filename, data: { exhibitIds: values.exhibitIds } }),
+    ]);
   }
 
   async function handleGenerateAltText(asset: MediaAsset, currentAltText?: string): Promise<string> {

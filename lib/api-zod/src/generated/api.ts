@@ -777,6 +777,7 @@ export const ListArtPiecesResponse = zod.object({
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
+  "description": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "currentVersion": zod.object({
@@ -794,7 +795,8 @@ export const ListArtPiecesResponse = zod.object({
   "generationAttemptCount": zod.number(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
-}).nullable()
+}).nullable(),
+  "exhibitIds": zod.array(zod.number()).describe('IDs of exhibits this piece belongs to.')
 }))
 })
 
@@ -874,6 +876,7 @@ export const GetArtPieceResponse = zod.object({
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
+  "description": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "currentVersion": zod.object({
@@ -891,7 +894,8 @@ export const GetArtPieceResponse = zod.object({
   "generationAttemptCount": zod.number(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
-}).nullable()
+}).nullable(),
+  "exhibitIds": zod.array(zod.number()).describe('IDs of exhibits this piece belongs to.')
 }).and(zod.object({
   "versions": zod.array(zod.object({
   "id": zod.number(),
@@ -931,7 +935,8 @@ export const UpdateArtPieceBody = zod.object({
   "title": zod.string().min(1).max(updateArtPieceBodyTitleMax).optional(),
   "prompt": zod.string().min(1).max(updateArtPieceBodyPromptMax).optional(),
   "status": zod.enum(['active', 'archived']).optional(),
-  "thumbnailUrl": zod.string().url().max(updateArtPieceBodyThumbnailUrlMax).nullish()
+  "thumbnailUrl": zod.string().url().max(updateArtPieceBodyThumbnailUrlMax).nullish(),
+  "description": zod.string().nullish()
 })
 
 export const UpdateArtPieceResponse = zod.object({
@@ -943,6 +948,7 @@ export const UpdateArtPieceResponse = zod.object({
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
+  "description": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "currentVersion": zod.object({
@@ -960,7 +966,8 @@ export const UpdateArtPieceResponse = zod.object({
   "generationAttemptCount": zod.number(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
-}).nullable()
+}).nullable(),
+  "exhibitIds": zod.array(zod.number()).describe('IDs of exhibits this piece belongs to.')
 })
 
 
@@ -1052,7 +1059,8 @@ export const ListMediaResponseItem = zod.object({
   "title": zod.string().nullish(),
   "mimeType": zod.string(),
   "altText": zod.string().nullish(),
-  "uploadedAt": zod.string()
+  "uploadedAt": zod.string(),
+  "exhibitIds": zod.array(zod.number()).describe('IDs of exhibits this image belongs to.')
 })
 export const ListMediaResponse = zod.array(ListMediaResponseItem)
 
@@ -1953,7 +1961,8 @@ export const UpdateMediaAltTextResponse = zod.object({
   "title": zod.string().nullish(),
   "mimeType": zod.string(),
   "altText": zod.string().nullish(),
-  "uploadedAt": zod.string()
+  "uploadedAt": zod.string(),
+  "exhibitIds": zod.array(zod.number()).describe('IDs of exhibits this image belongs to.')
 })
 
 
@@ -2116,6 +2125,180 @@ export const ListPlatformSyndicationsResponse = zod.object({
   "syncedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 }).describe('Result of one syndication attempt for a single post + platform pair.'))
+})
+
+
+/**
+ * Public read. Returns all exhibits ordered by name, each with pieceCount and imageCount.
+ * @summary List all exhibits with item counts
+ */
+export const listExhibitsResponseExhibitsItemRowsDefault = 1;
+export const listExhibitsResponseExhibitsItemColsDefault = 1;
+
+export const ListExhibitsResponse = zod.object({
+  "exhibits": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "artistStatement": zod.string().nullish(),
+  "biography": zod.string().nullish(),
+  "rows": zod.number().default(listExhibitsResponseExhibitsItemRowsDefault),
+  "cols": zod.number().default(listExhibitsResponseExhibitsItemColsDefault),
+  "pieceCount": zod.number(),
+  "imageCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Create a new exhibit (owner only)
+ */
+export const createExhibitBodyNameMax = 255;
+
+export const createExhibitBodySlugMax = 191;
+
+
+
+export const CreateExhibitBody = zod.object({
+  "name": zod.string().max(createExhibitBodyNameMax),
+  "slug": zod.string().max(createExhibitBodySlugMax).optional().describe('Optional. When omitted the server derives one from `name`.'),
+  "description": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get a single exhibit by slug
+ */
+export const GetExhibitParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const getExhibitResponseRowsDefault = 1;
+export const getExhibitResponseColsDefault = 1;
+
+export const GetExhibitResponse = zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "artistStatement": zod.string().nullish(),
+  "biography": zod.string().nullish(),
+  "rows": zod.number().default(getExhibitResponseRowsDefault),
+  "cols": zod.number().default(getExhibitResponseColsDefault),
+  "pieceCount": zod.number(),
+  "imageCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update an exhibit by id (owner only)
+ */
+export const UpdateExhibitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateExhibitBodyNameMax = 255;
+
+export const updateExhibitBodySlugMax = 191;
+
+export const updateExhibitBodyRowsMax = 4;
+
+export const updateExhibitBodyColsMax = 8;
+
+
+
+export const UpdateExhibitBody = zod.object({
+  "name": zod.string().max(updateExhibitBodyNameMax).optional(),
+  "slug": zod.string().max(updateExhibitBodySlugMax).optional(),
+  "description": zod.string().nullish(),
+  "artistStatement": zod.string().nullish(),
+  "biography": zod.string().nullish(),
+  "rows": zod.number().min(1).max(updateExhibitBodyRowsMax).optional(),
+  "cols": zod.number().min(1).max(updateExhibitBodyColsMax).optional()
+})
+
+export const UpdateExhibitResponse = zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Owner-curated collection of art pieces and images shown as a Three.js exhibit wall.')
+
+
+/**
+ * @summary Delete an exhibit by id (owner only)
+ */
+export const DeleteExhibitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Get pieces and images in an exhibit (for the exhibit wall)
+ */
+export const GetExhibitItemsParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const GetExhibitItemsResponse = zod.object({
+  "pieces": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "engine": zod.enum(['p5', 'c2', 'three']),
+  "thumbnailUrl": zod.string().nullable(),
+  "generatedCode": zod.string(),
+  "htmlCode": zod.string().nullish(),
+  "cssCode": zod.string().nullish(),
+  "description": zod.string().nullish()
+}).describe('Art piece data needed to render a frame on the exhibit wall.')),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "filename": zod.string(),
+  "altText": zod.string().nullish(),
+  "title": zod.string().nullish()
+}).describe('Image data needed to render a frame on the exhibit wall.')),
+  "rows": zod.number(),
+  "cols": zod.number()
+})
+
+
+/**
+ * @summary Replace the exhibit memberships of an art piece (owner only)
+ */
+export const SetArtPieceExhibitsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetArtPieceExhibitsBody = zod.object({
+  "exhibitIds": zod.array(zod.number())
+})
+
+export const SetArtPieceExhibitsResponse = zod.object({
+  "exhibitIds": zod.array(zod.number())
+})
+
+
+/**
+ * @summary Replace the exhibit memberships of a media asset (owner only)
+ */
+export const SetMediaExhibitsParams = zod.object({
+  "fileName": zod.coerce.string()
+})
+
+export const SetMediaExhibitsBody = zod.object({
+  "exhibitIds": zod.array(zod.number())
+})
+
+export const SetMediaExhibitsResponse = zod.object({
+  "exhibitIds": zod.array(zod.number())
 })
 
 
