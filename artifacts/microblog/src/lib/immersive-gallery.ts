@@ -538,6 +538,7 @@ export type ExhibitFrameSlot = {
   artMaterial: any;
   frameMesh: any;
   framePanel: any;
+  center: { x: number; y: number; z: number };
   labelMesh?: any;
   labelMaterial?: any;
 };
@@ -697,7 +698,13 @@ export function createMultiFrameExhibitWall(
     frameMesh.position.set(slotX, slotY, -1.12);
     scene.add(frameMesh);
 
-    const slot: ExhibitFrameSlot = { artMesh, artMaterial, frameMesh, framePanel };
+    const slot: ExhibitFrameSlot = {
+      artMesh,
+      artMaterial,
+      frameMesh,
+      framePanel,
+      center: { x: slotX, y: slotY, z: wallCenterZ },
+    };
 
     const label = labels?.[i];
     if (label) {

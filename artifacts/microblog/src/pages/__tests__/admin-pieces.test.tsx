@@ -9,6 +9,7 @@ vi.mock("@workspace/api-client-react", () => ({
   generateArtPiece: vi.fn(),
   getGetArtPieceQueryKey: () => ["art-piece", 1],
   getGetMyAiSettingsQueryKey: () => ["ai-settings"],
+  getListExhibitsQueryKey: () => ["exhibits"],
   getListArtPiecesQueryKey: () => ["art-pieces"],
   useCreateArtPiece: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateArtPieceVersion: () => ({ mutate: vi.fn(), isPending: false }),

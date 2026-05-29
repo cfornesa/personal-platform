@@ -4,7 +4,35 @@ import userEvent from "@testing-library/user-event";
 import {
   ExhibitWallContent,
   ItemDetailCard,
+  getProgressiveExhibitLiveBudget,
+  selectProgressiveExhibitSlots,
+  type WallItem,
 } from "@/pages/immersive-exhibit-wall";
+
+function piece(id: number, title = `Piece ${id}`): WallItem {
+  return {
+    kind: "piece",
+    id,
+    title,
+    engine: "p5",
+    thumbnailUrl: `/thumbs/${id}.png`,
+    generatedCode: "window.sketch = () => {};",
+    htmlCode: null,
+    cssCode: null,
+    description: null,
+  };
+}
+
+function image(id: number): WallItem {
+  return {
+    kind: "image",
+    id,
+    url: `/media/${id}.png`,
+    filename: `${id}.png`,
+    title: `Image ${id}`,
+    altText: null,
+  };
+}
 
 describe("ItemDetailCard", () => {
   it("renders piece descriptions in exhibit detail cards", () => {
@@ -108,6 +136,7 @@ describe("ExhibitWallContent", () => {
         { title: "Momentum", subtitle: "Image" },
       ],
       fullscreen: false,
+      staticMode: false,
     });
   });
 
@@ -150,6 +179,7 @@ describe("ExhibitWallContent", () => {
       cols: 1,
       labels: [{ title: "Piece", subtitle: "P5.js" }],
       fullscreen: true,
+      staticMode: false,
     }]);
 
     await user.click(screen.getByLabelText("Return to gallery view"));
@@ -160,6 +190,51 @@ describe("ExhibitWallContent", () => {
       cols: 1,
       labels: [{ title: "Piece", subtitle: "P5.js" }],
       fullscreen: false,
+      staticMode: false,
     }]);
+  });
+});
+
+describe("progressive exhibit loading helpers", () => {
+  it("uses conservative live budgets by viewport size", () => {
+    expect(getProgressiveExhibitLiveBudget(390)).toBe(1);
+    expect(getProgressiveExhibitLiveBudget(900)).toBe(2);
+    expect(getProgressiveExhibitLiveBudget(1440)).toBe(3);
+    expect(getProgressiveExhibitLiveBudget(1440, true)).toBe(1);
+  });
+
+  it("selects only nearby piece slots and ignores images", () => {
+    const selected = selectProgressiveExhibitSlots(
+      [piece(1), image(2), piece(3), piece(4)],
+      [
+        { x: -3.2, y: 1.3, z: -1 },
+        { x: 0, y: 1.3, z: -1 },
+        { x: 3.2, y: 1.3, z: -1 },
+        { x: 6.4, y: 1.3, z: -1 },
+      ],
+      { x: 3, y: 1.3, z: -1 },
+      2,
+    );
+
+    expect(Array.from(selected).sort((a, b) => a - b)).toEqual([2, 3]);
+  });
+
+  it("does not select any animated slots when the live budget is exhausted", () => {
+    const selected = selectProgressiveExhibitSlots(
+      [piece(1), piece(2)],
+      [
+        { x: 0, y: 1, z: -1 },
+        { x: 2, y: 1, z: -1 },
+      ],
+      { x: 0, y: 1, z: -1 },
+      0,
+    );
+
+    expect(selected.size).toBe(0);
+  });
+
+  it("prefers persisted thumbnail URLs over public preview generation", () => {
+    const items = [piece(1), piece(2)];
+    expect(items.every((item) => item.kind !== "piece" || Boolean(item.thumbnailUrl))).toBe(true);
   });
 });

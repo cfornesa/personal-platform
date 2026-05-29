@@ -55,6 +55,7 @@ import { YouTubeDialog } from "./dialogs/YouTubeDialog";
 import { ImageInsertDialog } from "./dialogs/ImageInsertDialog";
 import { ImageEditDialog } from "./dialogs/ImageEditDialog";
 import { PieceEditDialog } from "./dialogs/PieceEditDialog";
+import { persistArtPieceThumbnail } from "@/lib/art-piece-thumbnail";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -212,6 +213,7 @@ export function RichPostEditor({
   const [pieceDraft, setPieceDraft] = useState<GeneratedArtPieceDraft | null>(null);
   const [pieceDraftPrompt, setPieceDraftPrompt] = useState("");
   const [isPieceDraftOpen, setIsPieceDraftOpen] = useState(false);
+  const [isPersistingPieceThumbnail, setIsPersistingPieceThumbnail] = useState(false);
   const [isPieceLibraryOpen, setIsPieceLibraryOpen] = useState(false);
   const [isExhibitLibraryOpen, setIsExhibitLibraryOpen] = useState(false);
   const [pieceGenerationState, setPieceGenerationState] = useState<ArtPieceGenerationState | null>(null);
@@ -243,14 +245,7 @@ export function RichPostEditor({
       },
     },
   });
-  const createArtPiece = useCreateArtPiece({
-    mutation: {
-      onError: (error: any) => {
-        const message = getAiFailureMessage(error);
-        toast({ title: "Saving piece failed", description: message, variant: "destructive" });
-      },
-    },
-  });
+  const createArtPiece = useCreateArtPiece();
   const { mutateAsync: describeImageForBubble } = useDescribeImage();
   const { mutateAsync: updateMediaAltText } = useUpdateMediaAltText();
   const { mutateAsync: updateArtPieceForBubble } = useUpdateArtPiece();
@@ -290,6 +285,46 @@ export function RichPostEditor({
       onContentChange?.(nextEditor.getHTML());
     },
   });
+
+  async function handleSavePieceDraftAndInsert() {
+    if (!pieceDraft || !editor) return;
+    let pieceWasSaved = false;
+    try {
+      const response = await createArtPiece.mutateAsync({
+        data: {
+          draftToken: pieceDraft.draftToken,
+        },
+      });
+      pieceWasSaved = true;
+      setIsPersistingPieceThumbnail(true);
+      await persistArtPieceThumbnail(response);
+      editor.chain().focus().insertIframe(
+        buildPieceIframeAttrs({
+          id: response.id,
+          title: response.title,
+          prompt: response.prompt,
+          currentVersionId: response.currentVersionId!,
+        }),
+      ).run();
+      setIsPieceDraftOpen(false);
+      setPieceDraft(null);
+      toast({
+        title: "Piece saved",
+        description: "The new piece was saved with a thumbnail and embedded into the post.",
+      });
+    } catch (error) {
+      const message = getAiFailureMessage(error);
+      toast({
+        title: pieceWasSaved ? "Thumbnail generation failed" : "Saving piece failed",
+        description: pieceWasSaved
+          ? message || "The piece was saved, but its exhibit thumbnail could not be created."
+          : message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPersistingPieceThumbnail(false);
+    }
+  }
 
   useEffect(() => {
     if (!editor) {
@@ -1445,35 +1480,8 @@ export function RichPostEditor({
         onOpenChange={setIsPieceDraftOpen}
         draft={pieceDraft}
         prompt={pieceDraftPrompt}
-        isSaving={createArtPiece.isPending}
-        onSaveAndInsert={() => {
-          if (!pieceDraft || !editor) return;
-          createArtPiece.mutate(
-            {
-              data: {
-                draftToken: pieceDraft.draftToken,
-              },
-            },
-            {
-              onSuccess: (response) => {
-                editor.chain().focus().insertIframe(
-                  buildPieceIframeAttrs({
-                    id: response.id,
-                    title: response.title,
-                    prompt: response.prompt,
-                    currentVersionId: response.currentVersionId!,
-                  }),
-                ).run();
-                setIsPieceDraftOpen(false);
-                setPieceDraft(null);
-                toast({
-                  title: "Piece saved",
-                  description: "The new piece was saved to your library and embedded into the post.",
-                });
-              },
-            },
-          );
-        }}
+        isSaving={createArtPiece.isPending || isPersistingPieceThumbnail}
+        onSaveAndInsert={() => void handleSavePieceDraftAndInsert()}
       />
 
       <AlertDialog open={isCancelWarningOpen} onOpenChange={setIsCancelWarningOpen}>

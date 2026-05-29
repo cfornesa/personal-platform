@@ -40,12 +40,18 @@ import {
   type AiVendor,
 } from "../lib/ai-settings";
 import { AiProviderError, processTextWithProvider } from "../lib/ai-providers";
+import { isValidArtPieceThumbnailUrl } from "../lib/art-piece-thumbnail-url";
 
 const router: IRouter = Router();
 
 const artPieceEngineSchema = dbArtPieceEngineSchema;
 const artPieceStatusSchema = z.enum(["active", "archived"]);
 const aiVendorSchema = z.enum(["openrouter", "opencode-zen", "opencode-go", "google", "mistral", "mistral-vibe", "deepseek"]);
+const thumbnailUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine(isValidArtPieceThumbnailUrl, "Thumbnail URL must be a local media URL or an absolute URL.");
 
 const GenerateArtPieceBody = z.object({
   prompt: z.string().trim().min(1).max(4000),
@@ -61,14 +67,14 @@ const CreateArtPieceBody = z.object({
   htmlCode: z.string().nullable().optional(),
   cssCode: z.string().nullable().optional(),
   generatedCode: z.string().optional(),
-  thumbnailUrl: z.string().trim().url().max(2048).optional(),
+  thumbnailUrl: thumbnailUrlSchema.optional(),
 });
 
 const UpdateArtPieceBody = z.object({
   title: z.string().trim().min(1).max(255).optional(),
   prompt: z.string().trim().min(1).max(4000).optional(),
   status: artPieceStatusSchema.optional(),
-  thumbnailUrl: z.string().trim().url().max(2048).nullable().optional(),
+  thumbnailUrl: thumbnailUrlSchema.nullable().optional(),
   description: z.string().nullable().optional(),
 });
 

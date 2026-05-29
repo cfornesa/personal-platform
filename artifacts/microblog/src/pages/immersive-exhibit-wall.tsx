@@ -28,8 +28,11 @@ import {
   ImmersiveRouteShell,
 } from "@/components/immersive/ImmersiveRouteShell";
 import { buildExhibitGalleryEmbedHtml } from "@/lib/immersive-view";
+import { persistArtPieceThumbnail } from "@/lib/art-piece-thumbnail";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useQueryClient } from "@tanstack/react-query";
 
-type WallItem =
+export type WallItem =
   | ({ kind: "piece" } & ExhibitWallPieceItem)
   | ({ kind: "image" } & ExhibitWallImageItem);
 
@@ -48,6 +51,45 @@ function engineLabel(engine: string): string {
   if (engine === "c2") return "C2.js";
   if (engine === "three") return "Three.js";
   return engine;
+}
+
+export type ExhibitSlotLifecycle = "idle" | "booting" | "live" | "frozen" | "failed";
+
+type ExhibitSlotCenter = { x: number; y: number; z: number };
+
+export function getProgressiveExhibitLiveBudget(
+  viewportWidth: number,
+  staticMode = false,
+) {
+  if (staticMode) return 1;
+  if (viewportWidth < 640) return 1;
+  if (viewportWidth < 1180) return 2;
+  return 3;
+}
+
+export function selectProgressiveExhibitSlots(
+  items: WallItem[],
+  centers: Array<ExhibitSlotCenter | null | undefined>,
+  target: ExhibitSlotCenter,
+  liveBudget: number,
+) {
+  if (liveBudget <= 0) return new Set<number>();
+
+  return new Set(
+    items
+      .map((item, index) => {
+        const center = centers[index];
+        if (item.kind !== "piece" || !center) return null;
+        const dx = center.x - target.x;
+        const dy = center.y - target.y;
+        const dz = center.z - target.z;
+        return { index, distance: (dx * dx) + (dy * dy) + (dz * dz * 0.35) };
+      })
+      .filter((entry): entry is { index: number; distance: number } => Boolean(entry))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, liveBudget)
+      .map((entry) => entry.index),
+  );
 }
 
 function ExhibitWallStage({
@@ -71,18 +113,160 @@ function ExhibitWallStage({
     const safeStage = stage;
 
     const shell = createMultiFrameExhibitWall(safeStage, items.length, rows, cols, labels);
-    const textures: (any | null)[] = Array(items.length).fill(null);
-    const cleanups: Array<() => void> = [];
+    type RuntimeHandle = {
+      canvas: HTMLCanvasElement | null;
+      texture: any | null;
+      cleanup: () => void;
+    };
+    type SlotState = {
+      status: ExhibitSlotLifecycle;
+      texture: any | null;
+      textureKind: "placeholder" | "runtime" | "snapshot" | "image" | null;
+      runtime: RuntimeHandle | null;
+      token: number;
+      placeholderQueued: boolean;
+    };
+
+    const slotStates: SlotState[] = items.map(() => ({
+      status: "idle",
+      texture: null,
+      textureKind: null,
+      runtime: null,
+      token: 0,
+      placeholderQueued: false,
+    }));
     let frameId = 0;
+    let frameCount = 0;
+    let disposed = false;
+    let lastActiveKey = "";
+    let textureQueue = Promise.resolve();
 
     const runtimeSize = { ...DEFAULT_IMMERSIVE_RUNTIME_SIZE };
+
+    function replaceTexture(
+      idx: number,
+      texture: any | null,
+      textureKind: SlotState["textureKind"],
+      disposePrevious = true,
+    ) {
+      const slot = shell.slots[idx];
+      const state = slotStates[idx];
+      if (!slot || !state) return;
+      const previous = state.texture;
+      if (previous && previous !== texture && disposePrevious) {
+        previous.dispose?.();
+      }
+      state.texture = texture;
+      state.textureKind = textureKind;
+      slot.artMaterial.map = texture;
+      slot.artMaterial.needsUpdate = true;
+    }
+
+    function enqueueTextureLoad(
+      idx: number,
+      url: string | null | undefined,
+      onLoaded: (texture: any) => void,
+    ) {
+      if (!url) return;
+      textureQueue = textureQueue
+        .catch(() => undefined)
+        .then(() => new Promise<void>((resolve) => {
+          if (disposed) {
+            resolve();
+            return;
+          }
+          const loader = new THREE.TextureLoader();
+          loader.load(
+            url,
+            (tex: any) => {
+              if (disposed) {
+                tex.dispose?.();
+                resolve();
+                return;
+              }
+              tex.colorSpace = (THREE as any).SRGBColorSpace;
+              onLoaded(tex);
+              resolve();
+            },
+            undefined,
+            () => {
+              const state = slotStates[idx];
+              if (state?.status === "idle" || state?.status === "booting") {
+                state.status = "failed";
+              }
+              resolve();
+            },
+          );
+        }));
+    }
+
+    function queuePiecePlaceholder(idx: number, item: ExhibitWallPieceItem & { kind: "piece" }) {
+      const state = slotStates[idx];
+      if (!state || state.placeholderQueued || !item.thumbnailUrl) return;
+      state.placeholderQueued = true;
+      enqueueTextureLoad(idx, item.thumbnailUrl, (tex) => {
+        const current = slotStates[idx];
+        if (
+          !current
+          || current.textureKind === "runtime"
+          || current.textureKind === "snapshot"
+          || current.textureKind === "image"
+        ) {
+          tex.dispose?.();
+          return;
+        }
+        replaceTexture(idx, tex, "placeholder");
+      });
+    }
+
+    function createSnapshotTexture(canvas: HTMLCanvasElement | null) {
+      if (!canvas || canvas.width <= 0 || canvas.height <= 0) return null;
+      const snapshot = document.createElement("canvas");
+      snapshot.width = 512;
+      snapshot.height = 384;
+      const ctx = snapshot.getContext("2d");
+      if (!ctx) return null;
+      try {
+        ctx.drawImage(canvas, 0, 0, snapshot.width, snapshot.height);
+      } catch {
+        return null;
+      }
+      const texture = new (THREE as any).CanvasTexture(snapshot);
+      texture.colorSpace = (THREE as any).SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    function createMissingPreviewTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 384;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.fillStyle = "#111111";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(24, 24, canvas.width - 48, canvas.height - 48);
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.font = "bold 24px sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Preview unavailable", 48, canvas.height / 2 - 10);
+      ctx.fillStyle = "rgba(255,255,255,0.54)";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("Regenerate thumbnail in admin", 48, canvas.height / 2 + 28);
+      const texture = new (THREE as any).CanvasTexture(canvas);
+      texture.colorSpace = (THREE as any).SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
 
     async function bootPieceSlot(
       idx: number,
       item: ExhibitWallPieceItem & { kind: "piece" },
-    ) {
+      token: number,
+    ): Promise<RuntimeHandle | null> {
       const slot = shell.slots[idx];
-      if (!slot) return;
+      if (!slot || disposed || slotStates[idx]?.token !== token) return null;
 
       if (item.engine === "three") {
         const canvas = document.createElement("canvas");
@@ -104,8 +288,8 @@ function ExhibitWallStage({
           runtimeSize,
         );
 
-        let cleanup: (() => void) | void;
-        let threeRenderer: { dispose?: () => void } | null = null;
+        let cleanup: (() => void) | undefined;
+        let threeRenderer: { dispose?: () => void } | undefined;
 
         const stopFrameHandles = new Set<() => void>();
         const startFrame = (handler: (frameCount: number) => void) => {
@@ -126,8 +310,8 @@ function ExhibitWallStage({
         const instrumentedThree: any = { ...THREE };
         instrumentedThree.WebGLRenderer = class extends OriginalRenderer {
           constructor(input: any) {
-            super({ ...input, canvas });
-            threeRenderer = this;
+            super({ ...input, canvas, preserveDrawingBuffer: true });
+            threeRenderer = this as { dispose?: () => void };
             this.setPixelRatio?.(Math.min(window.devicePixelRatio, 1.5));
           }
         };
@@ -147,25 +331,39 @@ function ExhibitWallStage({
 
           const artTexture = new (THREE as any).CanvasTexture(canvas);
           artTexture.colorSpace = (THREE as any).SRGBColorSpace;
-          slot.artMaterial.map = artTexture;
-          slot.artMaterial.needsUpdate = true;
-          textures[idx] = artTexture;
+          if (disposed || slotStates[idx]?.token !== token) {
+            artTexture.dispose?.();
+            cleanup?.();
+            threeRenderer?.dispose?.();
+            canvasContainment.dispose();
+            canvas.remove();
+            hiddenDiv.remove();
+            return null;
+          }
+          replaceTexture(idx, artTexture, "runtime");
+          return {
+            canvas,
+            texture: artTexture,
+            cleanup: () => {
+              stopFrameHandles.forEach((s) => s());
+              stopFrameHandles.clear();
+              cleanup?.();
+              threeRenderer?.dispose?.();
+              canvasContainment.dispose();
+              canvas.remove();
+              hiddenDiv.remove();
+            },
+          };
         } catch {
-          // Piece failed to boot — leave placeholder color
-        }
-
-        cleanups.push(() => {
           stopFrameHandles.forEach((s) => s());
           stopFrameHandles.clear();
           cleanup?.();
           threeRenderer?.dispose?.();
           canvasContainment.dispose();
-          textures[idx]?.dispose?.();
-          textures[idx] = null;
           canvas.remove();
           hiddenDiv.remove();
-        });
-        return;
+          return null;
+        }
       }
 
       // P5 or C2
@@ -187,6 +385,7 @@ function ExhibitWallStage({
         | null = null;
 
       function syncCanvas(canvas: HTMLCanvasElement) {
+        if (disposed || slotStates[idx]?.token !== token) return;
         sourceCanvas = canvas;
         if (!managedCanvasContainment) {
           const canvasHost =
@@ -200,13 +399,12 @@ function ExhibitWallStage({
         if (!artTexture) {
           artTexture = new (THREE as any).CanvasTexture(canvas);
           artTexture.colorSpace = (THREE as any).SRGBColorSpace;
-          slot.artMaterial.map = artTexture;
-          slot.artMaterial.needsUpdate = true;
-          textures[idx] = artTexture;
+          replaceTexture(idx, artTexture, "runtime");
         }
       }
 
       function pollForCanvas(root: ParentNode) {
+        if (disposed || slotStates[idx]?.token !== token) return;
         const candidate = root.querySelector("canvas");
         if (candidate instanceof HTMLCanvasElement) {
           if (candidate.width === 0 || candidate.height === 0) {
@@ -224,6 +422,10 @@ function ExhibitWallStage({
       try {
         if (item.engine === "p5") {
           const p5Module = await import("p5");
+          if (disposed || slotStates[idx]?.token !== token) {
+            host.remove();
+            return null;
+          }
           const P5 = (p5Module.default ?? p5Module) as any;
           const sketchFactory = resolveSketchFactory(item.generatedCode);
           const mount =
@@ -235,6 +437,10 @@ function ExhibitWallStage({
         } else {
           // c2
           const c2Module = await import("c2.js");
+          if (disposed || slotStates[idx]?.token !== token) {
+            host.remove();
+            return null;
+          }
           const c2 = (c2Module.default ?? c2Module) as any;
           (window as any).c2 = c2;
           const sketchFactory = resolveSketchFactory(item.generatedCode);
@@ -263,47 +469,139 @@ function ExhibitWallStage({
           stopSourceLoop = typeof cleanup === "function" ? cleanup : () => window.cancelAnimationFrame(rafId);
         }
       } catch {
-        // Boot failed — leave placeholder
-      }
-
-      cleanups.push(() => {
         if (detectTimer) window.clearTimeout(detectTimer);
         artTexture?.dispose?.();
-        textures[idx] = null;
-        managedCanvasContainment?.dispose();
+        (managedCanvasContainment as ReturnType<typeof observeManagedCanvasContainment> | null)?.dispose();
         stopSourceLoop?.();
         p5Instance?.remove?.();
         host.remove();
-        void sourceCanvas;
-      });
+        return null;
+      }
+
+      return {
+        get canvas() {
+          return sourceCanvas;
+        },
+        get texture() {
+          return artTexture;
+        },
+        cleanup: () => {
+          if (detectTimer) window.clearTimeout(detectTimer);
+          managedCanvasContainment?.dispose();
+          stopSourceLoop?.();
+          p5Instance?.remove?.();
+          host.remove();
+          void sourceCanvas;
+        },
+      };
     }
 
     function bootImageSlot(idx: number, item: ExhibitWallImageItem) {
-      const slot = shell.slots[idx];
-      if (!slot) return;
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        item.url,
-        (tex: any) => {
-          tex.colorSpace = (THREE as any).SRGBColorSpace;
-          slot.artMaterial.map = tex;
-          slot.artMaterial.needsUpdate = true;
-          textures[idx] = tex;
-        },
-        undefined,
-        () => {
-          // Load error — leave placeholder
-        },
+      const state = slotStates[idx];
+      if (!state) return;
+      state.status = "booting";
+      enqueueTextureLoad(idx, item.url, (tex) => {
+        replaceTexture(idx, tex, "image");
+        const current = slotStates[idx];
+        if (current) current.status = "frozen";
+      });
+    }
+
+    function queueMissingPreviewPlaceholder(idx: number, item: ExhibitWallPieceItem & { kind: "piece" }) {
+      const state = slotStates[idx];
+      if (!state || item.thumbnailUrl || state.textureKind) return;
+      const texture = createMissingPreviewTexture();
+      if (texture) {
+        replaceTexture(idx, texture, "placeholder");
+      }
+    }
+
+    function freezePieceSlot(idx: number) {
+      const state = slotStates[idx];
+      if (!state) return;
+      if (!state.runtime) {
+        if (state.status === "booting") {
+          state.token += 1;
+          state.status = "frozen";
+        }
+        return;
+      }
+      const snapshot = createSnapshotTexture(state.runtime.canvas);
+      state.runtime.cleanup();
+      state.runtime = null;
+      state.token += 1;
+      if (snapshot) {
+        replaceTexture(idx, snapshot, "snapshot");
+      } else if (state.textureKind === "runtime") {
+        state.textureKind = "snapshot";
+      }
+      state.status = "frozen";
+    }
+
+    function activatePieceSlot(idx: number, item: ExhibitWallPieceItem & { kind: "piece" }) {
+      const state = slotStates[idx];
+      if (!state || state.status === "live" || state.status === "booting") return;
+      state.status = "booting";
+      const token = state.token + 1;
+      state.token = token;
+      void bootPieceSlot(idx, item, token).then((runtime) => {
+        const current = slotStates[idx];
+        if (!current || disposed || current.token !== token) {
+          if (current?.texture && current.texture === runtime?.texture) {
+            replaceTexture(idx, null, null);
+          }
+          runtime?.cleanup();
+          runtime?.texture?.dispose?.();
+          return;
+        }
+        if (!runtime) {
+          current.status = "failed";
+          return;
+        }
+        current.runtime = runtime;
+        current.status = "live";
+      });
+    }
+
+    function reconcileActiveSlots(force = false) {
+      const liveBudget = getProgressiveExhibitLiveBudget(
+        safeStage.clientWidth || window.innerWidth,
+        staticMode,
       );
+      const active = selectProgressiveExhibitSlots(
+        items,
+        shell.slots.map((slot) => slot.center),
+        shell.controls.target,
+        liveBudget,
+      );
+      const activeKey = Array.from(active).sort((a, b) => a - b).join(",");
+      if (!force && activeKey === lastActiveKey) return;
+      lastActiveKey = activeKey;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item || item.kind !== "piece") continue;
+        if (active.has(i)) {
+          activatePieceSlot(i, item);
+        } else {
+          freezePieceSlot(i);
+        }
+      }
     }
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (!item) continue;
-      if (item.kind === "image") {
+      if (item?.kind === "piece") {
+        queuePiecePlaceholder(i, item);
+        queueMissingPreviewPlaceholder(i, item);
+      }
+    }
+    reconcileActiveSlots(true);
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item?.kind === "image") {
         bootImageSlot(i, item);
-      } else {
-        void bootPieceSlot(i, item);
       }
     }
 
@@ -320,14 +618,18 @@ function ExhibitWallStage({
 
     function animate() {
       frameId = requestAnimationFrame(animate);
-      for (let i = 0; i < textures.length; i++) {
-        const tex = textures[i];
+      frameCount += 1;
+      for (let i = 0; i < slotStates.length; i++) {
+        const tex = slotStates[i]?.texture;
         if (tex?.isCanvasTexture) {
           tex.needsUpdate = true;
         }
       }
       keyNav?.update();
       shell.controls.update();
+      if (frameCount % 12 === 0) {
+        reconcileActiveSlots();
+      }
       shell.renderer.render(shell.scene, shell.camera);
     }
 
@@ -336,15 +638,22 @@ function ExhibitWallStage({
 
     function handleResize() {
       fitMultiFrameExhibitCamera(shell, safeStage);
+      reconcileActiveSlots(true);
     }
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(safeStage);
 
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
       cancelAnimationFrame(frameId);
-      cleanups.forEach((fn) => fn());
-      textures.forEach((tex) => tex?.dispose?.());
+      slotStates.forEach((state) => {
+        state.runtime?.cleanup();
+        state.texture?.dispose?.();
+        state.runtime = null;
+        state.texture = null;
+        state.textureKind = null;
+      });
       keyNav?.dispose();
       shell.controls.dispose();
       shell.floor.geometry.dispose();
@@ -498,6 +807,10 @@ export default function ImmersiveExhibitWallPage() {
   const [, params] = useRoute("/immersive/exhibits/:slug");
   const goBack = useReturnToPrevious();
   const slug = params?.slug ?? "";
+  const queryClient = useQueryClient();
+  const { isOwner } = useCurrentUser();
+  const thumbnailQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const thumbnailQueuedIdsRef = useRef<Set<number>>(new Set());
 
   const itemsQuery = useGetExhibitItems(slug, {
     query: {
@@ -532,6 +845,52 @@ export default function ImmersiveExhibitWallPage() {
     );
     return { items: sliced, rows: r, cols: c, labels: labelArr };
   }, [itemsQuery.data]);
+
+  useEffect(() => {
+    if (!isOwner || !slug) return;
+    const missingPieces = items.filter(
+      (item): item is { kind: "piece" } & ExhibitWallPieceItem =>
+        item.kind === "piece" && !item.thumbnailUrl && !thumbnailQueuedIdsRef.current.has(item.id),
+    );
+    if (missingPieces.length === 0) return;
+
+    for (const piece of missingPieces) {
+      thumbnailQueuedIdsRef.current.add(piece.id);
+      thumbnailQueueRef.current = thumbnailQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          await persistArtPieceThumbnail({
+            id: piece.id,
+            title: piece.title,
+            engine: piece.engine,
+            currentVersion: {
+              id: 0,
+              artPieceId: piece.id,
+              engine: piece.engine,
+              generatedCode: piece.generatedCode,
+              htmlCode: piece.htmlCode ?? null,
+              cssCode: piece.cssCode ?? null,
+              prompt: "",
+              structuredSpec: null,
+              generationVendor: null,
+              generationModel: null,
+              validationStatus: "validated",
+              generationAttemptCount: 1,
+              notes: null,
+              createdAt: "",
+            },
+          } as any);
+          queryClient.invalidateQueries({ queryKey: getGetExhibitItemsQueryKey(slug) });
+        })
+        .catch((error) => {
+          console.error("Failed to generate exhibit thumbnail", {
+            pieceId: piece.id,
+            error,
+          });
+          thumbnailQueuedIdsRef.current.delete(piece.id);
+        });
+    }
+  }, [isOwner, items, queryClient, slug]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {

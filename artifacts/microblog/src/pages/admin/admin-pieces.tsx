@@ -5,6 +5,7 @@ import {
   generateArtPiece as requestGeneratedArtPiece,
   getGetArtPieceQueryKey,
   getGetMyAiSettingsQueryKey,
+  getListExhibitsQueryKey,
   getListArtPiecesQueryKey,
   useCreateArtPiece,
   useCreateArtPieceVersion,
@@ -15,6 +16,7 @@ import {
   useUpdateMyAiSettings,
   useUpdateArtPiece,
   useSetArtPieceExhibits,
+  type ArtPiece,
   type GeneratedArtPieceDraft,
   type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
@@ -33,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 import { buildImmersivePieceHref } from "@/lib/immersive-view";
+import { persistArtPieceThumbnail } from "@/lib/art-piece-thumbnail";
 
 const PIECE_TEMPLATES: Record<ArtPieceEngine, { html: string; css: string; js: string }> = {
   p5: {
@@ -151,6 +154,10 @@ export default function AdminPiecesPage() {
   const generationAbortRef = useRef<AbortController | null>(null);
   const [isImprovingText, setIsImprovingText] = useState(false);
   const [pieceExhibitIds, setPieceExhibitIds] = useState<number[]>([]);
+  const [thumbnailStatus, setThumbnailStatus] = useState<Record<number, "missing" | "generating" | "saved" | "failed">>({});
+  const [isPersistingThumbnail, setIsPersistingThumbnail] = useState(false);
+  const thumbnailQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const thumbnailQueuedIdsRef = useRef<Set<number>>(new Set());
 
   const pieces = useListArtPieces();
   const filtered = useMemo(() => {
@@ -161,6 +168,11 @@ export default function AdminPiecesPage() {
       [piece.title, piece.prompt].some((value) => value.toLowerCase().includes(q)),
     );
   }, [pieces.data?.pieces, query]);
+
+  const missingThumbnailPieces = useMemo(
+    () => (pieces.data?.pieces ?? []).filter((piece) => piece.status === "active" && !piece.thumbnailUrl && piece.currentVersion),
+    [pieces.data?.pieces],
+  );
 
   useEffect(() => {
     if (!creationMode && !selectedId && filtered[0]) {
@@ -189,6 +201,62 @@ export default function AdminPiecesPage() {
   });
 
   const selected = detail.data;
+
+  async function persistSavedPieceThumbnail(piece: ArtPiece) {
+    if (!piece.currentVersion) {
+      throw new Error("Piece has no current version to thumbnail.");
+    }
+    setThumbnailStatus((current) => ({
+      ...current,
+      [piece.id]: "generating",
+    }));
+    const thumbnailUrl = await persistArtPieceThumbnail(piece);
+    setThumbnailStatus((current) => ({ ...current, [piece.id]: "saved" }));
+    queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetArtPieceQueryKey(piece.id) });
+    queryClient.invalidateQueries({ queryKey: getListExhibitsQueryKey() });
+    queryClient.invalidateQueries({
+      predicate: ({ queryKey }) =>
+        typeof queryKey[0] === "string" &&
+        queryKey[0].startsWith("/api/exhibits/") &&
+        queryKey[0].endsWith("/items"),
+    });
+    return thumbnailUrl;
+  }
+
+  function enqueueThumbnailGeneration(piece: ArtPiece) {
+    if (!piece.currentVersion || thumbnailQueuedIdsRef.current.has(piece.id)) return;
+    thumbnailQueuedIdsRef.current.add(piece.id);
+    thumbnailQueueRef.current = thumbnailQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await persistSavedPieceThumbnail(piece);
+        } catch {
+          setThumbnailStatus((current) => ({ ...current, [piece.id]: "failed" }));
+          toast({
+            title: "Thumbnail generation failed",
+            description: piece.title,
+            variant: "destructive",
+          });
+        }
+      });
+  }
+
+  function enqueueMissingThumbnails() {
+    for (const piece of missingThumbnailPieces) {
+      if (thumbnailStatus[piece.id] === "generating" || thumbnailStatus[piece.id] === "saved") {
+        continue;
+      }
+      enqueueThumbnailGeneration(piece);
+    }
+  }
+
+  useEffect(() => {
+    if (missingThumbnailPieces.length > 0) {
+      enqueueMissingThumbnails();
+    }
+  }, [missingThumbnailPieces]);
 
   // Initialize metadata when selection changes
   useEffect(() => {
@@ -302,46 +370,9 @@ canvas { display: block; }`;
     },
   });
 
-  const createVersion = useCreateArtPieceVersion({
-    mutation: {
-      onSuccess: (response) => {
-        setTitle(response.piece.title);
-        setPrompt(response.piece.prompt);
-        setSelectedEngine(response.version.engine);
-        setHtmlCode(response.version.htmlCode || "");
-        setCssCode(response.version.cssCode || "");
-        setGeneratedCode(response.version.generatedCode || "");
-        setArtPieceExhibits.mutate({ id: response.piece.id, data: { exhibitIds: pieceExhibitIds } });
-        queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetArtPieceQueryKey(response.piece.id) });
-        setDraftOpen(false);
-        setDraft(null);
-        toast({ title: "New piece version saved" });
-      },
-      onError: () => {
-        toast({ title: "Failed to save new version", variant: "destructive" });
-      },
-    },
-  });
+  const createVersion = useCreateArtPieceVersion();
 
-  const createPiece = useCreateArtPiece({
-    mutation: {
-      onSuccess: (response) => {
-        if (pieceExhibitIds.length > 0) {
-          setArtPieceExhibits.mutate({ id: response.id, data: { exhibitIds: pieceExhibitIds } });
-        }
-        queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
-        setSelectedId(response.id);
-        setCreationMode(null);
-        setDraftOpen(false);
-        setDraft(null);
-        toast({ title: "New piece saved" });
-      },
-      onError: () => {
-        toast({ title: "Failed to save piece", variant: "destructive" });
-      },
-    },
-  });
+  const createPiece = useCreateArtPiece();
 
   const setArtPieceExhibits = useSetArtPieceExhibits();
 
@@ -361,6 +392,69 @@ canvas { display: block; }`;
   });
 
   const processAiText = useProcessAiText();
+
+  async function handleSavedCurrentPiece(piece: ArtPiece) {
+    setIsPersistingThumbnail(true);
+    try {
+      await persistSavedPieceThumbnail(piece);
+    } catch {
+      setThumbnailStatus((current) => ({ ...current, [piece.id]: "failed" }));
+      toast({
+        title: "Thumbnail generation failed",
+        description: "The piece was saved, but its current-version thumbnail was not. Retry from this page before using it in exhibits.",
+        variant: "destructive",
+      });
+      throw new Error("Thumbnail generation failed.");
+    } finally {
+      setIsPersistingThumbnail(false);
+    }
+  }
+
+  async function handleCreatePiece(data: Parameters<typeof createPiece.mutateAsync>[0]["data"]) {
+    try {
+      const response = await createPiece.mutateAsync({ data });
+      if (pieceExhibitIds.length > 0) {
+        setArtPieceExhibits.mutate({ id: response.id, data: { exhibitIds: pieceExhibitIds } });
+      }
+      queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
+      setSelectedId(response.id);
+      await handleSavedCurrentPiece(response);
+      setCreationMode(null);
+      setDraftOpen(false);
+      setDraft(null);
+      toast({ title: "New piece saved" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Thumbnail generation failed.") return;
+      toast({ title: "Failed to save piece", variant: "destructive" });
+    }
+  }
+
+  async function handleCreateVersion(
+    id: number,
+    data: Parameters<typeof createVersion.mutateAsync>[0]["data"],
+  ) {
+    try {
+      const response = await createVersion.mutateAsync({ id, data });
+      setTitle(response.piece.title);
+      setPrompt(response.piece.prompt);
+      setSelectedEngine(response.version.engine);
+      setHtmlCode(response.version.htmlCode || "");
+      setCssCode(response.version.cssCode || "");
+      setGeneratedCode(response.version.generatedCode || "");
+      setArtPieceExhibits.mutate({ id: response.piece.id, data: { exhibitIds: pieceExhibitIds } });
+      queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetArtPieceQueryKey(response.piece.id) });
+      if (response.piece.currentVersionId === response.version.id) {
+        await handleSavedCurrentPiece(response.piece);
+      }
+      setDraftOpen(false);
+      setDraft(null);
+      toast({ title: "New piece version saved" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Thumbnail generation failed.") return;
+      toast({ title: "Failed to save new version", variant: "destructive" });
+    }
+  }
 
   async function handleImproveText() {
     if (!prompt.trim()) {
@@ -538,6 +632,15 @@ canvas { display: block; }`;
       description="Reusable interactive pieces for embedding into posts. Generate new pieces at your own risk. AI-generated pieces likely require some manual tweaking to work well, which is why you can edit code once you have saved a piece."
     >
       <div className="mb-4 flex justify-end gap-2">
+        {missingThumbnailPieces.length > 0 ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={enqueueMissingThumbnails}
+          >
+            Generate missing thumbnails ({missingThumbnailPieces.length})
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="outline"
@@ -575,7 +678,9 @@ canvas { display: block; }`;
               placeholder="Search pieces..."
             />
             <div className="max-h-[36rem] space-y-2 overflow-auto">
-              {filtered.map((piece) => (
+              {filtered.map((piece) => {
+                const status = thumbnailStatus[piece.id] ?? (piece.thumbnailUrl ? "saved" : "missing");
+                return (
                 <div key={piece.id} className="group relative">
                   <button
                     type="button"
@@ -588,8 +693,24 @@ canvas { display: block; }`;
                       <p className="font-medium">{piece.title}</p>
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{piece.status}</span>
                     </div>
+                    <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Thumbnail: {status}
+                    </p>
                     <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{piece.prompt}</p>
                   </button>
+                  {status === "failed" && piece.currentVersion ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        thumbnailQueuedIdsRef.current.delete(piece.id);
+                        enqueueThumbnailGeneration(piece);
+                      }}
+                      className="absolute bottom-2 right-2 rounded border border-border bg-background px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                    >
+                      Retry
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     aria-label={`Delete ${piece.title}`}
@@ -605,7 +726,8 @@ canvas { display: block; }`;
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              ))}
+                );
+              })}
               {filtered.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No pieces yet.</p>
               ) : null}
@@ -859,33 +981,28 @@ canvas { display: block; }`;
                     type="button"
                     onClick={() => {
                       if (creationMode === "manual") {
-                        createPiece.mutate({
-                          data: {
-                            title: title || "Untitled Piece",
-                            prompt,
-                            engine: selectedEngine,
-                            htmlCode,
-                            cssCode,
-                            generatedCode,
-                          },
+                        void handleCreatePiece({
+                          title: title || "Untitled Piece",
+                          prompt,
+                          engine: selectedEngine,
+                          htmlCode,
+                          cssCode,
+                          generatedCode,
                         });
                       } else if (selected) {
-                        createVersion.mutate({
-                          id: selected.id,
-                          data: {
-                            title,
-                            prompt,
-                            makeCurrent: true,
-                            htmlCode,
-                            cssCode,
-                            generatedCode,
-                          },
+                        void handleCreateVersion(selected.id, {
+                          title,
+                          prompt,
+                          makeCurrent: true,
+                          htmlCode,
+                          cssCode,
+                          generatedCode,
                         });
                       }
                     }}
-                    disabled={createPiece.isPending || createVersion.isPending || !generatedCode.trim()}
+                    disabled={createPiece.isPending || createVersion.isPending || isPersistingThumbnail || !generatedCode.trim()}
                   >
-                    {createPiece.isPending || createVersion.isPending ? "Saving..." : "Save"}
+                    {createPiece.isPending || createVersion.isPending || isPersistingThumbnail ? "Saving..." : "Save"}
                   </Button>
                   <Button
                     type="button"
@@ -993,20 +1110,17 @@ canvas { display: block; }`;
         }}
         draft={draft}
         prompt={prompt}
-        isSaving={creationMode === "ai" ? createPiece.isPending : createVersion.isPending}
+        isSaving={creationMode === "ai" ? createPiece.isPending || isPersistingThumbnail : createVersion.isPending || isPersistingThumbnail}
         onSaveAndInsert={() => {
           if (!draft) return;
           if (creationMode === "ai") {
-            createPiece.mutate({ data: { draftToken: draft.draftToken, title: title || draft.title } });
+            void handleCreatePiece({ draftToken: draft.draftToken, title: title || draft.title });
           } else {
             if (!selected) return;
-            createVersion.mutate({
-              id: selected.id,
-              data: {
-                draftToken: draft.draftToken,
-                title: title || draft.title,
-                makeCurrent: true,
-              },
+            void handleCreateVersion(selected.id, {
+              draftToken: draft.draftToken,
+              title: title || draft.title,
+              makeCurrent: true,
             });
           }
         }}
