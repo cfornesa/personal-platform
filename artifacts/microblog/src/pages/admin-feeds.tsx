@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,6 +9,7 @@ import {
   useRefreshFeedSource,
   useRefreshAllFeedSources,
   useApproveAllFromFeedSource,
+  useUploadFeedSourceProfilePhoto,
   getListFeedSourcesQueryKey,
   getListPendingPostsQueryKey,
   getListPostsQueryKey,
@@ -18,9 +19,12 @@ import {
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { FeaturedImagePicker } from "@/components/media/FeaturedImagePicker";
+import { getUploadErrorMessage } from "@/components/post/upload-error";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,10 +36,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, RefreshCw, Plus, Rss, ExternalLink, CheckCircle2, Pencil, X } from "lucide-react";
+import { Trash2, RefreshCw, Plus, Rss, ExternalLink, CheckCircle2, Pencil, X, Camera, ImageIcon } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
 const CADENCE_OPTIONS: CreateFeedSourceBodyCadence[] = ["daily", "weekly", "monthly"];
+const ACCEPTED_IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/gif,image/avif";
 
 function formatTimestamp(value: Date | string | null | undefined): string {
   if (!value) return "Never";
@@ -49,6 +54,7 @@ export default function AdminFeedsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // New-source form state.
   const [newName, setNewName] = useState("");
@@ -72,6 +78,8 @@ export default function AdminFeedsPage() {
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [approvingAllId, setApprovingAllId] = useState<number | null>(null);
+  const [photoUploadSourceId, setPhotoUploadSourceId] = useState<number | null>(null);
+  const [libraryPhotoSource, setLibraryPhotoSource] = useState<FeedSource | null>(null);
 
   useEffect(() => {
     if (!isUserLoading && !isOwner) {
@@ -114,6 +122,22 @@ export default function AdminFeedsPage() {
     mutation: {
       onSuccess: () => invalidateAll(),
       onError: () => toast({ title: "Failed to update source", variant: "destructive" }),
+    },
+  });
+
+  const uploadPhotoMutation = useUploadFeedSourceProfilePhoto({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Feed profile photo updated" });
+        invalidateAll();
+      },
+      onError: (error) => {
+        toast({
+          title: "Upload failed",
+          description: getUploadErrorMessage(error),
+          variant: "destructive",
+        });
+      },
     },
   });
 
@@ -245,6 +269,38 @@ export default function AdminFeedsPage() {
   const handleApproveAll = (source: FeedSource) => {
     setApprovingAllId(source.id);
     approveAllMutation.mutate({ id: source.id });
+  };
+
+  const handleChooseUpload = (source: FeedSource) => {
+    setPhotoUploadSourceId(source.id);
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !photoUploadSourceId) return;
+
+    uploadPhotoMutation.mutate({
+      id: photoUploadSourceId,
+      data: { file },
+    });
+  };
+
+  const handleSelectLibraryPhoto = (url: string) => {
+    if (!libraryPhotoSource) return;
+    updateMutation.mutate(
+      {
+        id: libraryPhotoSource.id,
+        data: { imageUrl: url },
+      },
+      {
+        onSuccess: () => {
+          setLibraryPhotoSource(null);
+          toast({ title: "Feed profile photo updated" });
+        },
+      },
+    );
   };
 
   const handleStartEdit = (source: FeedSource) => {
@@ -415,7 +471,14 @@ export default function AdminFeedsPage() {
               data-testid={`feed-source-${source.id}`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-1 gap-3">
+                  <Avatar className="h-12 w-12 border border-border">
+                    <AvatarImage src={source.imageUrl || undefined} alt={source.name} />
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      <Rss className="h-5 w-5" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold truncate">{source.name}</h3>
                     {source.enabled ? null : (
@@ -451,8 +514,28 @@ export default function AdminFeedsPage() {
                       Visit site <ExternalLink className="h-3 w-3" />
                     </a>
                   ) : null}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleChooseUpload(source)}
+                    disabled={uploadPhotoMutation.isPending && photoUploadSourceId === source.id}
+                    aria-label="Upload feed profile photo"
+                    title="Upload feed profile photo"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setLibraryPhotoSource(source)}
+                    aria-label="Choose feed profile photo from library"
+                    title="Choose feed profile photo from library"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -658,6 +741,25 @@ export default function AdminFeedsPage() {
           ))}
         </CardContent>
       </Card>
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGE_TYPES}
+        aria-label="Choose feed profile photo"
+        className="hidden"
+        onChange={handlePhotoFileChange}
+      />
+      <FeaturedImagePicker
+        open={!!libraryPhotoSource}
+        onOpenChange={(open) => {
+          if (!open) setLibraryPhotoSource(null);
+        }}
+        currentUrl={libraryPhotoSource?.imageUrl || undefined}
+        dialogTitle="Choose Feed Profile Photo"
+        finalActionLabel="Use as feed profile photo"
+        closeWarningDescription="You have selected a feed profile photo but have not saved it yet."
+        onSelect={handleSelectLibraryPhoto}
+      />
     </AdminLayout>
   );
 }

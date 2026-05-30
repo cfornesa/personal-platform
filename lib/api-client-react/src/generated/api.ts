@@ -107,7 +107,9 @@ import type {
   UpdatePostBody,
   UpdateSiteSettingsBody,
   UpdateUserProfileBody,
+  UploadFeedSourceProfilePhotoBody,
   UploadMediaBody,
+  UploadProfilePhotoBody,
   UploadedMedia,
   UpsertPlatformOAuthAppBody,
   UserProfile
@@ -1272,6 +1274,156 @@ export const useUpdateMe = <TError = ErrorType<void>,
       > => {
       return useMutation(getUpdateMeMutationOptions(options));
     }
+
+/**
+ * @summary Upload the current user's profile photo
+ */
+export const getUploadProfilePhotoUrl = () => {
+
+
+
+
+  return `/api/users/me/profile-photo`
+}
+
+export const uploadProfilePhoto = async (uploadProfilePhotoBody: UploadProfilePhotoBody, options?: RequestInit): Promise<UserProfile> => {
+    const formData = new FormData();
+formData.append(`file`, uploadProfilePhotoBody.file);
+
+  return customFetch<UserProfile>(getUploadProfilePhotoUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getUploadProfilePhotoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadProfilePhoto>>, TError,{data: BodyType<UploadProfilePhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadProfilePhoto>>, TError,{data: BodyType<UploadProfilePhotoBody>}, TContext> => {
+
+const mutationKey = ['uploadProfilePhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadProfilePhoto>>, {data: BodyType<UploadProfilePhotoBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadProfilePhoto(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadProfilePhotoMutationResult = NonNullable<Awaited<ReturnType<typeof uploadProfilePhoto>>>
+    export type UploadProfilePhotoMutationBody = BodyType<UploadProfilePhotoBody>
+    export type UploadProfilePhotoMutationError = ErrorType<void>
+
+    /**
+ * @summary Upload the current user's profile photo
+ */
+export const useUploadProfilePhoto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadProfilePhoto>>, TError,{data: BodyType<UploadProfilePhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadProfilePhoto>>,
+        TError,
+        {data: BodyType<UploadProfilePhotoBody>},
+        TContext
+      > => {
+      return useMutation(getUploadProfilePhotoMutationOptions(options));
+    }
+
+/**
+ * @summary Fetch a member profile photo
+ */
+export const getGetProfilePhotoUrl = (fileName: string,) => {
+
+
+
+
+  return `/api/profile-photos/${fileName}`
+}
+
+export const getProfilePhoto = async (fileName: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetProfilePhotoUrl(fileName),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProfilePhotoQueryKey = (fileName: string,) => {
+    return [
+    `/api/profile-photos/${fileName}`
+    ] as const;
+    }
+
+
+export const getGetProfilePhotoQueryOptions = <TData = Awaited<ReturnType<typeof getProfilePhoto>>, TError = ErrorType<void>>(fileName: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfilePhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProfilePhotoQueryKey(fileName);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProfilePhoto>>> = ({ signal }) => getProfilePhoto(fileName, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(fileName), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProfilePhoto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProfilePhotoQueryResult = NonNullable<Awaited<ReturnType<typeof getProfilePhoto>>>
+export type GetProfilePhotoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch a member profile photo
+ */
+
+export function useGetProfilePhoto<TData = Awaited<ReturnType<typeof getProfilePhoto>>, TError = ErrorType<void>>(
+ fileName: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfilePhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProfilePhotoQueryOptions(fileName,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 /**
  * @summary Get owner AI writing assistant settings
@@ -3280,6 +3432,80 @@ export const useRefreshFeedSource = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRefreshFeedSourceMutationOptions(options));
+    }
+
+/**
+ * @summary Upload a feed source profile photo into the Image Library (owner only)
+ */
+export const getUploadFeedSourceProfilePhotoUrl = (id: number,) => {
+
+
+
+
+  return `/api/feed-sources/${id}/profile-photo`
+}
+
+export const uploadFeedSourceProfilePhoto = async (id: number,
+    uploadFeedSourceProfilePhotoBody: UploadFeedSourceProfilePhotoBody, options?: RequestInit): Promise<FeedSource> => {
+    const formData = new FormData();
+formData.append(`file`, uploadFeedSourceProfilePhotoBody.file);
+
+  return customFetch<FeedSource>(getUploadFeedSourceProfilePhotoUrl(id),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getUploadFeedSourceProfilePhotoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>, TError,{id: number;data: BodyType<UploadFeedSourceProfilePhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>, TError,{id: number;data: BodyType<UploadFeedSourceProfilePhotoBody>}, TContext> => {
+
+const mutationKey = ['uploadFeedSourceProfilePhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>, {id: number;data: BodyType<UploadFeedSourceProfilePhotoBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadFeedSourceProfilePhoto(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadFeedSourceProfilePhotoMutationResult = NonNullable<Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>>
+    export type UploadFeedSourceProfilePhotoMutationBody = BodyType<UploadFeedSourceProfilePhotoBody>
+    export type UploadFeedSourceProfilePhotoMutationError = ErrorType<void>
+
+    /**
+ * @summary Upload a feed source profile photo into the Image Library (owner only)
+ */
+export const useUploadFeedSourceProfilePhoto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>, TError,{id: number;data: BodyType<UploadFeedSourceProfilePhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadFeedSourceProfilePhoto>>,
+        TError,
+        {id: number;data: BodyType<UploadFeedSourceProfilePhotoBody>},
+        TContext
+      > => {
+      return useMutation(getUploadFeedSourceProfilePhotoMutationOptions(options));
     }
 
 /**

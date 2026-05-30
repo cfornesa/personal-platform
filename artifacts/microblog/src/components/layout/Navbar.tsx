@@ -283,16 +283,69 @@ export function Navbar() {
           className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80"
           data-testid="navbar-left"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              <line x1="9" y1="10" x2="15" y2="10" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            </svg>
-          </div>
-          <span className="font-serif text-lg font-bold tracking-tight text-foreground">
-            {siteSettings?.siteTitle ?? ""}
-          </span>
+          {/* LOGO ICON / IMAGE RENDERING */}
+          {siteSettings?.logoLayout === "integrated_wordmark" && siteSettings?.logoUrl ? (
+            <>
+              <img
+                src={siteSettings.logoUrl}
+                alt={siteSettings.siteTitle ?? "Logo"}
+                className="h-8 w-auto max-w-[160px] object-contain block dark:hidden"
+              />
+              {siteSettings.logoDarkUrl ? (
+                <img
+                  src={siteSettings.logoDarkUrl}
+                  alt={siteSettings.siteTitle ?? "Logo"}
+                  className="h-8 w-auto max-w-[160px] object-contain hidden dark:block"
+                />
+              ) : (
+                <img
+                  src={siteSettings.logoUrl}
+                  alt={siteSettings.siteTitle ?? "Logo"}
+                  className="h-8 w-auto max-w-[160px] object-contain hidden dark:block"
+                />
+              )}
+            </>
+          ) : siteSettings?.logoLayout === "icon_and_text" && siteSettings?.logoUrl ? (
+            <>
+              <img
+                src={siteSettings.logoUrl}
+                alt=""
+                className="h-8 w-8 rounded-lg object-contain block dark:hidden"
+              />
+              {siteSettings.logoDarkUrl ? (
+                <img
+                  src={siteSettings.logoDarkUrl}
+                  alt=""
+                  className="h-8 w-8 rounded-lg object-contain hidden dark:block"
+                />
+              ) : (
+                <img
+                  src={siteSettings.logoUrl}
+                  alt=""
+                  className="h-8 w-8 rounded-lg object-contain hidden dark:block"
+                />
+              )}
+            </>
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <line x1="9" y1="10" x2="15" y2="10" />
+                <line x1="9" y1="14" x2="15" y2="14" />
+              </svg>
+            </div>
+          )}
+
+          {/* SITE TITLE RENDERING (with Visually Hidden sr-only support for full integrated logos to ensure SEO/A11y) */}
+          {siteSettings?.logoLayout === "integrated_wordmark" && siteSettings?.logoUrl ? (
+            <span className="sr-only">
+              {siteSettings?.siteTitle ?? ""}
+            </span>
+          ) : (
+            <span className="font-serif text-lg font-bold tracking-tight text-foreground">
+              {siteSettings?.siteTitle ?? ""}
+            </span>
+          )}
         </Link>
 
         {/* CENTER ZONE — flex-grows between left and right edges. */}

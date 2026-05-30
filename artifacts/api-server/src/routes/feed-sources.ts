@@ -1,11 +1,14 @@
+import path from "node:path";
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
+import multer from "multer";
 import {
   db,
   feedSourcesTable,
   feedItemsSeenTable,
   postsTable,
   usersTable,
+  mediaAssetsTable,
   eq,
   desc,
   and,
@@ -30,10 +33,45 @@ import {
   DeleteFeedSourceParams,
   RefreshFeedSourceParams,
 } from "@workspace/api-zod";
+import {
+  deriveMediaTitle,
+  MAX_MEDIA_BYTES,
+  MAX_MEDIA_MB,
+  storeUploadedImage,
+} from "../lib/media";
+import { createRateLimitMiddleware } from "../lib/ratelimit";
 
 const router: IRouter = Router();
 
 type FeedSourceRow = typeof feedSourcesTable.$inferSelect;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_MEDIA_BYTES,
+    files: 1,
+  },
+});
+
+function uploadSingleFeedSourcePhoto(req: Request, res: Response, next: NextFunction) {
+  upload.single("file")(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: `Image uploads must be ${MAX_MEDIA_MB} MB or smaller.` });
+        return;
+      }
+      res.status(400).json({ error: error.message || "Invalid upload" });
+      return;
+    }
+
+    next(error);
+  });
+}
 
 function serialize(row: FeedSourceRow) {
   return {
@@ -42,6 +80,7 @@ function serialize(row: FeedSourceRow) {
     username: row.username ?? null,
     bio: row.bio ?? null,
     authorName: row.authorName ?? null,
+    imageUrl: row.imageUrl ?? null,
     feedUrl: row.feedUrl,
     siteUrl: row.siteUrl,
     cadence: row.cadence,
@@ -54,6 +93,45 @@ function serialize(row: FeedSourceRow) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function assertImageLibraryUrl(imageUrl: string) {
+  const trimmed = imageUrl.trim();
+  if (!trimmed.startsWith("/api/media/")) {
+    throw new Error("Profile photo must be an existing Image Library URL.");
+  }
+
+  const fileName = path.basename(trimmed);
+  if (!fileName || trimmed !== `/api/media/${fileName}`) {
+    throw new Error("Profile photo must be an existing Image Library URL.");
+  }
+
+  const [asset] = await db
+    .select({ url: mediaAssetsTable.url })
+    .from(mediaAssetsTable)
+    .where(eq(mediaAssetsTable.url, trimmed))
+    .limit(1);
+
+  if (!asset) {
+    throw new Error("Profile photo must be an existing Image Library URL.");
+  }
+
+  return asset.url;
+}
+
+async function updateFeedSourceImage(sourceId: number, imageUrl: string | null) {
+  await db
+    .update(feedSourcesTable)
+    .set({
+      imageUrl,
+      updatedAt: formatMysqlDateTime(),
+    })
+    .where(eq(feedSourcesTable.id, sourceId));
+
+  await db
+    .update(postsTable)
+    .set({ authorImageUrl: imageUrl })
+    .where(eq(postsTable.sourceFeedId, sourceId));
 }
 
 // Owner cookie session, or X-Cron-Secret matching CRON_SECRET (constant-time).
@@ -169,6 +247,7 @@ export type IngestDb = {
     sourceId: number;
     guidHash: string;
     authorName: string;
+    authorImageUrl?: string | null;
     content: string;
     contentFormat: "plain" | "html";
     sourceGuid: string | null;
@@ -201,6 +280,7 @@ export async function ingestOneItem(
     sourceId: source.id,
     guidHash: normalized.guidHash,
     authorName: displayAuthor,
+    authorImageUrl: (source as { imageUrl?: string | null }).imageUrl ?? null,
     content: normalized.content,
     contentFormat: normalized.contentFormat,
     sourceGuid: normalized.guid,
@@ -247,7 +327,7 @@ function makeProductionIngestDb(): IngestDb {
           authorId: `feed:${values.sourceId}`,
           authorUserId: null,
           authorName: values.authorName,
-          authorImageUrl: null,
+          authorImageUrl: values.authorImageUrl ?? null,
           content: values.content,
           // Same shadow-column derivation as the manual create/update
           // paths so search hits the words a reader sees regardless of
@@ -400,6 +480,7 @@ router.post("/feed-sources", requireAuth, requireOwner, async (req: Request, res
         name: body.name,
         bio: body.bio ?? null,
         authorName: body.authorName ?? null,
+        imageUrl: body.imageUrl ? await assertImageLibraryUrl(body.imageUrl) : null,
         feedUrl: body.feedUrl,
         siteUrl: body.siteUrl ?? null,
         cadence: body.cadence,
@@ -474,6 +555,10 @@ router.patch("/feed-sources/:id", requireAuth, requireOwner, async (req: Request
     if (body.username !== undefined) updates.username = body.username ?? null;
     if (body.bio !== undefined) updates.bio = body.bio ?? null;
     if (body.authorName !== undefined) updates.authorName = body.authorName ?? null;
+    let selectedImageUrl: string | null | undefined;
+    if (body.imageUrl !== undefined) {
+      selectedImageUrl = body.imageUrl ? await assertImageLibraryUrl(body.imageUrl) : null;
+    }
     if (body.feedUrl !== undefined) updates.feedUrl = body.feedUrl;
     if (body.siteUrl !== undefined) updates.siteUrl = body.siteUrl ?? null;
     if (body.cadence !== undefined) {
@@ -491,6 +576,9 @@ router.patch("/feed-sources/:id", requireAuth, requireOwner, async (req: Request
     if (body.enabled !== undefined) updates.enabled = body.enabled ? 1 : 0;
 
     await db.update(feedSourcesTable).set(updates).where(eq(feedSourcesTable.id, id));
+    if (selectedImageUrl !== undefined) {
+      await updateFeedSourceImage(id, selectedImageUrl);
+    }
 
     const refreshed = await loadSourceById(id);
     return res.json(serialize(refreshed!));
@@ -498,6 +586,35 @@ router.patch("/feed-sources/:id", requireAuth, requireOwner, async (req: Request
     return res.status(400).json({ error: "Invalid request" });
   }
 });
+
+router.post(
+  "/feed-sources/:id/profile-photo",
+  createRateLimitMiddleware({ windowMs: 60_000, max: 20 }),
+  requireAuth,
+  requireOwner,
+  uploadSingleFeedSourcePhoto,
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = UpdateFeedSourceParams.parse(req.params);
+      const existing = await loadSourceById(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Feed source not found" });
+      }
+      if (!req.file?.buffer) {
+        return res.status(400).json({ error: "File upload is required" });
+      }
+
+      const uploaded = await storeUploadedImage(req.file.buffer, deriveMediaTitle(req.file.originalname));
+      await updateFeedSourceImage(id, uploaded.url);
+
+      const refreshed = await loadSourceById(id);
+      return res.status(201).json(serialize(refreshed!));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid upload";
+      return res.status(400).json({ error: message });
+    }
+  },
+);
 
 // DELETE /feed-sources/:id — removes source + ledger; imported posts kept.
 router.delete("/feed-sources/:id", requireAuth, requireOwner, async (req: Request, res: Response) => {

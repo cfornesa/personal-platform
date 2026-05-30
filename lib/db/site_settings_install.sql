@@ -75,17 +75,44 @@ CREATE TABLE IF NOT EXISTS `site_settings` (
   `color_muted_foreground`        VARCHAR(64) NOT NULL,
   `color_destructive`             VARCHAR(64) NOT NULL,
   `color_destructive_foreground`  VARCHAR(64) NOT NULL,
+  `logo_url`                      VARCHAR(2048) NULL,
+  `logo_dark_url`                 VARCHAR(2048) NULL,
+  `logo_layout`                   VARCHAR(32) NOT NULL DEFAULT 'text_only',
+  `default_theme_mode`            VARCHAR(32) NOT NULL DEFAULT 'system',
+  `color_primary_dark`                 VARCHAR(64) NULL,
+  `color_primary_foreground_dark`      VARCHAR(64) NULL,
+  `color_secondary_dark`               VARCHAR(64) NULL,
+  `color_secondary_foreground_dark`    VARCHAR(64) NULL,
+  `color_accent_dark`                  VARCHAR(64) NULL,
+  `color_accent_foreground_dark`       VARCHAR(64) NULL,
+  `color_muted_dark`                   VARCHAR(64) NULL,
+  `color_muted_foreground_dark`        VARCHAR(64) NULL,
+  `color_destructive_dark`             VARCHAR(64) NULL,
+  `color_destructive_foreground_dark`  VARCHAR(64) NULL,
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Backfill `theme` / `palette` on databases created before themes shipped.
--- Safe no-op if the column already exists. The `IF NOT EXISTS` clause works
--- on MySQL 8.0+ and MariaDB 10.0.2+; on older servers, drop the IF NOT EXISTS
--- clause and ignore the duplicate-column error.
+-- Backfill columns on databases created before they shipped.
+-- Safe no-op if the columns already exist.
 ALTER TABLE `site_settings`
   ADD COLUMN IF NOT EXISTS `theme`   VARCHAR(32) NOT NULL DEFAULT 'bauhaus';
 ALTER TABLE `site_settings`
   ADD COLUMN IF NOT EXISTS `palette` VARCHAR(32) NOT NULL DEFAULT 'bauhaus';
+ALTER TABLE `site_settings`
+  ADD COLUMN IF NOT EXISTS `logo_url`                           VARCHAR(2048) NULL,
+  ADD COLUMN IF NOT EXISTS `logo_dark_url`                      VARCHAR(2048) NULL,
+  ADD COLUMN IF NOT EXISTS `logo_layout`                        VARCHAR(32) NOT NULL DEFAULT 'text_only',
+  ADD COLUMN IF NOT EXISTS `default_theme_mode`                 VARCHAR(32) NOT NULL DEFAULT 'system',
+  ADD COLUMN IF NOT EXISTS `color_primary_dark`                 VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_primary_foreground_dark`      VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_secondary_dark`               VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_secondary_foreground_dark`    VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_accent_dark`                  VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_accent_foreground_dark`       VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_muted_dark`                   VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_muted_foreground_dark`        VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_destructive_dark`             VARCHAR(64) NULL,
+  ADD COLUMN IF NOT EXISTS `color_destructive_foreground_dark`  VARCHAR(64) NULL;
 
 -- ---- Seed the singleton row. Edit BEFORE importing, or after via /settings. --
 -- INSERT IGNORE means re-running never overwrites existing edits.
@@ -108,7 +135,13 @@ INSERT IGNORE INTO `site_settings` (
   `color_secondary`,         `color_secondary_foreground`,
   `color_accent`,            `color_accent_foreground`,
   `color_muted`,             `color_muted_foreground`,
-  `color_destructive`,       `color_destructive_foreground`
+  `color_destructive`,       `color_destructive_foreground`,
+  `logo_url`,                `logo_dark_url`,               `logo_layout`,                 `default_theme_mode`,
+  `color_primary_dark`,                 `color_primary_foreground_dark`,
+  `color_secondary_dark`,               `color_secondary_foreground_dark`,
+  `color_accent_dark`,                  `color_accent_foreground_dark`,
+  `color_muted_dark`,                   `color_muted_foreground_dark`,
+  `color_destructive_dark`,             `color_destructive_foreground_dark`
 ) VALUES (
   1,                                            -- id (always 1; singleton)
   'bauhaus',                                    -- theme — pick one of: bauhaus, traditional, minimalist, academic, airy, nature, comfort, audacious, artistic
@@ -130,5 +163,11 @@ INSERT IGNORE INTO `site_settings` (
   '240 100% 50%',  '0 0% 100%',                  -- secondary (blue)   / on-secondary (white)
   '60 100% 50%',   '0 0% 0%',                    -- accent (yellow)    / on-accent (black)
   '60 100% 50%',   '0 0% 0%',                    -- muted              / on-muted
-  '0 100% 50%',    '0 0% 100%'                   -- destructive (red)  / on-destructive (white)
+  '0 100% 50%',    '0 0% 100%',                  -- destructive (red)  / on-destructive (white)
+  '',              '',            'text_only',   'system',     -- logo_url, logo_dark_url, logo_layout, default_theme_mode
+  '',              '',                           -- primary dark / on-primary dark
+  '',              '',                           -- secondary dark / on-secondary dark
+  '',              '',                           -- accent dark / on-accent dark
+  '',              '',                           -- muted dark / on-muted dark
+  '',              ''                            -- destructive dark / on-destructive dark
 );

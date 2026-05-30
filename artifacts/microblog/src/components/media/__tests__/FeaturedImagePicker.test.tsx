@@ -22,6 +22,27 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast }),
 }));
 
+vi.mock("@/hooks/use-owner-ai-vendors", () => ({
+  useOwnerAiVendors: () => ({
+    aiVendors: [],
+    textVendors: [],
+    imageDescriptionVendors: [],
+    pieceVendors: [],
+    isLoading: false,
+    preferredArtPieceVendor: null,
+    preferredVendorTextImprove: null,
+    preferredVendorAltText: "opencode-zen", // mock an active vendor so AI alt-text tests render the Sparkles button
+  }),
+}));
+
+vi.mock("@/hooks/use-current-user", () => ({
+  useCurrentUser: () => ({
+    currentUser: { role: "owner" },
+    isOwner: true,
+    isAuthenticated: true,
+  }),
+}));
+
 function renderPicker(onSelect = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ThemeInjector } from "@/components/layout/ThemeInjector";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import Home from "@/pages/home";
 import SettingsPage from "@/pages/settings";
 import PostDetail from "@/pages/post-detail";
@@ -118,6 +119,7 @@ function AppShell() {
           </Switch>
         </main>
         <Footer />
+        <ThemeToggle />
       </div>
 
       <Toaster />

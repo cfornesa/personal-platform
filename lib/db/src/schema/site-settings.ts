@@ -32,6 +32,22 @@ export const siteSettingsTable = mysqlTable("site_settings", {
   colorDestructive: varchar("color_destructive", { length: 64 }).notNull(),
   colorDestructiveForeground: varchar("color_destructive_foreground", { length: 64 }).notNull(),
 
+  logoUrl: varchar("logo_url", { length: 2048 }),
+  logoDarkUrl: varchar("logo_dark_url", { length: 2048 }),
+  logoLayout: varchar("logo_layout", { length: 32 }).notNull().default("text_only"),
+  defaultThemeMode: varchar("default_theme_mode", { length: 32 }).notNull().default("system"),
+
+  colorPrimaryDark: varchar("color_primary_dark", { length: 64 }),
+  colorPrimaryForegroundDark: varchar("color_primary_foreground_dark", { length: 64 }),
+  colorSecondaryDark: varchar("color_secondary_dark", { length: 64 }),
+  colorSecondaryForegroundDark: varchar("color_secondary_foreground_dark", { length: 64 }),
+  colorAccentDark: varchar("color_accent_dark", { length: 64 }),
+  colorAccentForegroundDark: varchar("color_accent_foreground_dark", { length: 64 }),
+  colorMutedDark: varchar("color_muted_dark", { length: 64 }),
+  colorMutedForegroundDark: varchar("color_muted_foreground_dark", { length: 64 }),
+  colorDestructiveDark: varchar("color_destructive_dark", { length: 64 }),
+  colorDestructiveForegroundDark: varchar("color_destructive_foreground_dark", { length: 64 }),
+
   updatedAt: datetime("updated_at", { mode: "string", fsp: 3 })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP(3)`),
@@ -76,4 +92,20 @@ export const siteSettingsDefaults = {
   colorMutedForeground: "0 0% 0%",
   colorDestructive: "0 100% 50%",
   colorDestructiveForeground: "0 0% 100%",
+
+  logoUrl: "",
+  logoDarkUrl: "",
+  logoLayout: "text_only",
+  defaultThemeMode: "system",
+
+  colorPrimaryDark: "",
+  colorPrimaryForegroundDark: "",
+  colorSecondaryDark: "",
+  colorSecondaryForegroundDark: "",
+  colorAccentDark: "",
+  colorAccentForegroundDark: "",
+  colorMutedDark: "",
+  colorMutedForegroundDark: "",
+  colorDestructiveDark: "",
+  colorDestructiveForegroundDark: "",
 } as const;

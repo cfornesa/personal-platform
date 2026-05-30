@@ -90,7 +90,9 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
     setDisplayPost((prev) =>
       prev.id === post.id &&
       prev.content === post.content &&
-      prev.contentFormat === post.contentFormat
+      prev.contentFormat === post.contentFormat &&
+      prev.authorImageUrl === post.authorImageUrl &&
+      prev.authorName === post.authorName
         ? prev
         : post,
     );

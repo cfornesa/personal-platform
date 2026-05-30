@@ -151,6 +151,16 @@ export function ThemePalettePicker({
     colorDestructive: colors.colorDestructive ?? fallback.colorDestructive,
     colorDestructiveForeground:
       colors.colorDestructiveForeground ?? fallback.colorDestructiveForeground,
+    colorPrimaryDark: colors.colorPrimaryDark ?? fallback.colorPrimaryDark,
+    colorPrimaryForegroundDark: colors.colorPrimaryForegroundDark ?? fallback.colorPrimaryForegroundDark,
+    colorSecondaryDark: colors.colorSecondaryDark ?? fallback.colorSecondaryDark,
+    colorSecondaryForegroundDark: colors.colorSecondaryForegroundDark ?? fallback.colorSecondaryForegroundDark,
+    colorAccentDark: colors.colorAccentDark ?? fallback.colorAccentDark,
+    colorAccentForegroundDark: colors.colorAccentForegroundDark ?? fallback.colorAccentForegroundDark,
+    colorMutedDark: colors.colorMutedDark ?? fallback.colorMutedDark,
+    colorMutedForegroundDark: colors.colorMutedForegroundDark ?? fallback.colorMutedForegroundDark,
+    colorDestructiveDark: colors.colorDestructiveDark ?? fallback.colorDestructiveDark,
+    colorDestructiveForegroundDark: colors.colorDestructiveForegroundDark ?? fallback.colorDestructiveForegroundDark,
   };
 
   return (
@@ -176,18 +186,25 @@ export function ThemePalettePicker({
                   type="button"
                   onClick={() => onPickTheme(t.id)}
                   aria-pressed={selected}
-                  className={`group text-left rounded-md border overflow-hidden transition-colors ${
+                  className={`group text-left rounded-md border overflow-hidden transition-all duration-200 ${
                     selected
-                      ? "border-foreground ring-2 ring-foreground/20"
-                      : "border-border hover:border-foreground/40"
+                      ? "border-primary ring-4 ring-primary/20 scale-[1.02] shadow-lg"
+                      : "border-border hover:border-foreground/40 hover:scale-[1.01]"
                   }`}
                 >
                   <ThemePreviewTile
                     themeId={t.id as ThemeId}
                     palette={previewPaletteColors}
                   />
-                  <div className="border-t border-border bg-background p-2.5">
-                    <div className="text-sm font-semibold">{t.label}</div>
+                  <div className={`border-t border-border p-2.5 transition-colors duration-200 ${selected ? "bg-accent/10" : "bg-background"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold">{t.label}</div>
+                      {selected && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-primary px-1.5 py-0.5 text-[9px] font-black text-primary-foreground uppercase tracking-wider">
+                          ✓ Active
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                       {t.description}
                     </div>

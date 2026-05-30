@@ -36,6 +36,7 @@ import { MediaGrid } from "./MediaGrid";
 import { getUploadErrorMessage } from "@/components/post/upload-error";
 import { buildImmersiveImageHref } from "@/lib/immersive-view";
 import { cn } from "@/lib/utils";
+import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 
 type Tab = "library" | "upload" | "url";
 
@@ -61,7 +62,7 @@ export function FeaturedImagePicker({
   dialogTitle = "Set Featured Image",
   finalActionLabel = "Use this image",
   closeWarningDescription = "You have selected an image or started an upload/import, but have not inserted it yet.",
-  altTextVendor,
+  altTextVendor: propAltTextVendor,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("library");
   const [urlInput, setUrlInput] = useState("");
@@ -78,6 +79,9 @@ export function FeaturedImagePicker({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { preferredVendorAltText, imageDescriptionVendors } = useOwnerAiVendors();
+  const altTextVendor = propAltTextVendor ?? preferredVendorAltText ?? imageDescriptionVendors[0]?.id ?? null;
 
   const { data: assets = [], isLoading: isLoadingLibrary } = useListMedia({
     query: { enabled: open, queryKey: getListMediaQueryKey() },

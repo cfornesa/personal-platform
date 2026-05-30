@@ -30,6 +30,18 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   "image/avif": ".avif",
 };
 
+export async function inspectImageUpload(buffer: Buffer) {
+  const detectedType = await fileTypeFromBuffer(buffer);
+  if (!detectedType || !ALLOWED_MIME_TYPES.has(detectedType.mime)) {
+    throw new Error("Unsupported media type");
+  }
+
+  return {
+    extension: MIME_EXTENSION_MAP[detectedType.mime] ?? `.${detectedType.ext}`,
+    mimeType: detectedType.mime,
+  };
+}
+
 export function ensureMediaRoot() {
   if (!fs.existsSync(MEDIA_ROOT)) {
     fs.mkdirSync(MEDIA_ROOT, { recursive: true });
@@ -71,12 +83,7 @@ export function deriveMediaTitle(input?: string | null) {
 }
 
 export async function storeUploadedImage(buffer: Buffer, title?: string | null) {
-  const detectedType = await fileTypeFromBuffer(buffer);
-  if (!detectedType || !ALLOWED_MIME_TYPES.has(detectedType.mime)) {
-    throw new Error("Unsupported media type");
-  }
-
-  const extension = MIME_EXTENSION_MAP[detectedType.mime] ?? `.${detectedType.ext}`;
+  const { extension, mimeType } = await inspectImageUpload(buffer);
   const fileName = `${randomUUID()}${extension}`;
   const url = `/api/media/${fileName}`;
 
@@ -84,13 +91,13 @@ export async function storeUploadedImage(buffer: Buffer, title?: string | null) 
     url,
     filename: fileName,
     title: title?.trim().slice(0, 255) || "Untitled image",
-    mimeType: detectedType.mime,
+    mimeType,
     fileData: buffer,
   });
 
   return {
     fileName,
-    mimeType: detectedType.mime,
+    mimeType,
     title: title?.trim().slice(0, 255) || "Untitled image",
     url,
   };

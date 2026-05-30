@@ -6,14 +6,16 @@ This file is now historical only.
 
 Do not use the old cleanup guidance in this document against the current shipped app.
 
-As of `2026-05-05`, the live app and the deployed Replit runtime expect the following tables to exist:
+As of `2026-05-30`, the live app and the deployed runtime expect the following tables to exist:
 
 - `users`, `accounts`, `sessions`, `verification_tokens`
 - `user_ai_vendor_settings`
-- `posts`, `comments`, `reactions`
+- `posts`, `comments`, `reactions`, `profile_photo_assets`
 - `feed_sources`, `feed_items_seen`
 - `categories`, `post_categories`
 - `pages`, `nav_links`, `site_settings`
+- `media_assets`, `media_asset_exhibits`
+- `art_pieces`, `art_piece_versions`, `exhibits`, `piece_exhibits`
 
 They also expect the richer `users` and `posts` column sets that support:
 
@@ -21,6 +23,9 @@ They also expect the richer `users` and `posts` column sets that support:
 - owner AI vendor settings
 - inbound feed ingestion and pending moderation
 - public search backed by `posts.content_text`
+- database-backed member profile photos
+- Image Library-backed owner and feed-source profile photos
+- avatar backfills from `users.image` and `feed_sources.image_url` into `posts.author_image_url`
 - site settings, categories, pages, and nav management
 
 ## Why This Was Superseded
@@ -31,9 +36,9 @@ An earlier branch of project history produced cleanup guidance that treated seve
 
 For current operations, use these sources instead:
 
-- [lib/db/src/migrate.ts](/Users/Fornesus/Code/fornesus-platform/lib/db/src/migrate.ts:100)
-- [lib/db/install.sql](/Users/Fornesus/Code/fornesus-platform/lib/db/install.sql:1)
-- [README.md](/Users/Fornesus/Code/fornesus-platform/README.md:1)
-- [replit.md](/Users/Fornesus/Code/fornesus-platform/replit.md:1)
+- [lib/db/src/migrate.ts](/Users/Fornesus/Code/creatrweb-platform/lib/db/src/migrate.ts:1)
+- [lib/db/install.sql](/Users/Fornesus/Code/creatrweb-platform/lib/db/install.sql:1)
+- [README.md](/Users/Fornesus/Code/creatrweb-platform/README.md:1)
+- [replit.md](/Users/Fornesus/Code/creatrweb-platform/replit.md:1)
 
 If you need to reconcile a database, reconcile it forward to the current shipped schema rather than trimming it back to the older reduced schema described in the superseded report.

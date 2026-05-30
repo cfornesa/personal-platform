@@ -603,6 +603,11 @@ export interface UpdateUserProfileBody {
   bio?: string;
   website?: string;
   socialLinks?: UpdateUserProfileBodySocialLinks;
+  /**
+     * Owner-only existing Image Library URL to use as the profile photo.
+     * @maxLength 2048
+     */
+  imageUrl?: string;
   theme?: UpdateUserProfileBodyTheme;
   palette?: UpdateUserProfileBodyPalette;
   /**
@@ -1239,6 +1244,24 @@ export const SiteSettingsPalette = {
   pastel: 'pastel',
 } as const;
 
+export type SiteSettingsLogoLayout = typeof SiteSettingsLogoLayout[keyof typeof SiteSettingsLogoLayout];
+
+
+export const SiteSettingsLogoLayout = {
+  text_only: 'text_only',
+  icon_and_text: 'icon_and_text',
+  integrated_wordmark: 'integrated_wordmark',
+} as const;
+
+export type SiteSettingsDefaultThemeMode = typeof SiteSettingsDefaultThemeMode[keyof typeof SiteSettingsDefaultThemeMode];
+
+
+export const SiteSettingsDefaultThemeMode = {
+  system: 'system',
+  light: 'light',
+  dark: 'dark',
+} as const;
+
 /**
  * Map of social-platform key (instagram, twitter, youtube, tiktok,
 twitch, github, linkedin) to absolute URL, taken from the owner
@@ -1253,6 +1276,20 @@ export interface SiteSettings {
   theme: SiteSettingsTheme;
   palette: SiteSettingsPalette;
   siteTitle: string;
+  logoUrl?: string | null;
+  logoDarkUrl?: string | null;
+  logoLayout: SiteSettingsLogoLayout;
+  defaultThemeMode?: SiteSettingsDefaultThemeMode;
+  colorPrimaryDark?: string | null;
+  colorPrimaryForegroundDark?: string | null;
+  colorSecondaryDark?: string | null;
+  colorSecondaryForegroundDark?: string | null;
+  colorAccentDark?: string | null;
+  colorAccentForegroundDark?: string | null;
+  colorMutedDark?: string | null;
+  colorMutedForegroundDark?: string | null;
+  colorDestructiveDark?: string | null;
+  colorDestructiveForegroundDark?: string | null;
   heroHeading: string;
   heroSubheading: string;
   aboutHeading: string;
@@ -1540,6 +1577,11 @@ export interface FeedSource {
      * @maxLength 255
      */
   authorName?: string | null;
+  /**
+     * Optional profile photo URL for this feed source.
+     * @maxLength 2048
+     */
+  imageUrl?: string | null;
   feedUrl: string;
   siteUrl?: string | null;
   cadence: FeedSourceCadence;
@@ -1592,6 +1634,11 @@ export interface CreateFeedSourceBody {
      * @maxLength 255
      */
   authorName?: string | null;
+  /**
+     * Existing Image Library URL to use as the feed source profile photo.
+     * @maxLength 2048
+     */
+  imageUrl?: string | null;
   /** @maxLength 2048 */
   feedUrl: string;
   /** @maxLength 2048 */
@@ -1627,6 +1674,11 @@ export interface UpdateFeedSourceBody {
      * @maxLength 255
      */
   authorName?: string | null;
+  /**
+     * Existing Image Library URL to use as the feed source profile photo.
+     * @maxLength 2048
+     */
+  imageUrl?: string | null;
   /** @maxLength 2048 */
   feedUrl?: string;
   /** @maxLength 2048 */
@@ -1702,11 +1754,55 @@ export const UpdateSiteSettingsBodyPalette = {
   pastel: 'pastel',
 } as const;
 
+export type UpdateSiteSettingsBodyLogoLayout = typeof UpdateSiteSettingsBodyLogoLayout[keyof typeof UpdateSiteSettingsBodyLogoLayout];
+
+
+export const UpdateSiteSettingsBodyLogoLayout = {
+  text_only: 'text_only',
+  icon_and_text: 'icon_and_text',
+  integrated_wordmark: 'integrated_wordmark',
+} as const;
+
+export type UpdateSiteSettingsBodyDefaultThemeMode = typeof UpdateSiteSettingsBodyDefaultThemeMode[keyof typeof UpdateSiteSettingsBodyDefaultThemeMode] | null;
+
+
+export const UpdateSiteSettingsBodyDefaultThemeMode = {
+  system: 'system',
+  light: 'light',
+  dark: 'dark',
+} as const;
+
 export interface UpdateSiteSettingsBody {
   theme?: UpdateSiteSettingsBodyTheme;
   palette?: UpdateSiteSettingsBodyPalette;
   /** @maxLength 255 */
   siteTitle?: string;
+  /** @maxLength 2048 */
+  logoUrl?: string | null;
+  /** @maxLength 2048 */
+  logoDarkUrl?: string | null;
+  logoLayout?: UpdateSiteSettingsBodyLogoLayout;
+  defaultThemeMode?: UpdateSiteSettingsBodyDefaultThemeMode;
+  /** @maxLength 64 */
+  colorPrimaryDark?: string | null;
+  /** @maxLength 64 */
+  colorPrimaryForegroundDark?: string | null;
+  /** @maxLength 64 */
+  colorSecondaryDark?: string | null;
+  /** @maxLength 64 */
+  colorSecondaryForegroundDark?: string | null;
+  /** @maxLength 64 */
+  colorAccentDark?: string | null;
+  /** @maxLength 64 */
+  colorAccentForegroundDark?: string | null;
+  /** @maxLength 64 */
+  colorMutedDark?: string | null;
+  /** @maxLength 64 */
+  colorMutedForegroundDark?: string | null;
+  /** @maxLength 64 */
+  colorDestructiveDark?: string | null;
+  /** @maxLength 64 */
+  colorDestructiveForegroundDark?: string | null;
   /** @maxLength 255 */
   heroHeading?: string;
   /** @maxLength 1000 */
@@ -2004,6 +2100,10 @@ page?: number;
 limit?: number;
 };
 
+export type UploadProfilePhotoBody = {
+  file: Blob;
+};
+
 export type DescribeImageBodyVendor = typeof DescribeImageBodyVendor[keyof typeof DescribeImageBodyVendor];
 
 
@@ -2051,6 +2151,10 @@ export type UploadMediaBody = {
 export type ListPendingPostsParams = {
 page?: number;
 limit?: number;
+};
+
+export type UploadFeedSourceProfilePhotoBody = {
+  file: Blob;
 };
 
 export type RefreshAllFeedSourcesParams = {

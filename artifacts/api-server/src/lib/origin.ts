@@ -27,15 +27,15 @@ export function getCanonicalOrigin(req?: Request): string {
 
   // 3. Request headers (dynamic)
   if (req) {
-    const forwardedProto = req.header("x-forwarded-proto");
-    const forwardedHost = req.header("x-forwarded-host");
+    const forwardedProto = typeof req.header === "function" ? req.header("x-forwarded-proto") : undefined;
+    const forwardedHost = typeof req.header === "function" ? req.header("x-forwarded-host") : undefined;
     const protocol = forwardedProto?.split(",")[0]?.trim() || req.protocol;
-    const host = forwardedHost?.split(",")[0]?.trim() || req.get("host");
+    const host = typeof req.get === "function" ? req.get("host") : undefined;
     if (protocol && host) {
       return `${protocol}://${host}`;
     }
   }
 
   // 4. Ultimate fallback
-  return "https://chrisfornesa.com";
+  return "https://platform.creatrweb.com";
 }

@@ -155,8 +155,8 @@
   --secondary: var(--bauhaus-blue);
   --secondary-foreground: var(--bauhaus-white);
 
-  --muted: var(--bauhaus-yellow);
-  --muted-foreground: var(--bauhaus-black);
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 70%;
 
   --accent: var(--bauhaus-yellow);
   --accent-foreground: var(--bauhaus-black);

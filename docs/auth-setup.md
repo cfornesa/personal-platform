@@ -60,6 +60,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 - Set `DB_SSL=true` when connecting to any hosted MySQL provider (Hostinger, PlanetScale, Railway, etc.).
 - Schema is applied automatically on startup via `ensureTables()` — no manual migration step required.
 - A single canonical MySQL database can be shared by both the deployed app and a local publishing workflow.
+- Profile photos are stored locally in MySQL-backed paths: member profile-only uploads use `profile_photo_assets`, while owner and feed-source profile photos use the reusable `media_assets` Image Library path.
 
 ## OAuth Callback URLs
 
@@ -113,8 +114,8 @@ npm run promote-owner --workspace=@workspace/scripts -- --id your-user-id
 
 ## Expected Behavior After Setup
 
-- Signed-in members can comment and edit their own comments.
-- The promoted owner can create, edit, and delete posts; manage categories, platforms, and feeds; and access all `/admin/*` routes.
+- Signed-in members can comment, edit their own comments, manage their profile, and upload a profile-only photo.
+- The promoted owner can create, edit, and delete posts; manage categories, platforms, feeds, Image Library-backed profile photos, and feed-source profile photos; and access all `/admin/*` routes.
 - The owner's post composer uses the rich editor with sanitized HTML storage, compact WYSIWYG controls, heading levels `H1`–`H6`, local image uploads, direct featured-image uploads, YouTube URL insertion, and owner-trusted `https:` iframe embeds.
 - The first uploaded content image becomes the featured image automatically unless the owner has manually selected a featured image; oversized uploads return a clear 413 error instead of a generic server failure.
 - Platform connections configured in `/admin/platforms` appear in the post composer's syndication target selector.

@@ -62,6 +62,131 @@ type PartialSettings = {
   colorDestructiveForeground?: string | null;
   siteTitle?: string | null;
   heroSubheading?: string | null;
+  logoUrl?: string | null;
+  logoDarkUrl?: string | null;
+  logoLayout?: string | null;
+  defaultThemeMode?: string | null;
+  colorPrimaryDark?: string | null;
+  colorPrimaryForegroundDark?: string | null;
+  colorSecondaryDark?: string | null;
+  colorSecondaryForegroundDark?: string | null;
+  colorAccentDark?: string | null;
+  colorAccentForegroundDark?: string | null;
+  colorMutedDark?: string | null;
+  colorMutedForegroundDark?: string | null;
+  colorDestructiveDark?: string | null;
+  colorDestructiveForegroundDark?: string | null;
+};
+
+const PALETTES: Record<string, Record<string, string>> = {
+  bauhaus: {
+    colorPrimaryDark: "0 100% 50%",
+    colorPrimaryForegroundDark: "0 0% 100%",
+    colorSecondaryDark: "240 100% 50%",
+    colorSecondaryForegroundDark: "0 0% 100%",
+    colorAccentDark: "60 100% 50%",
+    colorAccentForegroundDark: "0 0% 0%",
+    colorMutedDark: "0 0% 15%",
+    colorMutedForegroundDark: "0 0% 70%",
+    colorDestructiveDark: "0 100% 50%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
+  monochrome: {
+    colorPrimaryDark: "0 0% 90%",
+    colorPrimaryForegroundDark: "0 0% 10%",
+    colorSecondaryDark: "0 0% 70%",
+    colorSecondaryForegroundDark: "0 0% 10%",
+    colorAccentDark: "0 0% 20%",
+    colorAccentForegroundDark: "0 0% 95%",
+    colorMutedDark: "0 0% 15%",
+    colorMutedForegroundDark: "0 0% 80%",
+    colorDestructiveDark: "0 65% 55%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
+  newsprint: {
+    colorPrimaryDark: "40 25% 92%",
+    colorPrimaryForegroundDark: "0 0% 10%",
+    colorSecondaryDark: "0 70% 50%",
+    colorSecondaryForegroundDark: "0 0% 10%",
+    colorAccentDark: "40 50% 30%",
+    colorAccentForegroundDark: "40 25% 92%",
+    colorMutedDark: "0 0% 20%",
+    colorMutedForegroundDark: "40 25% 80%",
+    colorDestructiveDark: "0 75% 50%",
+    colorDestructiveForegroundDark: "0 0% 10%",
+  },
+  ocean: {
+    colorPrimaryDark: "205 90% 60%",
+    colorPrimaryForegroundDark: "215 50% 10%",
+    colorSecondaryDark: "190 80% 55%",
+    colorSecondaryForegroundDark: "215 50% 10%",
+    colorAccentDark: "175 80% 40%",
+    colorAccentForegroundDark: "200 50% 95%",
+    colorMutedDark: "215 35% 20%",
+    colorMutedForegroundDark: "200 40% 80%",
+    colorDestructiveDark: "0 80% 60%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
+  forest: {
+    colorPrimaryDark: "140 50% 55%",
+    colorPrimaryForegroundDark: "130 30% 10%",
+    colorSecondaryDark: "30 50% 55%",
+    colorSecondaryForegroundDark: "130 30% 10%",
+    colorAccentDark: "70 40% 25%",
+    colorAccentForegroundDark: "90 25% 92%",
+    colorMutedDark: "130 20% 20%",
+    colorMutedForegroundDark: "90 25% 80%",
+    colorDestructiveDark: "0 70% 55%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
+  sunset: {
+    colorPrimaryDark: "15 90% 65%",
+    colorPrimaryForegroundDark: "15 40% 10%",
+    colorSecondaryDark: "340 80% 65%",
+    colorSecondaryForegroundDark: "15 40% 10%",
+    colorAccentDark: "45 80% 35%",
+    colorAccentForegroundDark: "30 60% 92%",
+    colorMutedDark: "15 30% 22%",
+    colorMutedForegroundDark: "30 60% 85%",
+    colorDestructiveDark: "0 80% 55%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
+  sepia: {
+    colorPrimaryDark: "30 60% 65%",
+    colorPrimaryForegroundDark: "25 30% 10%",
+    colorSecondaryDark: "35 50% 60%",
+    colorSecondaryForegroundDark: "25 30% 10%",
+    colorAccentDark: "40 50% 25%",
+    colorAccentForegroundDark: "35 40% 88%",
+    colorMutedDark: "25 25% 18%",
+    colorMutedForegroundDark: "35 40% 80%",
+    colorDestructiveDark: "0 70% 50%",
+    colorDestructiveForegroundDark: "25 30% 10%",
+  },
+  "high-contrast": {
+    colorPrimaryDark: "240 100% 70%",
+    colorPrimaryForegroundDark: "0 0% 0%",
+    colorSecondaryDark: "280 100% 65%",
+    colorSecondaryForegroundDark: "0 0% 0%",
+    colorAccentDark: "50 100% 50%",
+    colorAccentForegroundDark: "0 0% 0%",
+    colorMutedDark: "0 0% 20%",
+    colorMutedForegroundDark: "0 0% 100%",
+    colorDestructiveDark: "0 100% 60%",
+    colorDestructiveForegroundDark: "0 0% 0%",
+  },
+  pastel: {
+    colorPrimaryDark: "330 50% 40%",
+    colorPrimaryForegroundDark: "320 30% 95%",
+    colorSecondaryDark: "200 45% 40%",
+    colorSecondaryForegroundDark: "320 30% 95%",
+    colorAccentDark: "60 40% 30%",
+    colorAccentForegroundDark: "320 30% 95%",
+    colorMutedDark: "280 15% 22%",
+    colorMutedForegroundDark: "320 20% 85%",
+    colorDestructiveDark: "0 50% 45%",
+    colorDestructiveForegroundDark: "0 0% 100%",
+  },
 };
 
 function buildThemeInjection(settings: PartialSettings): { themeId: string; css: string } {
@@ -77,6 +202,25 @@ function buildThemeInjection(settings: PartialSettings): { themeId: string; css:
     const fallback = (siteSettingsDefaults as Record<string, unknown>)[k];
     return typeof fallback === "string" ? fallback : "0 0% 0%";
   };
+
+  const activePalette = merged.palette ? PALETTES[merged.palette] : undefined;
+
+  const vDark = (darkKey: keyof PartialSettings, lightKey: keyof PartialSettings): string => {
+    const candidate = (merged as Record<string, unknown>)[darkKey];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      const safe = safeHsl(candidate);
+      if (safe !== null) return safe;
+    }
+    if (activePalette && activePalette[darkKey]) {
+      const stockDark = activePalette[darkKey];
+      if (stockDark) {
+        const safe = safeHsl(stockDark);
+        if (safe !== null) return safe;
+      }
+    }
+    return v(lightKey);
+  };
+
   const themeId = safeThemeId(merged.theme) ?? "bauhaus";
 
   const css = `:root {
@@ -106,18 +250,18 @@ function buildThemeInjection(settings: PartialSettings): { themeId: string; css:
   --card-foreground: ${v("colorForegroundDark")};
   --popover: ${v("colorBackgroundDark")};
   --popover-foreground: ${v("colorForegroundDark")};
-  --primary: ${v("colorPrimary")};
-  --primary-foreground: ${v("colorPrimaryForeground")};
-  --secondary: ${v("colorSecondary")};
-  --secondary-foreground: ${v("colorSecondaryForeground")};
-  --accent: ${v("colorAccent")};
-  --accent-foreground: ${v("colorAccentForeground")};
-  --muted: ${v("colorMuted")};
-  --muted-foreground: ${v("colorMutedForeground")};
-  --destructive: ${v("colorDestructive")};
-  --destructive-foreground: ${v("colorDestructiveForeground")};
+  --primary: ${vDark("colorPrimaryDark", "colorPrimary")};
+  --primary-foreground: ${vDark("colorPrimaryForegroundDark", "colorPrimaryForeground")};
+  --secondary: ${vDark("colorSecondaryDark", "colorSecondary")};
+  --secondary-foreground: ${vDark("colorSecondaryForegroundDark", "colorSecondaryForeground")};
+  --accent: ${vDark("colorAccentDark", "colorAccent")};
+  --accent-foreground: ${vDark("colorAccentForegroundDark", "colorAccentForeground")};
+  --muted: ${vDark("colorMutedDark", "colorMuted")};
+  --muted-foreground: ${vDark("colorMutedForegroundDark", "colorMutedForeground")};
+  --destructive: ${vDark("colorDestructiveDark", "colorDestructive")};
+  --destructive-foreground: ${vDark("colorDestructiveForegroundDark", "colorDestructiveForeground")};
   --input: ${v("colorBackgroundDark")};
-  --ring: ${v("colorSecondary")};
+  --ring: ${vDark("colorSecondaryDark", "colorSecondary")};
 }`;
 
   return { themeId, css };
@@ -172,6 +316,40 @@ function applyThemeToHtml(html: string, themeId: string, css: string, descriptio
   return html;
 }
 
+function buildGlobalScripts(canonicalOrigin: string, defaultThemeMode: string | null | undefined): string {
+  const mode = defaultThemeMode || "system";
+  return `
+  <script>
+    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
+  </script>
+  <script id="theme-mode-bootstrap">
+    (function() {
+      var stored = localStorage.getItem("theme-mode");
+      var defaultMode = ${JSON.stringify(mode)};
+      var isDark = false;
+      if (stored === "dark") {
+        isDark = true;
+      } else if (stored === "light") {
+        isDark = false;
+      } else {
+        if (defaultMode === "dark") {
+          isDark = true;
+        } else if (defaultMode === "light") {
+          isDark = false;
+        } else {
+          isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        }
+      }
+      if (isDark) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    })();
+  </script>
+  `;
+}
+
 export async function injectThemeData(
   req: Request,
   htmlPath: string,
@@ -184,11 +362,7 @@ export async function injectThemeData(
 
     const injectedHtml = applyThemeToHtml(html, themeId, css, settings.heroSubheading);
 
-    const globalScripts = `
-  <script>
-    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
-  </script>
-    `;
+    const globalScripts = buildGlobalScripts(canonicalOrigin, settings.defaultThemeMode);
 
     return injectedHtml.replace("</head>", `${globalScripts}\n  </head>`);
   } catch (err) {
@@ -377,11 +551,7 @@ export async function injectUserTheme(
     let html = readHtml(htmlPath);
     html = applyThemeToHtml(html, themeId, css, settings.heroSubheading);
     
-    const globalScripts = `
-  <script>
-    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
-  </script>
-    `;
+    const globalScripts = buildGlobalScripts(canonicalOrigin, settings.defaultThemeMode);
 
     if (userHasCustomization(user) && typeof user.id === "string") {
       const scopeKey = buildScopeKey(user.id);
@@ -462,11 +632,7 @@ export async function injectCategoryFeedLinks(
     const categoryDescription = `Posts in the ${cat.name} category`;
     html = applyThemeToHtml(html, themeId, css, categoryDescription);
     
-    const globalScripts = `
-  <script>
-    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
-  </script>
-    `;
+    const globalScripts = buildGlobalScripts(canonicalOrigin, settings.defaultThemeMode);
 
     const safeName = cat.name
       .replace(/&/g, "&amp;")
@@ -514,11 +680,7 @@ export async function injectPageFeedLinks(
     let html = readHtml(htmlPath);
     html = applyThemeToHtml(html, themeId, css, page.title);
     
-    const globalScripts = `
-  <script>
-    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(canonicalOrigin)};
-  </script>
-    `;
+    const globalScripts = buildGlobalScripts(canonicalOrigin, settings.defaultThemeMode);
 
     const safeTitle = page.title
       .replace(/&/g, "&amp;")
@@ -578,11 +740,7 @@ export async function injectPostMetadata(req: Request, htmlPath: string, postId:
     const { themeId, css } = buildThemeInjection(settings);
     html = applyThemeToHtml(html, themeId, css);
     
-    const globalScripts = `
-  <script>
-    window.__CANONICAL_ORIGIN__ = ${JSON.stringify(siteUrl)};
-  </script>
-    `;
+    const globalScripts = buildGlobalScripts(siteUrl, settings.defaultThemeMode);
 
     html = html.replace("</head>", `${metaTags}\n${globalScripts}\n  </head>`);
 

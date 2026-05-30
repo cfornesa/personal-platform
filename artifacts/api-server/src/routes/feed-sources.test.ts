@@ -1,4 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+
+vi.mock("@workspace/db", () => ({
+  db: {
+    select: vi.fn(),
+    selectDistinct: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  feedSourcesTable: {},
+  feedItemsSeenTable: {},
+  postsTable: {},
+  usersTable: {},
+  mediaAssetsTable: {},
+  eq: vi.fn(),
+  desc: vi.fn(),
+  and: vi.fn(),
+  ne: vi.fn(),
+  or: vi.fn(),
+  formatMysqlDateTime: vi.fn((value?: Date) => (value ?? new Date()).toISOString()),
+}));
+
+vi.mock("../middlewares/auth", () => ({
+  requireAuth: vi.fn((_req, _res, next) => next()),
+  requireOwner: vi.fn((_req, _res, next) => next()),
+}));
+
 import {
   ingestOneItem,
   isDuplicateKeyError,
@@ -8,6 +37,22 @@ import {
   type IngestDb,
 } from "./feed-sources";
 import { normalizeFeedItem } from "../lib/feed-ingest";
+
+const envPath = path.resolve(import.meta.dirname, "../../../../.env");
+if (fs.existsSync(envPath)) {
+  const content = fs.readFileSync(envPath, "utf8");
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim().replace(/^(['"])(.*)\1$/, "$2");
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 
 const baseSource = { id: 7, name: "Some Blog" };
 const normalized = normalizeFeedItem(

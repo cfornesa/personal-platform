@@ -23,7 +23,7 @@
 
 ## Hostinger MySQL
 
-- **Purpose:** Canonical relational datastore for posts, users, comments, reactions, and Auth.js session data across both local and deployed app runtimes.
+- **Purpose:** Canonical relational datastore for posts, users, comments, reactions, Auth.js session data, profile-only image bytes, reusable media metadata, and feed-source profile metadata across both local and deployed app runtimes.
 - **Sends data off-domain:** Yes, when the app connects remotely from a local machine to the hosted MySQL service.
 - **What breaks if it changes or is removed:** Publishing, comment writes, authentication persistence, and feed-backed content reads stop working until database connectivity is restored or reconfigured.
 - **Self-hosting alternative:** A self-managed MySQL-compatible database or reverting to self-hosted SQLite on infrastructure that guarantees persistent storage outside the deployment build artifact.
@@ -72,17 +72,25 @@
 
 ## Local Media Library
 
-- **Purpose:** Store uploaded and owner-imported post media in the MySQL-backed `media_assets` library for insertion into rich posts and direct featured-image selection.
+- **Purpose:** Store uploaded and owner-imported media in the MySQL-backed `media_assets` library for insertion into rich posts, direct featured-image selection, owner profile photos, and feed-source profile photos.
 - **Sends data off-domain:** Only when the owner imports an image from a URL; the app server fetches that owner-provided remote image once, then stores a local copy.
-- **What breaks if it changes or is removed:** The rich post editor can no longer accept direct media uploads or import remote images into reusable local media until replaced with another storage mechanism.
+- **What breaks if it changes or is removed:** The rich post editor can no longer accept direct media uploads or import remote images into reusable local media, and owner/feed-source profile photo uploads can no longer appear in the Image Library until replaced with another storage mechanism.
 - **Self-hosting alternative:** This is already the self-hosted path. The main future alternative is managed object storage.
 - **Operational note:** Direct image uploads and URL imports are capped at 8 MB per file. Oversized uploads/imports return clear errors rather than a generic server failure.
 
+## Profile-Only Photo Storage
+
+- **Purpose:** Store member profile photo uploads in the database-backed `profile_photo_assets` table and serve them from `/api/profile-photos/:fileName` without adding them to the owner-managed Image Library.
+- **Sends data off-domain:** No.
+- **What breaks if it changes or is removed:** Member profile photo uploads stop working, and member profiles fall back to whatever `users.image` value was already stored until a replacement storage path is implemented.
+- **Self-hosting alternative:** This is already the self-hosted path. A future alternative would be app-owned object storage with equivalent access controls.
+- **Operational note:** The same upload size limits and magic-byte validation used for media uploads apply to profile photo uploads.
+
 ## File Type Detection
 
-- **Purpose:** Verify uploaded file types from file signatures instead of trusting browser MIME headers.
+- **Purpose:** Verify uploaded file types from file signatures instead of trusting browser MIME headers for media uploads, owner/feed-source profile photos, and member profile-only photos.
 - **Sends data off-domain:** No.
-- **What breaks if it changes or is removed:** Upload validation would need another magic-byte inspection mechanism before media uploads can stay safely enabled.
+- **What breaks if it changes or is removed:** Upload validation would need another magic-byte inspection mechanism before media and profile-photo uploads can stay safely enabled.
 - **Self-hosting alternative:** A custom in-repo signature sniffer for the small set of supported media formats.
 
 ## Satori & Resvg
