@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 
 const {
   ImmersiveMetadataCard,
@@ -12,6 +14,59 @@ function setDocumentFlow(matches: boolean) {
     value: matches ? 390 : 1440,
   });
 }
+
+function StatefulImmersiveRouteShell({
+  requestFullscreen,
+  exitFullscreen,
+}: {
+  requestFullscreen?: (this: HTMLElement) => Promise<void>;
+  exitFullscreen?: () => Promise<void>;
+} = {}) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  if (requestFullscreen) {
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+  }
+  if (exitFullscreen) {
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+  }
+
+  return (
+    <ImmersiveRouteShell
+      title="Tornado"
+      onBack={() => undefined}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={() => setIsFullscreen((current) => !current)}
+      renderScene={({ fullscreen }) => (
+        <div data-testid={fullscreen ? "fullscreen-scene" : "scene"}>Scene</div>
+      )}
+      metadataCard={
+        <ImmersiveMetadataCard
+          title="Tornado"
+          description="Description"
+          fields={[{ label: "Engine", value: "P5.js" }]}
+        />
+      }
+    />
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
+  document.body.style.overscrollBehavior = "";
+  document.documentElement.style.overscrollBehavior = "";
+  document.body.style.touchAction = "";
+  document.documentElement.style.touchAction = "";
+  vi.restoreAllMocks();
+});
 
 describe("ImmersiveRouteShell", () => {
   it("renders a stacked shell with metadata and an expand control", () => {
@@ -39,7 +94,7 @@ describe("ImmersiveRouteShell", () => {
     expect(screen.getByText("Description")).toBeTruthy();
     expect(screen.getByLabelText("Expand immersive view")).toBeTruthy();
     expect(renderScene).toHaveBeenCalledWith({ fullscreen: false, isMobile: true });
-    expect(screen.getByTestId("scene").parentElement?.className).toContain("aspect-video");
+    expect(screen.getByTestId("scene").parentElement?.className).toContain("h-[40svh]");
   });
 
   it("keeps the stacked shell even on wide desktop viewports", () => {
@@ -92,6 +147,87 @@ describe("ImmersiveRouteShell", () => {
 
     expect(screen.getByLabelText("Return to gallery view")).toBeTruthy();
     expect(renderScene).toHaveBeenCalledWith({ fullscreen: true, isMobile: true });
+  });
+
+  it("requests native fullscreen when expanding first-party immersive mode", async () => {
+    const user = userEvent.setup();
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    const requestFullscreen = vi.fn(function request(this: HTMLElement) {
+      fullscreenElement = this;
+      return Promise.resolve();
+    });
+
+    render(<StatefulImmersiveRouteShell requestFullscreen={requestFullscreen} />);
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("fullscreen-scene")).toBeTruthy();
+    expect(screen.getByTestId("immersive-fullscreen-root").className).toContain("100dvh");
+  });
+
+  it("keeps CSS fullscreen focus mode when native fullscreen is rejected", async () => {
+    const user = userEvent.setup();
+    const requestFullscreen = vi.fn(() => Promise.reject(new Error("Rejected")));
+
+    render(<StatefulImmersiveRouteShell requestFullscreen={requestFullscreen} />);
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("fullscreen-scene")).toBeTruthy();
+    expect(screen.getByLabelText("Return to gallery view")).toBeTruthy();
+  });
+
+  it("syncs browser-driven native fullscreen exits back to the route state", async () => {
+    const user = userEvent.setup();
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    const requestFullscreen = vi.fn(function request(this: HTMLElement) {
+      fullscreenElement = this;
+      return Promise.resolve();
+    });
+
+    render(<StatefulImmersiveRouteShell requestFullscreen={requestFullscreen} />);
+    await user.click(screen.getByLabelText("Expand immersive view"));
+
+    fullscreenElement = null;
+    act(() => {
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+
+    expect(screen.getByLabelText("Expand immersive view")).toBeTruthy();
+    expect(screen.queryByTestId("fullscreen-scene")).toBeNull();
+  });
+
+  it("restores document scroll and touch styles after fullscreen mode exits", async () => {
+    const user = userEvent.setup();
+    document.body.style.overflow = "auto";
+    document.documentElement.style.overflow = "auto";
+    document.body.style.overscrollBehavior = "contain";
+    document.documentElement.style.overscrollBehavior = "contain";
+    document.body.style.touchAction = "pan-x";
+    document.documentElement.style.touchAction = "pan-y";
+
+    render(<StatefulImmersiveRouteShell />);
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.documentElement.style.overscrollBehavior).toBe("none");
+    expect(document.body.style.touchAction).toBe("none");
+
+    await user.click(screen.getByLabelText("Return to gallery view"));
+    expect(document.body.style.overflow).toBe("auto");
+    expect(document.documentElement.style.overflow).toBe("auto");
+    expect(document.body.style.overscrollBehavior).toBe("contain");
+    expect(document.documentElement.style.touchAction).toBe("pan-y");
   });
 
   it("hides the fullscreen control in static embed mode", () => {

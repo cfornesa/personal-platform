@@ -34,6 +34,69 @@ type ImmersiveRouteShellProps = {
   embedCodes?: EmbedCodes;
 };
 
+type ImmersiveStyleSnapshot = {
+  bodyOverflow: string;
+  htmlOverflow: string;
+  bodyOverscrollBehavior: string;
+  htmlOverscrollBehavior: string;
+  bodyTouchAction: string;
+  htmlTouchAction: string;
+};
+
+const IMMERSIVE_VIEWPORT_WIDTH_VAR = "--immersive-viewport-width";
+const IMMERSIVE_VIEWPORT_HEIGHT_VAR = "--immersive-viewport-height";
+
+function getFullscreenElement() {
+  return document.fullscreenElement;
+}
+
+function requestElementFullscreen(element: HTMLElement) {
+  if (!element.requestFullscreen) {
+    return Promise.reject(new Error("Fullscreen API is unavailable."));
+  }
+  return element.requestFullscreen();
+}
+
+function lockDocumentForImmersiveMode(): ImmersiveStyleSnapshot {
+  const snapshot = {
+    bodyOverflow: document.body.style.overflow,
+    htmlOverflow: document.documentElement.style.overflow,
+    bodyOverscrollBehavior: document.body.style.overscrollBehavior,
+    htmlOverscrollBehavior: document.documentElement.style.overscrollBehavior,
+    bodyTouchAction: document.body.style.touchAction,
+    htmlTouchAction: document.documentElement.style.touchAction,
+  };
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overscrollBehavior = "none";
+  document.documentElement.style.overscrollBehavior = "none";
+  document.body.style.touchAction = "none";
+  document.documentElement.style.touchAction = "none";
+  return snapshot;
+}
+
+function restoreImmersiveDocumentLock(snapshot: ImmersiveStyleSnapshot) {
+  document.body.style.overflow = snapshot.bodyOverflow;
+  document.documentElement.style.overflow = snapshot.htmlOverflow;
+  document.body.style.overscrollBehavior = snapshot.bodyOverscrollBehavior;
+  document.documentElement.style.overscrollBehavior = snapshot.htmlOverscrollBehavior;
+  document.body.style.touchAction = snapshot.bodyTouchAction;
+  document.documentElement.style.touchAction = snapshot.htmlTouchAction;
+}
+
+function syncImmersiveViewportVars(element: HTMLElement) {
+  const viewport = window.visualViewport;
+  const width = Math.round(viewport?.width ?? window.innerWidth);
+  const height = Math.round(viewport?.height ?? window.innerHeight);
+  element.style.setProperty(IMMERSIVE_VIEWPORT_WIDTH_VAR, `${Math.max(width, 1)}px`);
+  element.style.setProperty(IMMERSIVE_VIEWPORT_HEIGHT_VAR, `${Math.max(height, 1)}px`);
+}
+
+function clearImmersiveViewportVars(element: HTMLElement) {
+  element.style.removeProperty(IMMERSIVE_VIEWPORT_WIDTH_VAR);
+  element.style.removeProperty(IMMERSIVE_VIEWPORT_HEIGHT_VAR);
+}
+
 function FullscreenToggleButton({
   isFullscreen,
   onToggle,
@@ -129,43 +192,84 @@ export function ImmersiveRouteShell({
   canonicalHref,
   embedCodes,
 }: ImmersiveRouteShellProps) {
+  const routeContainerRef = useRef<HTMLDivElement>(null);
   const embedContainerRef = useRef<HTMLDivElement>(null);
+  const isFullscreenRef = useRef(isFullscreen);
   const [isEmbedFullscreen, setIsEmbedFullscreen] = useState(false);
 
   useEffect(() => {
-    if (!isEmbedMode) return;
+    isFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
+
+  useEffect(() => {
     function onFullscreenChange() {
-      setIsEmbedFullscreen(!!document.fullscreenElement);
+      const fullscreenElement = getFullscreenElement();
+      setIsEmbedFullscreen(!!fullscreenElement && fullscreenElement === embedContainerRef.current);
+
+      if (
+        !isEmbedMode
+        && !fullscreenElement
+        && isFullscreenRef.current
+      ) {
+        onToggleFullscreen();
+      }
     }
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, [isEmbedMode]);
+  }, [isEmbedMode, onToggleFullscreen]);
 
   useEffect(() => {
-    if (!isEmbedMode) return;
-    const prevBody = document.body.style.overflow;
-    const prevHtml = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevBody;
-      document.documentElement.style.overflow = prevHtml;
-    };
-  }, [isEmbedMode]);
+    if (!isEmbedMode && !isFullscreen) return;
+    const snapshot = lockDocumentForImmersiveMode();
+    return () => restoreImmersiveDocumentLock(snapshot);
+  }, [isEmbedMode, isFullscreen]);
 
   useEffect(() => {
     if (!isFullscreen || isEmbedMode) {
       return;
     }
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    const target = routeContainerRef.current;
+    if (!target) {
+      return;
+    }
+    const targetElement = target;
+    function onFullscreenChange() {
+      syncImmersiveViewportVars(targetElement);
+    }
+    syncImmersiveViewportVars(targetElement);
+    window.addEventListener("resize", onFullscreenChange);
+    window.visualViewport?.addEventListener("resize", onFullscreenChange);
+    window.visualViewport?.addEventListener("scroll", onFullscreenChange);
     return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.removeEventListener("resize", onFullscreenChange);
+      window.visualViewport?.removeEventListener("resize", onFullscreenChange);
+      window.visualViewport?.removeEventListener("scroll", onFullscreenChange);
+      clearImmersiveViewportVars(targetElement);
     };
   }, [isFullscreen, isEmbedMode]);
+
+  async function handleRouteFullscreenToggle() {
+    if (isFullscreen) {
+      if (getFullscreenElement()) {
+        try {
+          await document.exitFullscreen();
+        } catch {
+          if (isFullscreenRef.current) {
+            onToggleFullscreen();
+          }
+        }
+        return;
+      }
+      onToggleFullscreen();
+      return;
+    }
+
+    const target = routeContainerRef.current;
+    if (target) {
+      void requestElementFullscreen(target).catch(() => undefined);
+    }
+    onToggleFullscreen();
+  }
 
   if (isEmbedMode) {
     function handleEmbedToggle() {
@@ -209,14 +313,17 @@ export function ImmersiveRouteShell({
   }
 
   return (
-    <>
+    <div ref={routeContainerRef} className="bg-[#050b16]">
       {isFullscreen ? (
-        <div className="fixed inset-0 z-[120] bg-[#050b16]">
+        <div
+          data-testid="immersive-fullscreen-root"
+          className="fixed inset-0 z-[120] h-[var(--immersive-viewport-height,100dvh)] w-[var(--immersive-viewport-width,100vw)] overflow-hidden bg-[#050b16] [overscroll-behavior:none] [touch-action:none]"
+        >
           <div className="relative h-full w-full overflow-hidden">
             {renderScene({ fullscreen: true, isMobile: true })}
             <div className="pointer-events-none absolute inset-0 z-10">
-              <div className="pointer-events-auto absolute bottom-4 right-4 z-[130]">
-                <FullscreenToggleButton isFullscreen onToggle={onToggleFullscreen} />
+              <div className="pointer-events-auto absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-[130]">
+                <FullscreenToggleButton isFullscreen onToggle={handleRouteFullscreenToggle} />
               </div>
             </div>
           </div>
@@ -248,11 +355,11 @@ export function ImmersiveRouteShell({
         <main className="pb-6">
           <section className="relative shrink-0 border-b border-white/10">
             <div className={cn("w-full overflow-hidden", sceneHeightClassName)}>
-              {renderScene({ fullscreen: false, isMobile: true })}
+              {!isFullscreen && renderScene({ fullscreen: false, isMobile: true })}
             </div>
             <div className="pointer-events-none absolute inset-0 z-10">
               <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
-                <FullscreenToggleButton isFullscreen={false} onToggle={onToggleFullscreen} />
+                <FullscreenToggleButton isFullscreen={false} onToggle={handleRouteFullscreenToggle} />
               </div>
             </div>
           </section>
@@ -267,6 +374,6 @@ export function ImmersiveRouteShell({
           <section className="shrink-0 bg-white/[0.03] p-5">{metadataCard}</section>
         </main>
       </div>
-    </>
+    </div>
   );
 }

@@ -119,7 +119,7 @@ function ImmersiveImageStage({
     animate();
 
     function handleResize() {
-      fitMountedGalleryCamera(shell, stageEl);
+      fitMountedGalleryCamera(shell, stageEl, undefined, false);
     }
     window.addEventListener("resize", handleResize);
     const observer = new ResizeObserver(handleResize);

@@ -34,6 +34,25 @@ options regardless of session context. -->
 
 ---
 
+## 2026-05-30 — Codebase State Audit For Documentation Recovery
+
+### Decisions Confirmed
+- The current documentation recovery pass starts with an evidence ledger rather than directly rewriting every public-facing markdown file.
+- `docs/codebase-state-audit.md` is the source document for follow-up markdown updates about recent unrecorded changes.
+- The audit includes recent committed changes through `146a235` and the current uncommitted immersive-route changes present in the working tree.
+- This pass is documentation-only: no runtime behavior, schema, URL structure, syndication target, or auth endpoint is changed.
+
+### Follow-up Documentation Targets
+- Update public docs from `docs/codebase-state-audit.md`, especially `README.md`, `replit.md`, and `docs/auth-setup.md`.
+- Add dated records for media library expansion, expanded AI vendors, immersive image/piece/exhibit routes, exhibit schema/API/UI, canonical origin behavior, and expanded POSSE platform support.
+- Propose corresponding `MEMORY.md` entries before writing them.
+
+### Unresolved Checkpoints Entering Next Session
+- [ ] Confirm whether the current uncommitted immersive fullscreen/resize changes should be documented as stable behavior or only as working-tree state.
+- [ ] Correct the stale comment in `artifacts/api-server/src/lib/origin.ts` that says the hardcoded fallback is `platform.creatrweb.com`; the code currently returns `https://chrisfornesa.com`.
+
+---
+
 ## 2026-05-08 — Documentation Realignment Pass
 
 ### Decisions Confirmed

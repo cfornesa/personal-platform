@@ -204,9 +204,10 @@ export function fitMountedGalleryCamera(
   shell: MountedGalleryShell,
   stage: HTMLDivElement,
   framingMultiplier = shell.profile.framingMultiplier ?? 1.28,
+  resetCamera = true,
 ) {
-  const width = stage.clientWidth || window.innerWidth;
-  const height = stage.clientHeight || window.innerHeight;
+  const width = stage.clientWidth >= 50 ? stage.clientWidth : window.innerWidth;
+  const height = stage.clientHeight >= 50 ? stage.clientHeight : window.innerHeight;
   shell.camera.aspect = width / Math.max(height, 1);
   shell.camera.updateProjectionMatrix();
   shell.renderer.setSize(width, height, false);
@@ -225,17 +226,20 @@ export function fitMountedGalleryCamera(
   const distanceForWidth = (shell.layout.width / 2) / Math.tan(horizontalFov / 2);
   const distance = Math.max(distanceForHeight, distanceForWidth) * framingMultiplier;
 
-  shell.camera.position.set(
-    WALL_CENTER.x,
-    WALL_CENTER.y + (shell.profile.cameraYOffset ?? 0.2),
-    WALL_CENTER.z + distance,
-  );
-  shell.camera.lookAt(target);
-  shell.controls.target.copy(target);
   shell.controls.minDistance = Math.max(1.25, distance * 0.34);
   shell.controls.maxDistance = Math.max(18, distance * 5.5);
   shell.controls.minPolarAngle = 0.01;
   shell.controls.maxPolarAngle = Math.PI - 0.01;
+
+  if (resetCamera) {
+    shell.camera.position.set(
+      WALL_CENTER.x,
+      WALL_CENTER.y + (shell.profile.cameraYOffset ?? 0.2),
+      WALL_CENTER.z + distance,
+    );
+    shell.camera.lookAt(target);
+    shell.controls.target.copy(target);
+  }
   shell.controls.update();
 }
 
@@ -733,9 +737,10 @@ export function createMultiFrameExhibitWall(
 export function fitMultiFrameExhibitCamera(
   shell: ExhibitWallShell,
   stage: HTMLDivElement,
+  resetCamera = true,
 ) {
-  const width = stage.clientWidth || window.innerWidth;
-  const height = stage.clientHeight || window.innerHeight;
+  const width = stage.clientWidth >= 50 ? stage.clientWidth : window.innerWidth;
+  const height = stage.clientHeight >= 50 ? stage.clientHeight : window.innerHeight;
   shell.camera.aspect = width / Math.max(height, 1);
   shell.camera.updateProjectionMatrix();
   shell.renderer.setSize(width, height, false);
@@ -751,13 +756,16 @@ export function fitMultiFrameExhibitCamera(
   const distanceForWidth = (totalWidth / 2) / Math.tan(horizontalFov / 2);
   const distance = Math.max(distanceForHeight, distanceForWidth) * 1.45;
 
-  shell.camera.position.set(0, gridCenterY + 0.2, WALL_CENTER.z + distance);
-  shell.camera.lookAt(target);
-  shell.controls.target.copy(target);
   shell.controls.minDistance = Math.max(1.2, distance * 0.25);
   shell.controls.maxDistance = Math.max(20, distance * 6);
   shell.controls.minAzimuthAngle = -Math.PI;
   shell.controls.maxAzimuthAngle = Math.PI;
+
+  if (resetCamera) {
+    shell.camera.position.set(0, gridCenterY + 0.2, WALL_CENTER.z + distance);
+    shell.camera.lookAt(target);
+    shell.controls.target.copy(target);
+  }
   shell.controls.update();
 }
 

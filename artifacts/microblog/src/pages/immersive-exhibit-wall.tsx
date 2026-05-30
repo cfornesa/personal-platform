@@ -637,7 +637,7 @@ function ExhibitWallStage({
     animate();
 
     function handleResize() {
-      fitMultiFrameExhibitCamera(shell, safeStage);
+      fitMultiFrameExhibitCamera(shell, safeStage, false);
       reconcileActiveSlots(true);
     }
     const resizeObserver = new ResizeObserver(handleResize);
