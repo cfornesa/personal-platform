@@ -38,6 +38,12 @@ export type WallItem =
 
 function useReturnToPrevious() {
   return () => {
+    const params = new URLSearchParams(window.location.search);
+    const postId = params.get("post");
+    if (postId && !isNaN(Number(postId))) {
+      window.location.href = `/posts/${postId}`;
+      return;
+    }
     if (window.history.length > 1) {
       window.history.back();
       return;
@@ -959,7 +965,7 @@ export default function ImmersiveExhibitWallPage() {
 
   const origin = window.location.origin;
   const safeName = exhibitName.replace(/"/g, "&quot;");
-  const plainEmbedCode = `<iframe src="${origin}/immersive/exhibits/${slug}?embed=1&static=1" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="${safeName}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  const plainEmbedCode = `<iframe src="${origin}/immersive/exhibits/${slug}?embed=1" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="${safeName}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
   const galleryEmbedCode = buildExhibitGalleryEmbedHtml(slug, exhibitName, origin);
   const canonicalHref = `${origin}/immersive/exhibits/${slug}`;
 

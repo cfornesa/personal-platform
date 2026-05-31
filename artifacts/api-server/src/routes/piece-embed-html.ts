@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { artPiecesTable, artPieceVersionsTable, db, eq } from "@workspace/db";
 import { z } from "zod";
-import { buildStaticImmersiveThreeEmbedHtml } from "./piece-embed-html.helpers";
 import { getCanonicalOrigin } from "../lib/origin";
 
 const router = Router();
@@ -49,9 +48,6 @@ router.get("/embed/pieces/:id", async (req: Request, res: Response) => {
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     const origin = getCanonicalOrigin(req);
-    if (version.engine === "three") {
-      return res.send(buildStaticImmersiveThreeEmbedHtml(piece.title, piece.id, version.id, origin));
-    }
     return res.send(pieceEmbedHtml(piece.title, version.engine, version.generatedCode, version.htmlCode, version.cssCode, origin));
   } catch (err) {
     console.error("Failed to serve piece embed:", err);
@@ -67,8 +63,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-
-function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: string | null | undefined, cssCode: string | null | undefined, origin: string): string {
+export function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: string | null | undefined, cssCode: string | null | undefined, origin: string): string {
   const safeTitle = escapeHtml(title);
   const safeCss = cssCode || "";
   const safeHtml = htmlCode || "";
@@ -91,32 +86,89 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
   let engineInit = "";
 
   if (engine === "three") {
+    // All imports are explicit URLs so the importmap in libraryScripts.three handles
+    // bare-specifier resolution for OrbitControls' own `import { ... } from 'three'`.
     engineInit = `
       import * as THREE from '${origin}/api/runtimes/three/three.module.min.js';
+      import { OrbitControls } from '${origin}/api/runtimes/three-examples/jsm/controls/OrbitControls.js';
       window.THREE = THREE;
-      
-      const state = { scene: null, camera: null, objects: [] };
+
+      const state = { scene: null, camera: null, renderer: null, objects: [] };
+      let controls = null;
+      let rafIds = [];
+
+      function getMount() {
+        return document.getElementById('container')
+          || document.getElementById('canvas-container')
+          || document.getElementById('sketch-container')
+          || document.body.querySelector(':scope > div')
+          || document.body;
+      }
+
+      function getManagedCanvas() {
+        const mount = getMount();
+        let canvas = mount.querySelector('canvas');
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          mount.appendChild(canvas);
+        }
+        canvas.style.cssText = 'display:block;width:100%;height:100%;';
+        const cw = mount.clientWidth  || window.innerWidth  || 1280;
+        const ch = mount.clientHeight || window.innerHeight || 720;
+        if (cw > 0) canvas.width  = cw;
+        if (ch > 0) canvas.height = ch;
+        return canvas;
+      }
+
+      function reassertCanvas(canvas) {
+        if (!canvas) return;
+        canvas.style.setProperty('display',     'block',  'important');
+        canvas.style.setProperty('visibility',  'visible','important');
+        canvas.style.setProperty('opacity',     '1',      'important');
+        canvas.style.setProperty('position',    'static', 'important');
+        canvas.style.setProperty('inset',       'auto',   'important');
+        canvas.style.setProperty('z-index',     'auto',   'important');
+        canvas.style.setProperty('width',       '100%',   'important');
+        canvas.style.setProperty('height',      '100%',   'important');
+        if (!canvas.width)  canvas.width  = canvas.parentElement?.clientWidth  || window.innerWidth  || 1280;
+        if (!canvas.height) canvas.height = canvas.parentElement?.clientHeight || window.innerHeight || 720;
+      }
+
+      function normalizeThreeCanvases() {
+        const mount = getMount();
+        const managed = getManagedCanvas();
+        if (managed.parentElement !== mount) mount.appendChild(managed);
+        reassertCanvas(managed);
+        document.querySelectorAll('canvas').forEach(function(c) {
+          if (c !== managed) {
+            c.style.setProperty('display', 'none', 'important');
+            c.setAttribute('aria-hidden', 'true');
+          }
+        });
+        return managed;
+      }
 
       function autoFit() {
         if (!state.scene || !state.camera) return;
-        state.objects.forEach(obj => {
-          if (obj.geometry && !obj.geometry.boundingBox) {
-            try { obj.geometry.computeBoundingBox(); } catch(e) {}
+        const box = new THREE.Box3();
+        state.scene.traverse(function(obj) {
+          if (obj.isHelper || obj.isLight || obj.isCamera) return;
+          if ((obj.isMesh || obj.isLine || obj.isPoints) && obj.geometry) {
+            obj.geometry.computeBoundingBox?.();
+            if (obj.geometry.boundingBox)
+              box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
           }
         });
-        const box = new THREE.Box3().setFromObject(state.scene);
         if (box.isEmpty()) return;
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        const size = new THREE.Vector3();
-        box.getSize(size);
+        const center = new THREE.Vector3(); box.getCenter(center);
+        const size = new THREE.Vector3();   box.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
         const fov = state.camera.fov * (Math.PI / 180);
-        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 2.2;
-        if (state.camera.aspect < 1) cameraZ /= state.camera.aspect;
-        state.camera.position.set(center.x + cameraZ, center.y + cameraZ * 0.4, center.z + cameraZ);
+        const dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 2.2;
+        state.camera.position.set(center.x + dist, center.y + dist * 0.4, center.z + dist);
         state.camera.lookAt(center);
         state.camera.updateMatrixWorld(true);
+        if (controls) { controls.target.copy(center); controls.update(); }
       }
 
       function startFrame(handler) {
@@ -125,10 +177,67 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
           frameCount++;
           handler(frameCount);
           if (frameCount === 15) autoFit();
-          requestAnimationFrame(tick);
+          const id = requestAnimationFrame(tick);
+          rafIds.push(id);
         }
-        requestAnimationFrame(tick);
+        const id = requestAnimationFrame(tick);
+        rafIds.push(id);
+        return function() { rafIds.forEach(cancelAnimationFrame); rafIds = []; };
       }
+
+      const instrumentedThree = { ...THREE };
+      const OriginalScene = THREE.Scene;
+      instrumentedThree.Scene = class extends OriginalScene {
+        constructor() { super(); state.scene = this; }
+        add(...objs) {
+          objs.forEach(function(o) { if (o.geometry) state.objects.push(o); });
+          return super.add(...objs);
+        }
+      };
+      const OriginalPerspectiveCamera = THREE.PerspectiveCamera;
+      instrumentedThree.PerspectiveCamera = class extends OriginalPerspectiveCamera {
+        constructor(...args) { super(...args); state.camera = this; }
+      };
+      if ('OrthographicCamera' in THREE) {
+        const OriginalOrthographicCamera = THREE.OrthographicCamera;
+        instrumentedThree.OrthographicCamera = class extends OriginalOrthographicCamera {
+          constructor(...args) { super(...args); state.camera = this; }
+        };
+      }
+      const OriginalWebGLRenderer = THREE.WebGLRenderer;
+      instrumentedThree.WebGLRenderer = class extends OriginalWebGLRenderer {
+        constructor(params) {
+          super({ ...(params || {}), canvas: getManagedCanvas() });
+          state.renderer = this;
+
+          // Prevent renderer.setSize() from writing pixel values into CSS.
+          const _origSetSize = this.setSize.bind(this);
+          this.setSize = function(w, h, _updateStyle) {
+            return _origSetSize(w, h, false);
+          };
+
+          // Track scene/camera on every render call and keep canvas contained.
+          const _origRender = this.render.bind(this);
+          this.render = function(sc, cam) {
+            if (sc)  state.scene  = sc;
+            if (cam) state.camera = cam;
+            normalizeThreeCanvases();
+            return _origRender(sc, cam);
+          };
+
+          // Wrap setAnimationLoop so canvas is normalized inside each frame.
+          if (typeof this.setAnimationLoop === 'function') {
+            const _origLoop = this.setAnimationLoop.bind(this);
+            this.setAnimationLoop = function(callback) {
+              return _origLoop(callback ? function(time, frame) {
+                normalizeThreeCanvases();
+                return callback(time, frame);
+              } : callback);
+            };
+          }
+        }
+      };
+      window.THREE = instrumentedThree;
 
       try {
         const codeContent = ${safeCode};
@@ -140,27 +249,39 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
           sketchFactory = window.sketch;
         }
         if (typeof sketchFactory === 'function') {
-          let canvas = document.querySelector('canvas');
-          if (!canvas) {
-            canvas = document.createElement('canvas');
-            const container = document.getElementById('container') || document.getElementById('canvas-container') || document.getElementById('sketch-container') || document.body;
-            container.appendChild(canvas);
-          }
-          canvas.style.width = '100%'; canvas.style.height = '100%'; canvas.style.display = 'block';
-
-          const instrumentedThree = { ...THREE };
-          const originalScene = THREE.Scene;
-          instrumentedThree.Scene = class extends originalScene { 
-            constructor() { super(); state.scene = this; } 
-            add(...objs) {
-              objs.forEach(obj => { if (obj.geometry) state.objects.push(obj); });
-              return super.add(...objs);
-            }
-          };
-          const originalCamera = THREE.PerspectiveCamera;
-          instrumentedThree.PerspectiveCamera = class extends originalCamera { constructor(...args) { super(...args); state.camera = this; } };
-
+          const canvas = getManagedCanvas();
           sketchFactory({ THREE: instrumentedThree, canvas, startFrame });
+          normalizeThreeCanvases();
+
+          if (state.camera && canvas) {
+            controls = new OrbitControls(state.camera, canvas);
+            controls.enableDamping = true;
+            controls.enablePan = true;
+
+            // Seed orbit target from camera look direction so first frame is
+            // never blank even when autoFit finds an empty scene.
+            const _camDir = new THREE.Vector3();
+            state.camera.getWorldDirection(_camDir);
+            const _camLen = state.camera.position.length();
+            controls.target
+              .copy(state.camera.position)
+              .addScaledVector(_camDir, Math.max(_camLen * 0.8, 3));
+
+            // autoFit runs with controls defined so it can override target
+            // with the actual scene centre when geometry is present.
+            autoFit();
+            controls.update();
+
+            function animateControls() {
+              const id = requestAnimationFrame(animateControls);
+              rafIds.push(id);
+              controls.update();
+              if (state.renderer && state.scene && state.camera)
+                state.renderer.render(state.scene, state.camera);
+            }
+            animateControls();
+          }
+
           window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
         } else {
           throw new Error('Sketch factory not found. Ensure your JS assigns a function to window.sketch.');
@@ -168,43 +289,32 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
       } catch(err) {
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
+
+      // Release GPU resources when PostContent destroys this iframe.
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) return;
+        rafIds.forEach(cancelAnimationFrame);
+        rafIds = [];
+        controls?.dispose();
+        state.renderer?.dispose?.();
+      });
     `;
   } else if (engine === "c2") {
     engineInit = `
+      let rafId = 0;
+      let stopFrame = function() { cancelAnimationFrame(rafId); };
+
       function startFrame(handler) {
         let frameCount = 0;
         function tick() {
           frameCount++;
           handler(frameCount);
-          requestAnimationFrame(tick);
+          rafId = requestAnimationFrame(tick);
         }
-        requestAnimationFrame(tick);
+        rafId = requestAnimationFrame(tick);
+        return stopFrame;
       }
 
-      try {
-        const codeContent = ${safeCode};
-        let sketchFactory;
-        try {
-          sketchFactory = new Function('return (' + codeContent + ')')();
-        } catch(e) {
-          new Function(codeContent)();
-          sketchFactory = window.sketch;
-        }
-
-        if (typeof sketchFactory === 'function') {
-          const canvas = document.querySelector('canvas') || document.createElement('canvas');
-          if (!canvas.parentNode) document.body.appendChild(canvas);
-          sketchFactory({ c2: window.c2, canvas, startFrame });
-          window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
-        } else {
-          throw new Error('Sketch factory not found. Ensure your JS assigns a function to window.sketch.');
-        }
-      } catch(err) {
-        window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
-      }
-    `;
-  } else {
-    engineInit = `
       try {
         const codeContent = ${safeCode};
         let sketchFactory;
@@ -217,7 +327,17 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
 
         if (typeof sketchFactory === 'function') {
           const container = document.getElementById('canvas-container') || document.getElementById('sketch-container') || document.body;
-          new p5(sketchFactory, container);
+          let canvas = container.querySelector('canvas');
+          if (!canvas) {
+            canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+          }
+          canvas.style.display = 'block';
+          const _cw = container.clientWidth  || window.innerWidth  || 1280;
+          const _ch = container.clientHeight || window.innerHeight || 720;
+          if (_cw > 0) canvas.width  = _cw;
+          if (_ch > 0) canvas.height = _ch;
+          sketchFactory({ c2: window.c2, canvas, startFrame });
           window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
         } else {
           throw new Error('Sketch factory not found. Ensure your JS assigns a function to window.sketch.');
@@ -225,16 +345,61 @@ function pieceEmbedHtml(title: string, engine: string, code: string, htmlCode: s
       } catch(err) {
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) stopFrame();
+      });
+    `;
+  } else {
+    // p5 and any future engines
+    engineInit = `
+      let p5Instance = null;
+
+      try {
+        const codeContent = ${safeCode};
+        let sketchFactory;
+        try {
+          sketchFactory = new Function('return (' + codeContent + ')')();
+        } catch(e) {
+          new Function(codeContent)();
+          sketchFactory = window.sketch;
+        }
+
+        if (typeof sketchFactory === 'function') {
+          const container = document.getElementById('canvas-container') || document.getElementById('sketch-container') || document.body;
+          function init() {
+            if (window.innerHeight > 0) {
+              p5Instance = new p5(sketchFactory, container);
+              window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
+            } else {
+              setTimeout(init, 16);
+            }
+          }
+          init();
+        } else {
+          throw new Error('Sketch factory not found. Ensure your JS assigns a function to window.sketch.');
+        }
+      } catch(err) {
+        window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
+      }
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+          try { p5Instance?.remove(); } catch(e) {}
+          p5Instance = null;
+        }
+      });
     `;
   }
 
-  const scriptTag = engine === "three" 
+  const scriptTag = engine === "three"
     ? `<script type="module">${engineInit}</script>`
     : `<script type="text/javascript">${engineInit}</script>`;
 
+  const defaultContainerId = engine === "three" ? "container" : "canvas-container";
   const bodyContent = htmlCode !== null && htmlCode !== undefined
     ? `${safeHtml}\n${scriptTag}`
-    : `<div id="canvas-container"></div>\n${scriptTag}`;
+    : `<div id="${defaultContainerId}"></div>\n${scriptTag}`;
 
   return `<!DOCTYPE html>
 <html lang="en">

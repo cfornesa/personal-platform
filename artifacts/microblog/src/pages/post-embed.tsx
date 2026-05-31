@@ -64,7 +64,7 @@ export default function PostEmbed() {
           </div>
         </div>
 
-        <PostContent content={post.content} contentFormat={post.contentFormat} />
+        <PostContent content={post.content} contentFormat={post.contentFormat} postId={post.id} />
         
         <div className="pt-2 flex items-center justify-between border-t border-border mt-4">
           <a 

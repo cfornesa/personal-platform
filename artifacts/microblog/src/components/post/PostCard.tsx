@@ -25,7 +25,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
 import { useEnabledPlatformConnections } from "@/hooks/use-enabled-platform-connections";
@@ -73,6 +73,57 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(post.content);
+
+  const [isVisible, setIsVisible] = useState(isDetail);
+  const [cardHeight, setCardHeight] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isDetail) {
+      setIsVisible(true);
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          const rect = el.getBoundingClientRect();
+          if (rect.height > 0) {
+            setCardHeight(rect.height);
+          }
+        }
+      },
+      {
+        rootMargin: "350px 0px",
+      }
+    );
+
+    observer.observe(el);
+    return () => {
+      observer.unobserve(el);
+    };
+  }, [isDetail]);
+
+  useEffect(() => {
+    if (isDetail || !isVisible) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        if (height > 0) {
+          setCardHeight(height);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isVisible, isDetail]);
+
 
   const mergePost = (base: Post, patch: Partial<Post>): Post => ({
     ...base,
@@ -434,6 +485,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
                 <img
                   src={(displayPost as DisplayPostWithFeaturedImageMeta).featuredImageUrl!}
                   alt=""
+                  loading="lazy"
                   className="w-full rounded-xl border border-border object-cover"
                 />
               </ImmersiveMediaFrame>
@@ -447,6 +499,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
               content={displayPost.content}
               contentFormat={displayPost.contentFormat}
               highlightQuery={highlightQuery}
+              postId={displayPost.id}
             />
           </>
         )}
@@ -538,15 +591,39 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
   );
 
   if (isDetail) {
-    return <div className="border-b border-border bg-card">{content}</div>;
+    return <div ref={containerRef} className="border-b border-border bg-card">{content}</div>;
+  }
+
+  if (!isVisible) {
+    return (
+      <div
+        ref={containerRef}
+        className="border-b border-border bg-card relative overflow-hidden block"
+        style={{ height: cardHeight ? `${cardHeight}px` : "140px" }}
+      >
+        <div className="flex gap-4 p-5 sm:p-6 animate-pulse opacity-20">
+          <div className="h-10 w-10 rounded-full bg-muted shrink-0" />
+          <div className="flex-1 space-y-3 py-1">
+            <div className="h-4 bg-muted rounded w-1/4" />
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded" />
+              <div className="h-4 bg-muted rounded w-5/6" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className={`border-b border-border bg-card relative overflow-hidden block ${isEditing ? "" : "cursor-pointer"}`}>
+    <div
+      ref={containerRef}
+      className={`border-b border-border bg-card relative overflow-hidden block ${isEditing ? "" : "cursor-pointer"}`}
+    >
       {!isEditing ? (
-      <Link href={`/posts/${displayPost.id}`} className="absolute inset-0 z-0">
-        <span className="sr-only">View post</span>
-      </Link>
+        <Link href={`/posts/${displayPost.id}`} className="absolute inset-0 z-0">
+          <span className="sr-only">View post</span>
+        </Link>
       ) : null}
       {content}
     </div>

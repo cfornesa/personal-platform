@@ -13,10 +13,9 @@ export default function PieceEmbed() {
   const searchParams = new URLSearchParams(window.location.search);
   const version = searchParams.get("version");
   const versionId = version ? Number(version) : undefined;
-  const staticImmersiveHref = useMemo(() => {
+  const immersiveEmbedHref = useMemo(() => {
     const href = new URL(buildImmersivePieceHref(pieceId, versionId), window.location.origin);
     href.searchParams.set("embed", "1");
-    href.searchParams.set("static", "1");
     return href.toString();
   }, [pieceId, versionId]);
 
@@ -38,8 +37,8 @@ export default function PieceEmbed() {
     if (data?.version.engine !== "three") {
       return;
     }
-    window.location.replace(staticImmersiveHref);
-  }, [data?.version.engine, staticImmersiveHref]);
+    window.location.replace(immersiveEmbedHref);
+  }, [data?.version.engine, immersiveEmbedHref]);
 
   if (isLoading) {
     return <div className="min-h-screen animate-pulse bg-transparent" />;

@@ -27,6 +27,12 @@ import {
 function useReturnToPrevious() {
   const [, setLocation] = useLocation();
   return () => {
+    const params = new URLSearchParams(window.location.search);
+    const postId = params.get("post");
+    if (postId && !isNaN(Number(postId))) {
+      setLocation(`/posts/${postId}`);
+      return;
+    }
     if (window.history.length > 1) {
       window.history.back();
       return;

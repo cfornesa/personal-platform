@@ -154,7 +154,7 @@ function buildPieceIframeAttrs(piece: {
 
 function buildExhibitIframeAttrs(exhibit: { slug: string; name: string }) {
   return {
-    src: `/immersive/exhibits/${exhibit.slug}?embed=1&static=1`,
+    src: `/immersive/exhibits/${exhibit.slug}?embed=1`,
     width: "100%",
     height: "480",
     title: exhibit.name,

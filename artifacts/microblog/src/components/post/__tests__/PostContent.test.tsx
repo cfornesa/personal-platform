@@ -1,8 +1,33 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { PostContent } from "../PostContent";
 
+class MockIntersectionObserver {
+  static instances: MockIntersectionObserver[] = [];
+  readonly observe = vi.fn();
+  readonly unobserve = vi.fn();
+  readonly disconnect = vi.fn();
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    MockIntersectionObserver.instances.push(this);
+  }
+
+  emit(target: Element, isIntersecting: boolean) {
+    this.callback(
+      [{ target, isIntersecting } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+}
+
 describe("PostContent", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    MockIntersectionObserver.instances = [];
+    (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver;
+  });
+
   it("renders plain content as text without executing tags", () => {
     const malicious = "Hello <script>window.__pwned = true;</script> world";
     const { container } = render(
@@ -34,19 +59,66 @@ describe("PostContent", () => {
     expect(trigger?.getAttribute("aria-label")).toContain("immersive");
   });
 
-  it("adds an immersive trigger to embedded art pieces", () => {
+  it("lazy mounts and unloads embedded art piece iframes by viewport visibility", () => {
     const { container } = render(
       <PostContent
         content='<iframe src="/embed/pieces/7?version=9" title="Orbit Bloom"></iframe>'
         contentFormat="html"
       />,
     );
-    const trigger = container.querySelector('a[href="/immersive/pieces/7?version=9"]');
+    const trigger = container.querySelector('a[href$="/immersive/pieces/7?version=9"]');
     expect(trigger).not.toBeNull();
-    const frame = container.querySelector('iframe[src="/embed/pieces/7?version=9"]');
-    expect(frame?.getAttribute("width")).toBe("100%");
-    expect(frame?.getAttribute("height")).toBeNull();
-    expect(frame?.getAttribute("style")).toContain("aspect-ratio:16 / 9");
+    expect(container.querySelector("iframe")).toBeNull();
+
+    const wrapper = container.querySelector<HTMLElement>("[data-lazy-iframe-wrapper='true']");
+    expect(wrapper).not.toBeNull();
+    MockIntersectionObserver.instances[0].emit(wrapper!, true);
+    expect(container.querySelector("iframe")?.getAttribute("src")).toContain("/embed/pieces/7?version=9");
+
+    MockIntersectionObserver.instances[0].emit(wrapper!, false);
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(wrapper?.textContent).toContain("Loading");
+  });
+
+  it("lazy mounts every visible art piece iframe without a manual preview click", () => {
+    const { container } = render(
+      <PostContent
+        content={[
+          '<iframe src="/embed/pieces/7?version=9" title="Orbit Bloom"></iframe>',
+          '<iframe src="/embed/pieces/8?version=10" title="Wave Study"></iframe>',
+        ].join("")}
+        contentFormat="html"
+      />,
+    );
+
+    const wrappers = container.querySelectorAll<HTMLElement>("[data-lazy-iframe-wrapper='true']");
+    expect(wrappers).toHaveLength(2);
+    expect(container.querySelectorAll("iframe")).toHaveLength(0);
+
+    MockIntersectionObserver.instances[0].emit(wrappers[0], true);
+    MockIntersectionObserver.instances[0].emit(wrappers[1], true);
+    const frames = container.querySelectorAll("iframe");
+    expect(frames).toHaveLength(2);
+    expect(frames[0].getAttribute("src")).toContain("/embed/pieces/7?version=9");
+    expect(frames[1].getAttribute("src")).toContain("/embed/pieces/8?version=10");
+  });
+
+  it("normalizes exhibit embeds to full interactive lazy iframes in post content", () => {
+    const { container } = render(
+      <PostContent
+        content='<iframe src="/immersive/exhibits/orbit-room?embed=1&static=1" title="Orbit Room"></iframe>'
+        contentFormat="html"
+      />,
+    );
+    const trigger = container.querySelector('a[href$="/immersive/exhibits/orbit-room"]');
+    expect(trigger).not.toBeNull();
+    const wrapper = container.querySelector<HTMLElement>("[data-lazy-iframe-wrapper='true']");
+    expect(wrapper).not.toBeNull();
+
+    MockIntersectionObserver.instances[0].emit(wrapper!, true);
+    const frameSrc = container.querySelector("iframe")?.getAttribute("src") ?? "";
+    expect(frameSrc).toContain("/immersive/exhibits/orbit-room?embed=1");
+    expect(frameSrc).not.toContain("static=1");
   });
 
   it("preserves whitespace in plain content", () => {

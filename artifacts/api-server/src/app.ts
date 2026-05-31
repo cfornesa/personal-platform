@@ -36,12 +36,17 @@ const threePath = fs.existsSync(path.join(nmRoot, "three", "build"))
   ? path.join(nmRoot, "three", "build")
   : path.resolve(__dirname, "../../..", "artifacts/microblog/node_modules/three/build");
 
+const threeExamplesPath = fs.existsSync(path.join(nmRoot, "three", "examples"))
+  ? path.join(nmRoot, "three", "examples")
+  : path.resolve(__dirname, "../../..", "artifacts/microblog/node_modules/three/examples");
+
 const c2Path = fs.existsSync(path.join(nmRoot, "c2.js", "dist"))
   ? path.join(nmRoot, "c2.js", "dist")
   : path.resolve(__dirname, "../../..", "artifacts/microblog/node_modules/c2.js/dist");
 
 app.use("/api/runtimes/p5", express.static(p5Path));
 app.use("/api/runtimes/three", express.static(threePath));
+app.use("/api/runtimes/three-examples", express.static(threeExamplesPath));
 app.use("/api/runtimes/c2", express.static(c2Path));
 
 app.use(
