@@ -34,8 +34,19 @@ export const IMAGE_DESCRIPTION_VENDORS = [
 ] as const;
 export type ImageDescriptionVendor = (typeof IMAGE_DESCRIPTION_VENDORS)[number];
 
-export const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe", "deepseek"] as const;
+export const PIECE_GENERATION_VENDORS = ["opencode-zen", "opencode-go", "google", "mistral", "mistral-vibe", "deepseek"] as const;
 export type PieceGenerationVendor = (typeof PIECE_GENERATION_VENDORS)[number];
+
+export const ENDPOINT_KIND_OPTIONS = [
+  { id: "chat-completions", label: "OpenAI Chat Completions" },
+  { id: "anthropic-messages", label: "Anthropic Messages" },
+  { id: "openai-responses", label: "OpenAI Responses" },
+  { id: "google-generate", label: "Google Generate Content" },
+] as const;
+export type EndpointKind = (typeof ENDPOINT_KIND_OPTIONS)[number]["id"];
+
+export const OPENCODE_GO_ENDPOINT_KINDS: readonly EndpointKind[] = ["chat-completions", "anthropic-messages"];
+export const OPENCODE_ZEN_ENDPOINT_KINDS: readonly EndpointKind[] = ["chat-completions", "openai-responses", "anthropic-messages", "google-generate"];
 
 export function isTextGenerationVendor(vendor: string): vendor is TextGenerationVendor {
   return (TEXT_GENERATION_VENDORS as readonly string[]).includes(vendor);
@@ -49,27 +60,39 @@ export function isImageDescriptionVendor(vendor: string): vendor is ImageDescrip
   return (IMAGE_DESCRIPTION_VENDORS as readonly string[]).includes(vendor);
 }
 
-export type SafeAiVendorSetting = {
+export type SafeVendorKey = {
   vendor: AiVendor;
   vendorLabel: string;
+  hasKey: boolean;
+};
+
+export type SafeAiVendorProfile = {
+  id: number;
+  vendor: AiVendor;
+  vendorLabel: string;
+  profileName: string;
   enabled: boolean;
-  configured: boolean;
+  configured: boolean; // vendor has a key AND profile has a model
   model: string | null;
+  endpointKind: string | null;
 };
 
 export type SafeAiSettingsResponse = {
   availableVendors: readonly { id: AiVendor; label: string }[];
-  settings: SafeAiVendorSetting[];
-  preferredArtPieceVendor: AiVendor | null;
-  preferredVendorTextImprove: AiVendor | null;
-  preferredVendorAltText: AiVendor | null;
+  vendorKeys: SafeVendorKey[];
+  profiles: SafeAiVendorProfile[];
+  preferredArtPieceProfileId: number | null;
+  preferredTextImproveProfileId: number | null;
+  preferredAltTextProfileId: number | null;
 };
 
-export type NormalizedAiVendorSettingsInput = {
+export type NormalizedAiProfileInput = {
+  id?: number;
   vendor: AiVendor;
+  profileName: string;
   enabled?: boolean;
   model?: string;
-  apiKey?: string;
+  endpointKind?: string | null;
 };
 
 export function isAiVendor(value: string): value is AiVendor {
@@ -93,18 +116,29 @@ export function normalizeOptionalString(value: string | null | undefined): strin
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function normalizeAiVendorSettingsInput(input: {
+export function normalizeAiProfileInput(input: {
+  id?: number;
   vendor: string;
+  profileName: string;
   enabled?: boolean;
   model?: string;
-  apiKey?: string;
-}): NormalizedAiVendorSettingsInput | null {
+  endpointKind?: string | null;
+}): NormalizedAiProfileInput | null {
   const vendor = input.vendor.trim();
   if (!isAiVendor(vendor)) {
     return null;
   }
 
-  const normalized: NormalizedAiVendorSettingsInput = { vendor };
+  const profileName = normalizeOptionalString(input.profileName);
+  if (!profileName) {
+    return null;
+  }
+
+  const normalized: NormalizedAiProfileInput = { vendor, profileName };
+
+  if (typeof input.id === "number") {
+    normalized.id = input.id;
+  }
 
   if (typeof input.enabled === "boolean") {
     normalized.enabled = input.enabled;
@@ -115,66 +149,74 @@ export function normalizeAiVendorSettingsInput(input: {
     normalized.model = model;
   }
 
-  const apiKey = normalizeOptionalString(input.apiKey);
-  if (apiKey) {
-    normalized.apiKey = apiKey;
-  }
+  const endpointKind = normalizeOptionalString(input.endpointKind);
+  normalized.endpointKind = endpointKind;
 
   return normalized;
 }
 
-export function validateAiVendorSettingsInput(input: {
+export function validateAiProfileInput(input: {
   vendorLabel: string;
+  profileName: string;
   enabled: boolean;
+  hasVendorKey: boolean;
   model: string | null;
-  encryptedApiKey: string | null;
 }): string | null {
   if (!input.enabled) {
     return null;
   }
   if (!input.model) {
-    return `${input.vendorLabel} requires a model before it can be enabled`;
+    return `${input.vendorLabel} profile "${input.profileName}" requires a model before it can be enabled`;
   }
-  if (!input.encryptedApiKey) {
-    return `${input.vendorLabel} requires an API key before it can be enabled`;
+  if (!input.hasVendorKey) {
+    return `${input.vendorLabel} requires an API key. Add one in the "AI API Keys" section above.`;
   }
   return null;
 }
 
-function normalizePreferredVendor(value?: string | null): AiVendor | null {
-  return typeof value === "string" && isAiVendor(value) ? value : null;
-}
-
 export function toSafeAiSettingsResponse(
-  rows: Array<Pick<UserAiVendorSettings, "vendor" | "enabled" | "model" | "encryptedApiKey">>,
-  preferredArtPieceVendor?: string | null,
-  preferredVendorTextImprove?: string | null,
-  preferredVendorAltText?: string | null,
+  rows: Array<Pick<UserAiVendorSettings, "id" | "vendor" | "profileName" | "endpointKind" | "enabled" | "model">>,
+  vendorKeyMap: Map<AiVendor, boolean>,
+  preferredArtPieceProfileId?: number | null,
+  preferredTextImproveProfileId?: number | null,
+  preferredAltTextProfileId?: number | null,
 ): SafeAiSettingsResponse {
-  const byVendor = new Map<string, Pick<UserAiVendorSettings, "vendor" | "enabled" | "model" | "encryptedApiKey">>();
-  for (const row of rows) {
-    byVendor.set(row.vendor, row);
-  }
-
   return {
     availableVendors: AI_VENDOR_OPTIONS,
-    settings: AI_VENDOR_OPTIONS.map((option) => {
-      const row = byVendor.get(option.id);
-      const model = normalizeOptionalString(row?.model);
-      const enabled = row?.enabled === 1;
-      const configured = Boolean(model && normalizeOptionalString(row?.encryptedApiKey));
+    vendorKeys: AI_VENDOR_OPTIONS.map((option) => ({
+      vendor: option.id,
+      vendorLabel: option.label,
+      hasKey: vendorKeyMap.get(option.id) ?? false,
+    })),
+    profiles: rows
+      .filter((row) => {
+        if (!isAiVendor(row.vendor)) {
+          console.warn(`[ai-settings] Skipping profile with unknown vendor slug "${row.vendor}" (id=${row.id})`);
+          return false;
+        }
+        return true;
+      })
+      .map((row) => {
+        const model = normalizeOptionalString(row.model);
+        const enabled = row.enabled === 1;
+        const hasKey = vendorKeyMap.get(row.vendor as AiVendor) ?? false;
+        const configured = hasKey && Boolean(model);
+        const vendorLabel = getAiVendorLabel(row.vendor) ?? row.vendor;
 
-      return {
-        vendor: option.id,
-        vendorLabel: option.label,
-        enabled,
-        configured,
-        model,
-      };
-    }),
-    preferredArtPieceVendor: normalizePreferredVendor(preferredArtPieceVendor),
-    preferredVendorTextImprove: normalizePreferredVendor(preferredVendorTextImprove),
-    preferredVendorAltText: normalizePreferredVendor(preferredVendorAltText),
+        return {
+          id: row.id,
+          vendor: row.vendor as AiVendor,
+          vendorLabel,
+          profileName: row.profileName,
+          enabled,
+          configured,
+          model,
+          endpointKind: normalizeOptionalString(row.endpointKind),
+        };
+      }),
+    preferredArtPieceProfileId: preferredArtPieceProfileId ?? null,
+    preferredTextImproveProfileId: preferredTextImproveProfileId ?? null,
+    preferredAltTextProfileId: preferredAltTextProfileId ?? null,
   };
 }
 

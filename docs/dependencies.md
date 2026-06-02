@@ -106,6 +106,7 @@
 - **Sends data off-domain:** Yes, when the owner explicitly triggers AI from the post editor or the interactive-piece generation flow.
 - **What breaks if it changes or is removed:** AI-assisted rewriting and AI-assisted interactive piece generation for users who selected OpenCode Zen stop working until the adapter is updated or the user switches vendors; the rest of the app remains functional.
 - **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
+- **Routing note:** Uses Opencode Zen's compatibility endpoints by model family. Chat-completions art-piece requests, including `minimax-m3-free`, use the gateway-safe 4096-token cap and send `thinking: { type: "disabled" }` plus an explicit no-`<think>` system directive so Zen returns final HTML/CSS/JS instead of reasoning-only output. Piece-generation provider requests share the 20-minute generation budget and retry retryable upstream failures inside the existing attempt budget.
 
 ## OpenCode Go
 
@@ -113,6 +114,7 @@
 - **Sends data off-domain:** Yes, when the owner explicitly triggers AI from the post editor or the interactive-piece generation flow.
 - **What breaks if it changes or is removed:** AI-assisted rewriting and AI-assisted interactive piece generation for users who selected OpenCode Go stop working until the adapter is updated or the user switches vendors; the rest of the app remains functional.
 - **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
+- **Routing note:** Uses Opencode Go's compatibility endpoints by model family. `minimax-m3` routes to `/zen/go/v1/chat/completions` and may also be saved as `opencode-go/minimax-m3`. Chat-completions art-piece requests use the gateway-safe 4096-token cap and send `thinking: { type: "disabled" }` plus an explicit no-`<think>` system directive. Piece-generation provider requests share the 20-minute generation budget and retry retryable upstream failures inside the existing attempt budget.
 
 ## Google Gemini API
 
@@ -219,7 +221,7 @@
 - **Sends data off-domain:** Yes, to `api.deepseek.com` when the owner explicitly triggers AI text or interactive-piece generation.
 - **What breaks if it changes or is removed:** DeepSeek-backed AI text rewriting and AI-assisted interactive piece generation stop working until the adapter is updated or the owner switches vendors; local posts, saved pieces, feeds, exports, and other AI vendors remain functional.
 - **Self-hosting alternative:** Not permitted for this product direction. Hosted-provider-only.
-- **Routing note:** Uses DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` endpoint with `Authorization: Bearer {key}`. The Admin AI UI defaults to `deepseek-v4-flash`; `deepseek-v4-pro` can be entered manually. For validated piece generation, DeepSeek requests use non-thinking mode and a larger code-generation output budget; ordinary text rewriting keeps the normal chat-completions request shape. DeepSeek is intentionally excluded from image alt-text generation until official DeepSeek API image-input support is documented or live-verified.
+- **Routing note:** Uses DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` endpoint with `Authorization: Bearer {key}`. The Admin AI UI defaults to `deepseek-v4-flash`; `deepseek-v4-pro` can be entered manually. For validated piece generation, DeepSeek requests use non-thinking mode so the provider is more likely to return final HTML/CSS/JS blocks instead of reasoning-only content. Piece-generation provider requests share the 20-minute generation budget across up to 5 attempts; DeepSeek chat completions use the expanded 12,000-token output budget while ordinary text rewriting keeps the normal chat-completions request shape. DeepSeek is intentionally excluded from image alt-text generation until official DeepSeek API image-input support is documented or live-verified.
 
 ## turndown
 

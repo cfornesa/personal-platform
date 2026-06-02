@@ -23,7 +23,7 @@ const DISALLOWED_CODE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
 
 const MAX_ART_PIECE_ELEMENTS = 24;
 const MAX_ART_PIECE_ATTEMPTS = 5;
-const ART_PIECE_TIMEOUT_MS = 600_000;
+const ART_PIECE_TIMEOUT_MS = 1_200_000;
 const VALIDATED_DRAFT_TTL_MS = 10 * 60 * 1000;
 
 const colorSchema = z

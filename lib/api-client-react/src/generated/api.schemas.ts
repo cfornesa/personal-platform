@@ -700,10 +700,10 @@ export interface AiVendorOption {
   label: string;
 }
 
-export type MyAiVendorSettingVendor = typeof MyAiVendorSettingVendor[keyof typeof MyAiVendorSettingVendor];
+export type MyAiVendorProfileVendor = typeof MyAiVendorProfileVendor[keyof typeof MyAiVendorProfileVendor];
 
 
-export const MyAiVendorSettingVendor = {
+export const MyAiVendorProfileVendor = {
   openrouter: 'openrouter',
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
@@ -713,18 +713,31 @@ export const MyAiVendorSettingVendor = {
   deepseek: 'deepseek',
 } as const;
 
-export interface MyAiVendorSetting {
-  vendor: MyAiVendorSettingVendor;
+export type MyAiVendorProfileEndpointKind = typeof MyAiVendorProfileEndpointKind[keyof typeof MyAiVendorProfileEndpointKind] | null;
+
+
+export const MyAiVendorProfileEndpointKind = {
+  'chat-completions': 'chat-completions',
+  'anthropic-messages': 'anthropic-messages',
+  'openai-responses': 'openai-responses',
+  'google-generate': 'google-generate',
+} as const;
+
+export interface MyAiVendorProfile {
+  id: number;
+  vendor: MyAiVendorProfileVendor;
   vendorLabel: string;
+  profileName: string;
   enabled: boolean;
   configured: boolean;
   model?: string | null;
+  endpointKind: MyAiVendorProfileEndpointKind;
 }
 
-export type MyAiSettingsPreferredArtPieceVendor = typeof MyAiSettingsPreferredArtPieceVendor[keyof typeof MyAiSettingsPreferredArtPieceVendor] | null;
+export type MyAiVendorKeyVendor = typeof MyAiVendorKeyVendor[keyof typeof MyAiVendorKeyVendor];
 
 
-export const MyAiSettingsPreferredArtPieceVendor = {
+export const MyAiVendorKeyVendor = {
   openrouter: 'openrouter',
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
@@ -734,44 +747,25 @@ export const MyAiSettingsPreferredArtPieceVendor = {
   deepseek: 'deepseek',
 } as const;
 
-export type MyAiSettingsPreferredVendorTextImprove = typeof MyAiSettingsPreferredVendorTextImprove[keyof typeof MyAiSettingsPreferredVendorTextImprove] | null;
-
-
-export const MyAiSettingsPreferredVendorTextImprove = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
-export type MyAiSettingsPreferredVendorAltText = typeof MyAiSettingsPreferredVendorAltText[keyof typeof MyAiSettingsPreferredVendorAltText] | null;
-
-
-export const MyAiSettingsPreferredVendorAltText = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
+export interface MyAiVendorKey {
+  vendor: MyAiVendorKeyVendor;
+  vendorLabel: string;
+  hasKey: boolean;
+}
 
 export interface MyAiSettings {
   availableVendors: AiVendorOption[];
-  settings: MyAiVendorSetting[];
-  preferredArtPieceVendor: MyAiSettingsPreferredArtPieceVendor;
-  preferredVendorTextImprove: MyAiSettingsPreferredVendorTextImprove;
-  preferredVendorAltText: MyAiSettingsPreferredVendorAltText;
+  vendorKeys: MyAiVendorKey[];
+  profiles: MyAiVendorProfile[];
+  preferredArtPieceProfileId: number | null;
+  preferredTextImproveProfileId: number | null;
+  preferredAltTextProfileId: number | null;
 }
 
-export type UpdateMyAiVendorSettingBodyVendor = typeof UpdateMyAiVendorSettingBodyVendor[keyof typeof UpdateMyAiVendorSettingBodyVendor];
+export type UpdateMyAiProfileBodyVendor = typeof UpdateMyAiProfileBodyVendor[keyof typeof UpdateMyAiProfileBodyVendor];
 
 
-export const UpdateMyAiVendorSettingBodyVendor = {
+export const UpdateMyAiProfileBodyVendor = {
   openrouter: 'openrouter',
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
@@ -781,85 +775,69 @@ export const UpdateMyAiVendorSettingBodyVendor = {
   deepseek: 'deepseek',
 } as const;
 
-export interface UpdateMyAiVendorSettingBody {
-  vendor: UpdateMyAiVendorSettingBodyVendor;
+export type UpdateMyAiProfileBodyEndpointKind = typeof UpdateMyAiProfileBodyEndpointKind[keyof typeof UpdateMyAiProfileBodyEndpointKind] | null;
+
+
+export const UpdateMyAiProfileBodyEndpointKind = {
+  'chat-completions': 'chat-completions',
+  'anthropic-messages': 'anthropic-messages',
+  'openai-responses': 'openai-responses',
+  'google-generate': 'google-generate',
+} as const;
+
+export interface UpdateMyAiProfileBody {
+  /** Omit to create a new profile; include to update an existing one */
+  id?: number;
+  vendor: UpdateMyAiProfileBodyVendor;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  profileName: string;
   enabled?: boolean;
   /**
      * @minLength 1
      * @maxLength 191
      */
   model?: string;
+  endpointKind?: UpdateMyAiProfileBodyEndpointKind;
+}
+
+export type UpdateMyAiVendorKeyBodyVendor = typeof UpdateMyAiVendorKeyBodyVendor[keyof typeof UpdateMyAiVendorKeyBodyVendor];
+
+
+export const UpdateMyAiVendorKeyBodyVendor = {
+  openrouter: 'openrouter',
+  'opencode-zen': 'opencode-zen',
+  'opencode-go': 'opencode-go',
+  google: 'google',
+  mistral: 'mistral',
+  'mistral-vibe': 'mistral-vibe',
+  deepseek: 'deepseek',
+} as const;
+
+export interface UpdateMyAiVendorKeyBody {
+  vendor: UpdateMyAiVendorKeyBodyVendor;
   /**
      * @minLength 1
      * @maxLength 4096
      */
-  apiKey?: string;
+  apiKey: string;
 }
 
-export type UpdateMyAiSettingsBodyPreferredArtPieceVendor = typeof UpdateMyAiSettingsBodyPreferredArtPieceVendor[keyof typeof UpdateMyAiSettingsBodyPreferredArtPieceVendor] | null;
-
-
-export const UpdateMyAiSettingsBodyPreferredArtPieceVendor = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
-export type UpdateMyAiSettingsBodyPreferredVendorTextImprove = typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove[keyof typeof UpdateMyAiSettingsBodyPreferredVendorTextImprove] | null;
-
-
-export const UpdateMyAiSettingsBodyPreferredVendorTextImprove = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
-export type UpdateMyAiSettingsBodyPreferredVendorAltText = typeof UpdateMyAiSettingsBodyPreferredVendorAltText[keyof typeof UpdateMyAiSettingsBodyPreferredVendorAltText] | null;
-
-
-export const UpdateMyAiSettingsBodyPreferredVendorAltText = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
 /**
- * Owner AI settings for all supported vendors. Each vendor keeps its own
-enabled flag, model slug, and encrypted API key so the editor can
-switch vendors without re-entering credentials.
+ * Owner AI settings. vendorKeys stores one API key per vendor; profiles
+are independent of keys and share the vendor key automatically.
 
  */
 export interface UpdateMyAiSettingsBody {
-  settings: UpdateMyAiVendorSettingBody[];
-  preferredArtPieceVendor?: UpdateMyAiSettingsBodyPreferredArtPieceVendor;
-  preferredVendorTextImprove?: UpdateMyAiSettingsBodyPreferredVendorTextImprove;
-  preferredVendorAltText?: UpdateMyAiSettingsBodyPreferredVendorAltText;
+  vendorKeys?: UpdateMyAiVendorKeyBody[];
+  profiles?: UpdateMyAiProfileBody[];
+  deletedProfileIds?: number[];
+  preferredArtPieceProfileId?: number | null;
+  preferredTextImproveProfileId?: number | null;
+  preferredAltTextProfileId?: number | null;
 }
-
-export type ProcessAiTextBodyVendor = typeof ProcessAiTextBodyVendor[keyof typeof ProcessAiTextBodyVendor];
-
-
-export const ProcessAiTextBodyVendor = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
 
 export type ProcessAiTextBodyMode = typeof ProcessAiTextBodyMode[keyof typeof ProcessAiTextBodyMode];
 
@@ -872,7 +850,7 @@ export const ProcessAiTextBodyMode = {
 export interface ProcessAiTextBody {
   /** @maxLength 40000 */
   content: string;
-  vendor: ProcessAiTextBodyVendor;
+  profileId: number;
   mode?: ProcessAiTextBodyMode;
 }
 
@@ -893,6 +871,7 @@ export interface ProcessAiTextResponse {
   text: string;
   vendor: ProcessAiTextResponseVendor;
   vendorLabel: string;
+  profileName: string;
   model: string;
 }
 
@@ -995,19 +974,6 @@ export const GenerateArtPieceBodyEngine = {
   three: 'three',
 } as const;
 
-export type GenerateArtPieceBodyVendor = typeof GenerateArtPieceBodyVendor[keyof typeof GenerateArtPieceBodyVendor];
-
-
-export const GenerateArtPieceBodyVendor = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
 export interface GenerateArtPieceBody {
   /**
      * @minLength 1
@@ -1015,7 +981,8 @@ export interface GenerateArtPieceBody {
      */
   prompt: string;
   engine: GenerateArtPieceBodyEngine;
-  vendor: GenerateArtPieceBodyVendor;
+  /** ID of the AI vendor profile to use for generation */
+  profileId: number;
 }
 
 export type GeneratedArtPieceDraftEngine = typeof GeneratedArtPieceDraftEngine[keyof typeof GeneratedArtPieceDraftEngine];
@@ -2104,22 +2071,9 @@ export type UploadProfilePhotoBody = {
   file: Blob;
 };
 
-export type DescribeImageBodyVendor = typeof DescribeImageBodyVendor[keyof typeof DescribeImageBodyVendor];
-
-
-export const DescribeImageBodyVendor = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
 export type DescribeImageBody = {
   imageUrl: string;
-  vendor: DescribeImageBodyVendor;
+  profileId: number;
   /** Optional existing alt text to use as context for refinement */
   existingAltText?: string;
 };

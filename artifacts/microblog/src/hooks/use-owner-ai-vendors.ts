@@ -1,7 +1,6 @@
 import {
   getGetMyAiSettingsQueryKey,
   useGetMyAiSettings,
-  type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -22,20 +21,29 @@ const IMAGE_DESCRIPTION_VENDORS = [
   "mistral",
   "mistral-vibe",
 ] as const;
-const PIECE_GENERATION_VENDORS = ["google", "mistral", "mistral-vibe", "deepseek"] as const;
+const PIECE_GENERATION_VENDORS = ["opencode-zen", "opencode-go", "google", "mistral", "mistral-vibe", "deepseek"] as const;
 
-function filterVendors(
-  vendors: Array<{ id: ProcessAiTextBodyVendor; label: string }>,
+export type AiProfile = {
+  id: number;
+  vendor: string;
+  vendorLabel: string;
+  profileName: string;
+  label: string;
+};
+
+function filterProfiles(
+  profiles: AiProfile[],
   allowlist: readonly string[],
-) {
-  return vendors.filter((v) => allowlist.includes(v.id));
+): AiProfile[] {
+  return profiles.filter((p) => allowlist.includes(p.vendor));
 }
 
-function keepPreferredVendor(
-  vendor: ProcessAiTextBodyVendor | null | undefined,
-  vendors: Array<{ id: ProcessAiTextBodyVendor; label: string }>,
-) {
-  return vendor && vendors.some((v) => v.id === vendor) ? vendor : null;
+function keepPreferredProfile(
+  profileId: number | null | undefined,
+  profiles: AiProfile[],
+): number | null {
+  if (profileId == null) return null;
+  return profiles.some((p) => p.id === profileId) ? profileId : null;
 }
 
 export function useOwnerAiVendors() {
@@ -47,38 +55,42 @@ export function useOwnerAiVendors() {
     },
   });
 
-  const aiVendors = (aiSettings.data?.settings ?? [])
-    .filter((setting) => setting.enabled && setting.configured)
-    .map((setting) => ({
-      id: setting.vendor as ProcessAiTextBodyVendor,
-      label: setting.vendorLabel,
+  // configured = vendor has a saved key AND profile has a model (server derives this)
+  const allProfiles: AiProfile[] = (aiSettings.data?.profiles ?? [])
+    .filter((p) => p.enabled && p.configured && Boolean(p.model))
+    .map((p) => ({
+      id: p.id,
+      vendor: p.vendor,
+      vendorLabel: p.vendorLabel,
+      profileName: p.profileName,
+      label: p.profileName,
     }));
 
-  const textVendors = filterVendors(aiVendors, TEXT_GENERATION_VENDORS);
-  const imageDescriptionVendors = filterVendors(aiVendors, IMAGE_DESCRIPTION_VENDORS);
-  const pieceVendors = filterVendors(aiVendors, PIECE_GENERATION_VENDORS);
+  const textProfiles = filterProfiles(allProfiles, TEXT_GENERATION_VENDORS);
+  const imageDescriptionProfiles = filterProfiles(allProfiles, IMAGE_DESCRIPTION_VENDORS);
+  const pieceProfiles = filterProfiles(allProfiles, PIECE_GENERATION_VENDORS);
 
-  const preferredArtPieceVendor = keepPreferredVendor(
-    aiSettings.data?.preferredArtPieceVendor as ProcessAiTextBodyVendor | null | undefined,
-    pieceVendors,
+  const preferredArtPieceProfileId = keepPreferredProfile(
+    aiSettings.data?.preferredArtPieceProfileId,
+    pieceProfiles,
   );
-  const preferredVendorTextImprove = keepPreferredVendor(
-    aiSettings.data?.preferredVendorTextImprove as ProcessAiTextBodyVendor | null | undefined,
-    textVendors,
+  const preferredTextImproveProfileId = keepPreferredProfile(
+    aiSettings.data?.preferredTextImproveProfileId,
+    textProfiles,
   );
-  const preferredVendorAltText = keepPreferredVendor(
-    aiSettings.data?.preferredVendorAltText as ProcessAiTextBodyVendor | null | undefined,
-    imageDescriptionVendors,
+  const preferredAltTextProfileId = keepPreferredProfile(
+    aiSettings.data?.preferredAltTextProfileId,
+    imageDescriptionProfiles,
   );
 
   return {
-    aiVendors: textVendors,
-    textVendors,
-    imageDescriptionVendors,
-    pieceVendors,
+    allProfiles,
+    textProfiles,
+    imageDescriptionProfiles,
+    pieceProfiles,
     isLoading: aiSettings.isLoading,
-    preferredArtPieceVendor,
-    preferredVendorTextImprove,
-    preferredVendorAltText,
+    preferredArtPieceProfileId,
+    preferredTextImproveProfileId,
+    preferredAltTextProfileId,
   };
 }

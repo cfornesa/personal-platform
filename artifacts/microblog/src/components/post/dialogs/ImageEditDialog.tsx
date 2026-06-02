@@ -15,7 +15,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   initialSrc: string;
   initialAlt: string;
-  altTextVendor: string | null;
+  aiProfileId: number | null;
   onSave: (alt: string) => Promise<void>;
   onAiGenerate: () => Promise<string | null>;
   onReplace: () => void;
@@ -27,7 +27,7 @@ export function ImageEditDialog({
   onOpenChange,
   initialSrc,
   initialAlt,
-  altTextVendor,
+  aiProfileId,
   onSave,
   onAiGenerate,
   onReplace,
@@ -91,19 +91,17 @@ export function ImageEditDialog({
                 rows={3}
                 className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
               />
-              {altTextVendor && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  className="h-auto w-9 shrink-0 self-start"
-                  disabled={isGenerating}
-                  title="Generate alt text with AI"
-                  onClick={() => void handleGenerate()}
-                >
-                  {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                </Button>
-              )}
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-auto w-9 shrink-0 self-start"
+                disabled={isGenerating}
+                title={aiProfileId !== null ? "Generate alt text with AI" : "No image description AI profile configured — go to Admin → AI to add one"}
+                onClick={() => void handleGenerate()}
+              >
+                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
         </div>

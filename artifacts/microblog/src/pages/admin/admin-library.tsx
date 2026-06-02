@@ -22,7 +22,7 @@ export default function AdminLibraryPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAddImageOpen, setIsAddImageOpen] = useState(false);
-  const { imageDescriptionVendors, preferredVendorAltText } = useOwnerAiVendors();
+  const { imageDescriptionProfiles, preferredAltTextProfileId } = useOwnerAiVendors();
 
   const { data: assets = [], isLoading } = useListMedia({
     query: { queryKey: getListMediaQueryKey() },
@@ -55,7 +55,7 @@ export default function AdminLibraryPage() {
   const { mutateAsync: describeImage } = useDescribeImage();
   const { mutateAsync: setMediaExhibits } = useSetMediaExhibits();
 
-  const altTextVendor = preferredVendorAltText ?? imageDescriptionVendors[0]?.id ?? null;
+  const aiProfileId = preferredAltTextProfileId ?? imageDescriptionProfiles[0]?.id ?? null;
 
   async function handleSaveDetails(asset: MediaAsset, values: { title: string; altText: string; exhibitIds: number[] }) {
     await Promise.all([
@@ -71,15 +71,15 @@ export default function AdminLibraryPage() {
   }
 
   async function handleGenerateAltText(asset: MediaAsset, currentAltText?: string): Promise<string> {
-    if (!altTextVendor) {
-      toast({ title: "No AI vendor configured", description: "Enable a vendor in Admin → AI first.", variant: "destructive" });
+    if (aiProfileId === null) {
+      toast({ title: "No AI profile configured", description: "Go to Admin → AI to add an image description profile.", variant: "destructive" });
       return asset.altText ?? "";
     }
     try {
       const result = await describeImage({
         data: {
           imageUrl: asset.url,
-          vendor: altTextVendor,
+          profileId: aiProfileId,
           ...(currentAltText?.trim() ? { existingAltText: currentAltText.trim() } : {}),
         },
       });
@@ -120,7 +120,7 @@ export default function AdminLibraryPage() {
         dialogTitle="Add Image to Library"
         finalActionLabel="Done"
         closeWarningDescription="You have selected an image or started an upload/import, but have not finished adding it to the library."
-        altTextVendor={altTextVendor}
+        aiProfileId={aiProfileId}
         onSelect={() => {
           queryClient.invalidateQueries({ queryKey: getListMediaQueryKey() });
           setIsAddImageOpen(false);
@@ -141,7 +141,7 @@ export default function AdminLibraryPage() {
             deleteMedia({ fileName });
           }}
           onSaveDetails={handleSaveDetails}
-          onGenerateAltText={altTextVendor ? handleGenerateAltText : undefined}
+          onGenerateAltText={handleGenerateAltText}
         />
       )}
     </AdminLayout>

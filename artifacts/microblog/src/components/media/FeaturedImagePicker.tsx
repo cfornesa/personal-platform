@@ -8,7 +8,6 @@ import {
   useUploadMedia,
   getListMediaQueryKey,
   type MediaAsset,
-  type DescribeImageBodyVendor,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -48,8 +47,8 @@ type Props = {
   dialogTitle?: string;
   finalActionLabel?: string;
   closeWarningDescription?: string;
-  /** Preferred vendor id for AI alt text generation. */
-  altTextVendor?: string | null;
+  /** Preferred AI profile ID for alt text generation. */
+  aiProfileId?: number | null;
 };
 
 const ACCEPTED_IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/gif,image/avif";
@@ -62,7 +61,7 @@ export function FeaturedImagePicker({
   dialogTitle = "Set Featured Image",
   finalActionLabel = "Use this image",
   closeWarningDescription = "You have selected an image or started an upload/import, but have not inserted it yet.",
-  altTextVendor: propAltTextVendor,
+  aiProfileId: propAiProfileId,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("library");
   const [urlInput, setUrlInput] = useState("");
@@ -80,8 +79,8 @@ export function FeaturedImagePicker({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { preferredVendorAltText, imageDescriptionVendors } = useOwnerAiVendors();
-  const altTextVendor = propAltTextVendor ?? preferredVendorAltText ?? imageDescriptionVendors[0]?.id ?? null;
+  const { preferredAltTextProfileId, imageDescriptionProfiles } = useOwnerAiVendors();
+  const aiProfileId = propAiProfileId ?? preferredAltTextProfileId ?? imageDescriptionProfiles[0]?.id ?? null;
 
   const { data: assets = [], isLoading: isLoadingLibrary } = useListMedia({
     query: { enabled: open, queryKey: getListMediaQueryKey() },
@@ -195,13 +194,17 @@ export function FeaturedImagePicker({
   }
 
   async function handleGenerateAlt() {
-    if (!selectedAsset || !altTextVendor) return;
+    if (!selectedAsset) return;
+    if (aiProfileId === null) {
+      toast({ title: "No AI profile configured", description: "Go to Admin → AI to add an image description profile.", variant: "destructive" });
+      return;
+    }
     setIsGeneratingAlt(true);
     try {
       const result = await describeImage({
         data: {
           imageUrl: selectedAsset.url,
-          vendor: altTextVendor as DescribeImageBodyVendor,
+          profileId: aiProfileId,
           ...(altTextDraft.trim() ? { existingAltText: altTextDraft.trim() } : {}),
         },
       });
@@ -493,19 +496,18 @@ export function FeaturedImagePicker({
                     maxLength={500}
                     className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                   />
-                  {altTextVendor && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 gap-1.5"
-                      onClick={handleGenerateAlt}
-                      disabled={isGeneratingAlt}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {isGeneratingAlt ? "Generating..." : "AI"}
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1.5"
+                    onClick={handleGenerateAlt}
+                    disabled={isGeneratingAlt}
+                    title={aiProfileId !== null ? "Generate alt text with AI" : "No image description AI profile configured — go to Admin → AI to add one"}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {isGeneratingAlt ? "Generating..." : "AI"}
+                  </Button>
                   <Button
                     type="button"
                     size="sm"

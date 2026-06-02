@@ -602,7 +602,7 @@ paths:
     post:
       operationId: describeImage
       tags: [ai]
-      summary: Generate alt text for an image URL using the owner-selected AI vendor
+      summary: Generate alt text for an image URL using the owner-selected AI vendor profile
       requestBody:
         required: true
         content:
@@ -612,22 +612,15 @@ paths:
               properties:
                 imageUrl:
                   type: string
-                vendor:
-                  type: string
-                  enum:
-                    - openrouter
-                    - opencode-zen
-                    - opencode-go
-                    - google
-                    - mistral
-                    - mistral-vibe
-                    - deepseek
+                profileId:
+                  type: integer
+                  description: ID of the AI vendor profile to use
                 existingAltText:
                   type: string
                   description: Optional existing alt text to use as context for refinement
               required:
                 - imageUrl
-                - vendor
+                - profileId
       responses:
         "200":
           description: Generated alt text
@@ -3151,9 +3144,11 @@ components:
         - id
         - label
 
-    MyAiVendorSetting:
+    MyAiVendorProfile:
       type: object
       properties:
+        id:
+          type: integer
         vendor:
           type: string
           enum:
@@ -3166,6 +3161,8 @@ components:
             - deepseek
         vendorLabel:
           type: string
+        profileName:
+          type: string
         enabled:
           type: boolean
         configured:
@@ -3173,12 +3170,22 @@ components:
         model:
           type: string
           nullable: true
+        endpointKind:
+          type: string
+          nullable: true
+          enum:
+            - chat-completions
+            - anthropic-messages
+            - openai-responses
+            - google-generate
       required:
+        - id
         - vendor
         - vendorLabel
+        - profileName
         - enabled
         - configured
-    
+
     MyAiSettings:
       type: object
       properties:
@@ -3186,53 +3193,32 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AiVendorOption"
-        settings:
+        profiles:
           type: array
           items:
-            $ref: "#/components/schemas/MyAiVendorSetting"
-        preferredArtPieceVendor:
-          type: string
+            $ref: "#/components/schemas/MyAiVendorProfile"
+        preferredArtPieceProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
-        preferredVendorTextImprove:
-          type: string
+        preferredTextImproveProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
-        preferredVendorAltText:
-          type: string
+        preferredAltTextProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
       required:
         - availableVendors
-        - settings
-        - preferredArtPieceVendor
-        - preferredVendorTextImprove
-        - preferredVendorAltText
+        - profiles
+        - preferredArtPieceProfileId
+        - preferredTextImproveProfileId
+        - preferredAltTextProfileId
 
-    UpdateMyAiVendorSettingBody:
+    UpdateMyAiProfileBody:
       type: object
       properties:
+        id:
+          type: integer
+          description: Omit to create a new profile; include to update an existing one
         vendor:
           type: string
           enum:
@@ -3243,6 +3229,10 @@ components:
             - mistral
             - mistral-vibe
             - deepseek
+        profileName:
+          type: string
+          minLength: 1
+          maxLength: 128
         enabled:
           type: boolean
         model:
@@ -3253,55 +3243,45 @@ components:
           type: string
           minLength: 1
           maxLength: 4096
+        endpointKind:
+          type: string
+          nullable: true
+          enum:
+            - chat-completions
+            - anthropic-messages
+            - openai-responses
+            - google-generate
       required:
         - vendor
+        - profileName
 
     UpdateMyAiSettingsBody:
       type: object
       description: |
-        Owner AI settings for all supported vendors. Each vendor keeps its own
-        enabled flag, model slug, and encrypted API key so the editor can
-        switch vendors without re-entering credentials.
+        Owner AI settings as named profiles. Each profile has its own vendor,
+        model slug, API key, and optional endpoint kind. Multiple profiles per
+        vendor are supported so the same key can be reused with different models
+        or endpoint formats.
       properties:
-        settings:
+        profiles:
           type: array
           items:
-            $ref: "#/components/schemas/UpdateMyAiVendorSettingBody"
-        preferredArtPieceVendor:
-          type: string
+            $ref: "#/components/schemas/UpdateMyAiProfileBody"
+        deletedProfileIds:
+          type: array
+          items:
+            type: integer
+        preferredArtPieceProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
-        preferredVendorTextImprove:
-          type: string
+        preferredTextImproveProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
-        preferredVendorAltText:
-          type: string
+        preferredAltTextProfileId:
+          type: integer
           nullable: true
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
       required:
-        - settings
+        - profiles
 
     ProcessAiTextBody:
       type: object
@@ -3309,16 +3289,9 @@ components:
         content:
           type: string
           maxLength: 40000
-        vendor:
-          type: string
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
+        profileId:
+          type: integer
+          description: ID of the AI vendor profile to use
         mode:
           type: string
           enum:
@@ -3326,7 +3299,7 @@ components:
             - text
       required:
         - content
-        - vendor
+        - profileId
 
     ProcessAiTextResponse:
       type: object
@@ -3345,12 +3318,15 @@ components:
             - deepseek
         vendorLabel:
           type: string
+        profileName:
+          type: string
         model:
           type: string
       required:
         - text
         - vendor
         - vendorLabel
+        - profileName
         - model
 
     ArtPieceVersion:
@@ -3496,20 +3472,13 @@ components:
         engine:
           type: string
           enum: [p5, c2, three]
-        vendor:
-          type: string
-          enum:
-            - openrouter
-            - opencode-zen
-            - opencode-go
-            - google
-            - mistral
-            - mistral-vibe
-            - deepseek
+        profileId:
+          type: integer
+          description: ID of the AI vendor profile to use for generation
       required:
         - prompt
         - engine
-        - vendor
+        - profileId
 
     GeneratedArtPieceDraft:
       type: object

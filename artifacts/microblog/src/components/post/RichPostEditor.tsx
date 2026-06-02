@@ -28,9 +28,7 @@ import {
   useProcessAiText,
   useUpdateArtPiece,
   useUpdateMediaAltText,
-  type DescribeImageBodyVendor,
   type GeneratedArtPieceDraft,
-  type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -81,13 +79,13 @@ type RichPostEditorProps = {
    * minimal editor.
    */
   showCategories?: boolean;
-  aiVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
-  /** Subset of aiVendors that support piece generation. */
-  pieceVendors?: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
-  /** Pre-selected vendor for text improvement (skips dropdown). */
-  preferredVendorTextImprove?: ProcessAiTextBodyVendor | null;
-  /** Pre-selected vendor for image alt text generation. */
-  preferredVendorAltText?: ProcessAiTextBodyVendor | null;
+  textProfiles?: Array<{ id: number; label: string }>;
+  /** Subset of textProfiles that support piece generation. */
+  pieceProfiles?: Array<{ id: number; label: string }>;
+  /** Pre-selected profile ID for text improvement (skips dropdown). */
+  preferredTextImproveProfileId?: number | null;
+  /** Pre-selected profile ID for image alt text generation. */
+  preferredAltTextProfileId?: number | null;
   /** Enabled platform connections to show in the "Share to:" selector. Omit to hide it. */
   platformConnections?: EnabledPlatformConnection[];
   /** Initial featured image URL (for edit mode). */
@@ -176,10 +174,10 @@ export function RichPostEditor({
   initialCategoryIds = [],
   initialPlatformIds = [],
   showCategories = true,
-  aiVendors = [],
-  pieceVendors = [],
-  preferredVendorTextImprove,
-  preferredVendorAltText,
+  textProfiles = [],
+  pieceProfiles = [],
+  preferredTextImproveProfileId,
+  preferredAltTextProfileId,
   platformConnections,
   initialFeaturedImageUrl,
   initialSocialPostDrafts,
@@ -207,12 +205,13 @@ export function RichPostEditor({
   const artPiecesList = useListArtPieces();
   const hasPieces = (artPiecesList.data?.pieces?.length ?? 0) > 0;
 
-  const [selectedAiVendor, setSelectedAiVendor] = useState<ProcessAiTextBodyVendor | "">(aiVendors[0]?.id ?? "");
+  const [selectedAiProfileId, setSelectedAiProfileId] = useState<number | null>(textProfiles[0]?.id ?? null);
   const [selectedAiMode, setSelectedAiMode] = useState<"text" | "piece">("text");
   const [selectedPieceEngine, setSelectedPieceEngine] = useState<ArtPieceEngine>("p5");
   const [pieceDraft, setPieceDraft] = useState<GeneratedArtPieceDraft | null>(null);
   const [pieceDraftPrompt, setPieceDraftPrompt] = useState("");
   const [isPieceDraftOpen, setIsPieceDraftOpen] = useState(false);
+  const [savingPieceDraftToken, setSavingPieceDraftToken] = useState<string | null>(null);
   const [isPersistingPieceThumbnail, setIsPersistingPieceThumbnail] = useState(false);
   const [isPieceLibraryOpen, setIsPieceLibraryOpen] = useState(false);
   const [isExhibitLibraryOpen, setIsExhibitLibraryOpen] = useState(false);
@@ -288,6 +287,8 @@ export function RichPostEditor({
 
   async function handleSavePieceDraftAndInsert() {
     if (!pieceDraft || !editor) return;
+    if (savingPieceDraftToken === pieceDraft.draftToken) return;
+    setSavingPieceDraftToken(pieceDraft.draftToken);
     let pieceWasSaved = false;
     try {
       const response = await createArtPiece.mutateAsync({
@@ -296,6 +297,9 @@ export function RichPostEditor({
         },
       });
       pieceWasSaved = true;
+      setIsPieceDraftOpen(false);
+      setPieceDraft(null);
+      setSavingPieceDraftToken(null);
       setIsPersistingPieceThumbnail(true);
       await persistArtPieceThumbnail(response);
       editor.chain().focus().insertIframe(
@@ -306,8 +310,6 @@ export function RichPostEditor({
           currentVersionId: response.currentVersionId!,
         }),
       ).run();
-      setIsPieceDraftOpen(false);
-      setPieceDraft(null);
       toast({
         title: "Piece saved",
         description: "The new piece was saved with a thumbnail and embedded into the post.",
@@ -323,6 +325,9 @@ export function RichPostEditor({
       });
     } finally {
       setIsPersistingPieceThumbnail(false);
+      if (!pieceWasSaved) {
+        setSavingPieceDraftToken((current) => current === pieceDraft.draftToken ? null : current);
+      }
     }
   }
 
@@ -338,31 +343,27 @@ export function RichPostEditor({
   }, [editor, initialContent, canonicalOrigin]);
 
   useEffect(() => {
-    if (aiVendors.length === 0) {
-      if (selectedAiVendor !== "") {
-        setSelectedAiVendor("");
-      }
+    if (textProfiles.length === 0) {
+      if (selectedAiProfileId !== null) setSelectedAiProfileId(null);
       return;
     }
-
-    if (!aiVendors.some((vendor) => vendor.id === selectedAiVendor)) {
-      setSelectedAiVendor(aiVendors[0]!.id);
+    if (!textProfiles.some((p) => p.id === selectedAiProfileId)) {
+      setSelectedAiProfileId(textProfiles[0]!.id);
     }
-
     if (selectedAiMode === "piece") {
-      if (pieceVendors.length === 0 && !hasPieces) {
+      if (pieceProfiles.length === 0 && !hasPieces) {
         setSelectedAiMode("text");
-      } else if (pieceVendors.length > 0 && !pieceVendors.some((v) => v.id === selectedAiVendor) && pieceVendors[0]) {
-        setSelectedAiVendor(pieceVendors[0].id);
+      } else if (pieceProfiles.length > 0 && !pieceProfiles.some((p) => p.id === selectedAiProfileId) && pieceProfiles[0]) {
+        setSelectedAiProfileId(pieceProfiles[0].id);
       }
     }
-  }, [aiVendors, hasPieces, pieceVendors, selectedAiVendor, selectedAiMode]);
+  }, [textProfiles, hasPieces, pieceProfiles, selectedAiProfileId, selectedAiMode]);
 
   useEffect(() => {
-    if (preferredVendorTextImprove && aiVendors.some((v) => v.id === preferredVendorTextImprove)) {
-      setSelectedAiVendor(preferredVendorTextImprove);
+    if (preferredTextImproveProfileId != null && textProfiles.some((p) => p.id === preferredTextImproveProfileId)) {
+      setSelectedAiProfileId(preferredTextImproveProfileId);
     }
-  }, [preferredVendorTextImprove]);
+  }, [preferredTextImproveProfileId]);
 
   const substackConnection = (platformConnections ?? []).find((connection) => connection.platform === "substack");
   const isSubstackSelected = substackConnection ? platformIds.includes(substackConnection.id) : false;
@@ -552,7 +553,7 @@ export function RichPostEditor({
   }
 
   async function generatePieceDraft(prompt: string) {
-    if (!selectedAiVendor) {
+    if (!selectedAiProfileId) {
       return;
     }
 
@@ -560,7 +561,7 @@ export function RichPostEditor({
     const controller = new AbortController();
     pieceGenerationAbortRef.current = controller;
 
-    const selectedVendorLabel = aiVendors.find((vendor) => vendor.id === selectedAiVendor)?.label ?? selectedAiVendor;
+    const selectedVendorLabel = textProfiles.find((p) => p.id === selectedAiProfileId)?.label ?? String(selectedAiProfileId);
 
     setPieceGenerationState({
       open: true,
@@ -581,7 +582,7 @@ export function RichPostEditor({
         {
           prompt,
           engine: selectedPieceEngine,
-          vendor: selectedAiVendor,
+          profileId: selectedAiProfileId ?? 0,
         },
         { signal: controller.signal },
       );
@@ -673,12 +674,13 @@ export function RichPostEditor({
       return;
     }
 
-    const effectiveVendor =
+    const effectiveProfileId =
       selectedAiMode === "text"
-        ? (preferredVendorTextImprove ?? (selectedAiVendor || null))
-        : selectedAiVendor || null;
+        ? (preferredTextImproveProfileId ?? selectedAiProfileId)
+        : selectedAiProfileId;
 
-    if (!effectiveVendor) {
+    if (!effectiveProfileId) {
+      toast({ title: "No AI profile configured", description: "Go to Admin → AI to add a text generation profile.", variant: "destructive" });
       return;
     }
 
@@ -701,7 +703,7 @@ export function RichPostEditor({
         }
 
         const response = await processAiText.mutateAsync({
-          data: { content: textOnlyContent, vendor: effectiveVendor as ProcessAiTextBodyVendor },
+          data: { content: textOnlyContent, profileId: effectiveProfileId },
         });
 
         const reconstructed = preservedHtml + response.text;
@@ -812,7 +814,7 @@ export function RichPostEditor({
         open={isFeaturedPickerOpen}
         onOpenChange={setIsFeaturedPickerOpen}
         currentUrl={featuredImageUrl || undefined}
-        altTextVendor={preferredVendorAltText ?? null}
+        aiProfileId={preferredAltTextProfileId ?? null}
         onSelect={(url) => {
           setFeaturedImageUrl(url);
           setFeaturedImageSource("manual");
@@ -1151,7 +1153,7 @@ export function RichPostEditor({
             />
           ) : null}
 
-          {aiVendors.length > 0 ? (
+          {textProfiles.length > 0 ? (
             <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-2">
               <select
                 aria-label="AI Mode"
@@ -1160,13 +1162,13 @@ export function RichPostEditor({
                 onChange={(event) => {
                   const next = event.target.value as "text" | "piece";
                   setSelectedAiMode(next);
-                  if (next === "piece" && !pieceVendors.some((v) => v.id === selectedAiVendor)) {
-                    if (pieceVendors[0]) setSelectedAiVendor(pieceVendors[0].id);
+                  if (next === "piece" && !pieceProfiles.some((p) => p.id === selectedAiProfileId)) {
+                    if (pieceProfiles[0]) setSelectedAiProfileId(pieceProfiles[0].id);
                   }
                 }}
               >
                 <option value="text">Text</option>
-                {(pieceVendors.length > 0 || hasPieces) ? <option value="piece">Piece</option> : null}
+                {(pieceProfiles.length > 0 || hasPieces) ? <option value="piece">Piece</option> : null}
               </select>
               {selectedAiMode === "piece" ? (
                 <select
@@ -1181,16 +1183,16 @@ export function RichPostEditor({
                 </select>
               ) : null}
               <select
-                aria-label="AI Vendor"
+                aria-label="AI Profile"
                 className={aiSelectClass}
-                value={selectedAiVendor}
-                onChange={(event) => setSelectedAiVendor(event.target.value as ProcessAiTextBodyVendor)}
+                value={selectedAiProfileId ?? ""}
+                onChange={(event) => setSelectedAiProfileId(Number(event.target.value) || null)}
               >
-                {selectedAiMode === "piece" && pieceVendors.length === 0
-                  ? <option value="" disabled>No piece vendors enabled</option>
-                  : (selectedAiMode === "piece" ? pieceVendors : aiVendors).map((vendor) => (
-                      <option key={vendor.id} value={vendor.id}>
-                        {vendor.label}
+                {selectedAiMode === "piece" && pieceProfiles.length === 0
+                  ? <option value="" disabled>No piece profiles enabled</option>
+                  : (selectedAiMode === "piece" ? pieceProfiles : textProfiles).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label}
                       </option>
                     ))
                 }
@@ -1204,7 +1206,7 @@ export function RichPostEditor({
                   processAiText.isPending ||
                   pieceGenerationState?.phase === "generating" ||
                   textLength === 0 ||
-                  !selectedAiVendor
+                  !selectedAiProfileId
                 }
                 onClick={() => void handleImproveWithAi()}
               >
@@ -1310,20 +1312,24 @@ export function RichPostEditor({
         onOpenChange={(open) => { if (!open) setImageEditState(null); }}
         initialSrc={imageEditState?.src ?? ""}
         initialAlt={imageEditState?.alt ?? ""}
-        altTextVendor={preferredVendorAltText ?? null}
+        aiProfileId={preferredAltTextProfileId ?? null}
         onAiGenerate={async () => {
-          if (!imageEditState?.src || !preferredVendorAltText) return null;
+          if (!imageEditState?.src) return null;
+          if (!preferredAltTextProfileId) {
+            toast({ title: "No AI profile configured", description: "Go to Admin → AI to add an image description profile.", variant: "destructive" });
+            return null;
+          }
           try {
             const r = await describeImageForBubble({
               data: {
                 imageUrl: imageEditState.src,
-                vendor: preferredVendorAltText as DescribeImageBodyVendor,
+                profileId: preferredAltTextProfileId,
                 ...(imageEditState.alt.trim() ? { existingAltText: imageEditState.alt.trim() } : {}),
               },
             });
             return r.altText;
-          } catch (err: any) {
-            const code = err?.data?.code ?? err?.response?.data?.code;
+          } catch (err: unknown) {
+            const code = (err as { data?: { code?: string }; response?: { data?: { code?: string } } })?.data?.code ?? (err as { data?: { code?: string }; response?: { data?: { code?: string } } })?.response?.data?.code;
             if (code === "vision_not_supported") {
               toast({ title: "Vision not supported", description: "This AI model does not support image analysis. Choose a vision-capable model in Admin → AI → Task Preferences.", variant: "destructive" });
             } else {
@@ -1362,11 +1368,14 @@ export function RichPostEditor({
         onOpenChange={(open) => { if (!open) setPieceEditState(null); }}
         initialTitle={pieceEditState?.title ?? ""}
         initialDescription={pieceEditState?.ariaLabel ?? ""}
-        altTextVendor={preferredVendorAltText ?? null}
+        aiProfileId={preferredTextImproveProfileId ?? null}
         onAiImprove={async (text) => {
-          if (!preferredVendorAltText) return null;
+          if (!preferredTextImproveProfileId) {
+            toast({ title: "No AI profile configured", description: "Go to Admin → AI to add a text generation profile.", variant: "destructive" });
+            return null;
+          }
           try {
-            const r = await processAiText.mutateAsync({ data: { content: text, vendor: preferredVendorAltText as ProcessAiTextBodyVendor, mode: "text" } });
+            const r = await processAiText.mutateAsync({ data: { content: text, profileId: preferredTextImproveProfileId, mode: "text" } });
             return r.text;
           } catch { return null; }
         }}
@@ -1477,10 +1486,16 @@ export function RichPostEditor({
 
       <ArtPieceDraftDialog
         open={isPieceDraftOpen}
-        onOpenChange={setIsPieceDraftOpen}
+        onOpenChange={(open) => {
+          setIsPieceDraftOpen(open);
+          if (!open) {
+            setPieceDraft(null);
+            setSavingPieceDraftToken(null);
+          }
+        }}
         draft={pieceDraft}
         prompt={pieceDraftPrompt}
-        isSaving={createArtPiece.isPending || isPersistingPieceThumbnail}
+        isSaving={Boolean(savingPieceDraftToken) || createArtPiece.isPending || isPersistingPieceThumbnail}
         onSaveAndInsert={() => void handleSavePieceDraftAndInsert()}
       />
 
@@ -1575,7 +1590,7 @@ export function RichPostEditor({
       <ImageInsertDialog
         open={imageInsertDialogOpen}
         onOpenChange={setImageInsertDialogOpen}
-        altTextVendor={preferredVendorAltText ?? null}
+        aiProfileId={preferredAltTextProfileId ?? null}
         onInsert={(url, altText) => {
           editor?.chain().focus().setImage({ src: url, alt: altText ?? "" }).run();
           if (!featuredImageUrl.trim() && featuredImageSource !== "manual") {

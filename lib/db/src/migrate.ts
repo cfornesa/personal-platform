@@ -1,4 +1,4 @@
-import type { RowDataPacket } from "mysql2/promise";
+import type { RowDataPacket, PoolConnection } from "mysql2/promise";
 import { mysqlPool } from "./index.ts";
 
 type ColumnRow = RowDataPacket & {
@@ -266,14 +266,17 @@ export async function ensureTables(): Promise<void> {
 
   await mysqlPool.query(`
     CREATE TABLE IF NOT EXISTS user_ai_vendor_settings (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       user_id VARCHAR(191) NOT NULL,
       vendor VARCHAR(64) NOT NULL,
+      profile_name VARCHAR(128) NOT NULL DEFAULT 'Default',
+      endpoint_kind VARCHAR(32) NULL,
       enabled INT NOT NULL DEFAULT 0,
       model VARCHAR(191) NULL,
       encrypted_api_key TEXT NULL,
       created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      PRIMARY KEY (user_id, vendor),
+      UNIQUE KEY uq_user_vendor_profile (user_id, vendor, profile_name),
       CONSTRAINT user_ai_vendor_settings_user_id_fk
         FOREIGN KEY (user_id) REFERENCES users(id)
         ON DELETE CASCADE
@@ -678,11 +681,10 @@ export async function ensureTables(): Promise<void> {
     "color_destructive_foreground",
     "color_destructive_foreground VARCHAR(64) NULL",
   );
-  await ensureColumn(
-    "users",
-    "preferred_art_piece_vendor",
-    "preferred_art_piece_vendor VARCHAR(64) NULL",
-  );
+  // preferred_art_piece_vendor / preferred_vendor_text_improve / preferred_vendor_alt_text
+  // are intentionally absent here — they were replaced by profile ID integer columns in the
+  // AI vendor profile migration below. Adding them here would re-create them after the
+  // migration drops them, causing an infinite add/drop loop on every startup.
 
   // Keep denormalized post avatars aligned with the current user profile
   // photo. This corrects rows written before profile-photo updates cascaded
@@ -1269,17 +1271,6 @@ export async function ensureTables(): Promise<void> {
     "file_data MEDIUMBLOB NULL",
   );
 
-  await ensureColumn(
-    "users",
-    "preferred_vendor_text_improve",
-    "preferred_vendor_text_improve VARCHAR(64) NULL",
-  );
-
-  await ensureColumn(
-    "users",
-    "preferred_vendor_alt_text",
-    "preferred_vendor_alt_text VARCHAR(64) NULL",
-  );
 
   // Rename old "galleries" tables to "exhibits" if they still exist under the old names.
   // Each rename is wrapped in a silent try/catch: it's a no-op if the source is missing
@@ -1359,4 +1350,296 @@ export async function ensureTables(): Promise<void> {
   await ensureColumn("exhibits", "artist_statement", "`artist_statement` TEXT NULL");
   await ensureColumn("exhibits", "biography", "`biography` TEXT NULL");
   await ensureColumn("art_pieces", "description", "`description` TEXT NULL");
+
+  // Rename the legacy 'codestral' vendor slug to 'mistral-vibe' everywhere it
+  // still appears. The manual migration docs/migrations/2026-05-24-rename-codestral-to-mistral-vibe.sql
+  // was intended for this but was never baked into ensureTables(). Running the
+  // UPDATE here is idempotent: if no 'codestral' rows exist it is a silent no-op.
+  await mysqlPool.query(`
+    UPDATE user_ai_vendor_settings SET vendor = 'mistral-vibe' WHERE vendor = 'codestral'
+  `);
+  // Fix profile_names stamped with the old slug only after that column exists.
+  // Some sibling repos may still be migrating from the pre-profile schema, where
+  // `profile_name` is added later by the AI Vendor Profile Migration below.
+  const aiVendorColsForCodestralRename = await getColumnNames("user_ai_vendor_settings");
+  if (aiVendorColsForCodestralRename.has("profile_name")) {
+    // UPDATE IGNORE skips any row where the renamed value would violate the
+    // UNIQUE (user_id, vendor, profile_name) constraint — which happens when the
+    // user already has a fresh mistral-vibe row with the same resulting name.
+    // After the IGNORE pass, delete whatever codestral-origin rows remain (they
+    // are superseded by the fresh rows).
+    await mysqlPool.query(`
+      UPDATE IGNORE user_ai_vendor_settings
+      SET profile_name = CONCAT('mistral-vibe', SUBSTR(profile_name, LENGTH('codestral') + 1))
+      WHERE vendor = 'mistral-vibe' AND profile_name LIKE 'codestral%'
+    `);
+    await mysqlPool.query(`
+      DELETE FROM user_ai_vendor_settings
+      WHERE vendor = 'mistral-vibe' AND profile_name LIKE 'codestral%'
+    `);
+  }
+  // If the old preference columns still exist, rename any 'codestral' values too.
+  const colsForCodestralRename = await getColumnNames("users");
+  if (colsForCodestralRename.has("preferred_art_piece_vendor")) {
+    await mysqlPool.query(`UPDATE users SET preferred_art_piece_vendor = 'mistral-vibe' WHERE preferred_art_piece_vendor = 'codestral'`);
+  }
+  if (colsForCodestralRename.has("preferred_vendor_text_improve")) {
+    await mysqlPool.query(`UPDATE users SET preferred_vendor_text_improve = 'mistral-vibe' WHERE preferred_vendor_text_improve = 'codestral'`);
+  }
+  if (colsForCodestralRename.has("preferred_vendor_alt_text")) {
+    await mysqlPool.query(`UPDATE users SET preferred_vendor_alt_text = 'mistral-vibe' WHERE preferred_vendor_alt_text = 'codestral'`);
+  }
+
+  // -------------------------------------------------------------------------
+  // AI Vendor Profile Migration (2026-06-01)
+  //
+  // Converts the single-row-per-vendor AI settings model to a named profile
+  // model. The `user_ai_vendor_settings` table gains an auto-increment PK,
+  // a `profile_name` column, and an `endpoint_kind` column. The three
+  // vendor-string preference columns on `users` are replaced with integer
+  // profile-ID columns that reference the new PK.
+  //
+  // Every step is individually idempotent: it checks the current schema state
+  // before acting. This handles partial migrations from failed earlier attempts.
+  // The old encrypted_api_key, model, and enabled values are NEVER modified —
+  // only new columns are added and the primary key is restructured.
+  // -------------------------------------------------------------------------
+
+  // Step A: Add `id` as a nullable INT if it doesn't exist yet.
+  // NO FIRST or AFTER clause — positional hints during a MySQL table rebuild
+  // can silently null TEXT columns that appear after the insertion point on
+  // some MySQL 5.7 variants. The column lands at the end of the table, which
+  // is semantically equivalent (application code references columns by name).
+  const aiVendorColsA = await getColumnNames("user_ai_vendor_settings");
+  console.log("[migrate] user_ai_vendor_settings columns:", [...aiVendorColsA].join(", "));
+  if (!aiVendorColsA.has("id")) {
+    console.log("[migrate] Step A: adding id column");
+    await mysqlPool.query(`
+      ALTER TABLE user_ai_vendor_settings ADD COLUMN id INT NULL
+    `);
+    console.log("[migrate] Step A: done");
+  }
+
+  // Step B: Fill any NULL id values with sequential integers.
+  // Uses a dedicated connection so the session variable (@ai_id) is visible
+  // to both the SET and the UPDATE on the same connection.
+  const [[nullCheck]] = await mysqlPool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS cnt FROM user_ai_vendor_settings WHERE id IS NULL",
+  );
+  console.log("[migrate] Step B: rows with null id =", (nullCheck as RowDataPacket & { cnt: number }).cnt);
+  if ((nullCheck as RowDataPacket & { cnt: number }).cnt > 0) {
+    let conn: PoolConnection | null = null;
+    try {
+      conn = await mysqlPool.getConnection();
+      await conn.query(
+        "SET @ai_id := (SELECT COALESCE(MAX(id), 0) FROM user_ai_vendor_settings)",
+      );
+      await conn.query(`
+        UPDATE user_ai_vendor_settings
+        SET id = (@ai_id := @ai_id + 1)
+        WHERE id IS NULL
+        ORDER BY user_id, vendor
+      `);
+    } finally {
+      conn?.release();
+    }
+  }
+
+  // Step C: Make `id` NOT NULL (prerequisite for becoming the PK).
+  const idMeta = await getColumnMetadata("user_ai_vendor_settings", "id");
+  if (idMeta?.IS_NULLABLE === "YES") {
+    await mysqlPool.query(`
+      ALTER TABLE user_ai_vendor_settings MODIFY COLUMN id INT NOT NULL
+    `);
+  }
+
+  // The legacy composite PRIMARY KEY (user_id, vendor) also served as the
+  // supporting index for the user_id foreign key. Add an explicit replacement
+  // before dropping that PK, otherwise InnoDB rejects the table rebuild on
+  // older databases with "Foreign key constraint is incorrectly formed".
+  await ensureIndex(
+    "user_ai_vendor_settings",
+    "user_ai_vendor_settings_user_id_idx",
+    "CREATE INDEX user_ai_vendor_settings_user_id_idx ON user_ai_vendor_settings (user_id)",
+  );
+
+  // Step D: Swap the primary key from (user_id, vendor) to id with AUTO_INCREMENT.
+  // Detect whether the old composite PK still owns the primary key slot by checking
+  // if user_id appears in the PRIMARY constraint.
+  console.log("[migrate] Step D: checking primary key");
+  const [[pkRow]] = await mysqlPool.query<RowDataPacket[]>(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'user_ai_vendor_settings'
+      AND CONSTRAINT_NAME = 'PRIMARY'
+      AND COLUMN_NAME = 'user_id'
+    LIMIT 1
+  `);
+  console.log("[migrate] Step D: user_id in PRIMARY KEY?", Boolean(pkRow));
+  if (pkRow) {
+    console.log("[migrate] Step D: swapping PK");
+    await mysqlPool.query(`
+      ALTER TABLE user_ai_vendor_settings
+        DROP PRIMARY KEY,
+        MODIFY COLUMN id INT NOT NULL AUTO_INCREMENT,
+        ADD PRIMARY KEY (id)
+    `);
+    console.log("[migrate] Step D: done");
+  }
+
+  // Step E: Add profile_name and endpoint_kind columns.
+  await ensureColumn(
+    "user_ai_vendor_settings",
+    "profile_name",
+    "profile_name VARCHAR(128) NOT NULL DEFAULT 'Default'",
+  );
+  await ensureColumn(
+    "user_ai_vendor_settings",
+    "endpoint_kind",
+    "endpoint_kind VARCHAR(32) NULL",
+  );
+
+  // Step F: Add the unique index on (user_id, vendor, profile_name).
+  await tryEnsureIndex(
+    "user_ai_vendor_settings",
+    "uq_user_vendor_profile",
+    "CREATE UNIQUE INDEX uq_user_vendor_profile ON user_ai_vendor_settings (user_id, vendor, profile_name)",
+  );
+
+  // Step G: One-time rename — give every row that still has the default 'Default'
+  // name a human-readable name: "{vendor} - {model}" or just "{vendor}".
+  console.log("[migrate] Step G: renaming default profiles");
+  await mysqlPool.query(`
+    UPDATE user_ai_vendor_settings
+    SET profile_name = CASE
+      WHEN model IS NOT NULL AND model != '' THEN CONCAT(vendor, ' - ', model)
+      ELSE vendor
+    END
+    WHERE profile_name = 'Default'
+  `);
+
+  // Diagnostic: log current state of all AI vendor profiles
+  const settingsCols = await getColumnNames("user_ai_vendor_settings");
+  let diagQuery = "";
+  if (settingsCols.has("encrypted_api_key")) {
+    diagQuery = "SELECT id, user_id, vendor, profile_name, enabled, model IS NOT NULL AS has_model, encrypted_api_key IS NOT NULL AS has_key FROM user_ai_vendor_settings";
+  } else {
+    diagQuery = `
+      SELECT s.id, s.user_id, s.vendor, s.profile_name, s.enabled, s.model IS NOT NULL AS has_model, k.encrypted_api_key IS NOT NULL AS has_key
+      FROM user_ai_vendor_settings s
+      LEFT JOIN user_ai_vendor_keys k ON s.user_id = k.user_id AND s.vendor = k.vendor
+    `;
+  }
+  const [diagRows] = await mysqlPool.query<RowDataPacket[]>(diagQuery);
+  console.log("[migrate] AI vendor profiles after migration:", JSON.stringify(diagRows));
+
+  // Add profile-ID preference columns to users (new names, integer type).
+  await ensureColumn(
+    "users",
+    "preferred_art_piece_profile_id",
+    "preferred_art_piece_profile_id INT NULL",
+  );
+  await ensureColumn(
+    "users",
+    "preferred_text_improve_profile_id",
+    "preferred_text_improve_profile_id INT NULL",
+  );
+  await ensureColumn(
+    "users",
+    "preferred_alt_text_profile_id",
+    "preferred_alt_text_profile_id INT NULL",
+  );
+
+  // Migrate vendor-string preferences → profile IDs, then drop the old columns.
+  // Each block is a no-op once the source column no longer exists.
+  const userColumnsForMigration = await getColumnNames("users");
+
+  if (userColumnsForMigration.has("preferred_art_piece_vendor")) {
+    await mysqlPool.query(`
+      UPDATE users u
+      JOIN user_ai_vendor_settings s
+        ON s.user_id = u.id AND s.vendor = u.preferred_art_piece_vendor
+      SET u.preferred_art_piece_profile_id = s.id
+      WHERE u.preferred_art_piece_vendor IS NOT NULL
+        AND u.preferred_art_piece_profile_id IS NULL
+    `);
+    await mysqlPool.query(`ALTER TABLE users DROP COLUMN preferred_art_piece_vendor`);
+  }
+
+  if (userColumnsForMigration.has("preferred_vendor_text_improve")) {
+    await mysqlPool.query(`
+      UPDATE users u
+      JOIN user_ai_vendor_settings s
+        ON s.user_id = u.id AND s.vendor = u.preferred_vendor_text_improve
+      SET u.preferred_text_improve_profile_id = s.id
+      WHERE u.preferred_vendor_text_improve IS NOT NULL
+        AND u.preferred_text_improve_profile_id IS NULL
+    `);
+    await mysqlPool.query(`ALTER TABLE users DROP COLUMN preferred_vendor_text_improve`);
+  }
+
+  if (userColumnsForMigration.has("preferred_vendor_alt_text")) {
+    await mysqlPool.query(`
+      UPDATE users u
+      JOIN user_ai_vendor_settings s
+        ON s.user_id = u.id AND s.vendor = u.preferred_vendor_alt_text
+      SET u.preferred_alt_text_profile_id = s.id
+      WHERE u.preferred_vendor_alt_text IS NOT NULL
+        AND u.preferred_alt_text_profile_id IS NULL
+    `);
+    await mysqlPool.query(`ALTER TABLE users DROP COLUMN preferred_vendor_alt_text`);
+  }
+
+  // -------------------------------------------------------------------------
+  // AI Vendor Keys Migration (2026-06-01 v2)
+  //
+  // Moves encrypted_api_key out of per-profile rows into a new
+  // user_ai_vendor_keys table (one key per vendor per user). This lets the
+  // same API key be shared across all profiles for a vendor without
+  // re-entering it for each profile.
+  // -------------------------------------------------------------------------
+
+  // Create the new table idempotently.
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS user_ai_vendor_keys (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id VARCHAR(191) NOT NULL,
+      vendor VARCHAR(64) NOT NULL,
+      encrypted_api_key TEXT NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE KEY uq_user_vendor_key (user_id, vendor),
+      CONSTRAINT user_ai_vendor_keys_user_id_fk
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Migrate existing per-profile keys → per-vendor keys.
+  // Pick the key from the profile with the highest id (most recently created)
+  // per (user_id, vendor). INSERT IGNORE keeps existing rows in user_ai_vendor_keys
+  // intact on re-runs.
+  const aiSettingsCols = await getColumnNames("user_ai_vendor_settings");
+  if (aiSettingsCols.has("encrypted_api_key")) {
+    await mysqlPool.query(`
+      INSERT IGNORE INTO user_ai_vendor_keys (user_id, vendor, encrypted_api_key, created_at, updated_at)
+      SELECT s.user_id, s.vendor, s.encrypted_api_key, NOW(3), NOW(3)
+      FROM user_ai_vendor_settings s
+      INNER JOIN (
+        SELECT user_id, vendor, MAX(id) AS latest_id
+        FROM user_ai_vendor_settings
+        WHERE encrypted_api_key IS NOT NULL AND encrypted_api_key != ''
+        GROUP BY user_id, vendor
+      ) latest
+        ON s.user_id = latest.user_id
+        AND s.vendor = latest.vendor
+        AND s.id = latest.latest_id
+    `);
+
+    // Drop the column from profiles — keys now live exclusively in user_ai_vendor_keys.
+    await mysqlPool.query(`
+      ALTER TABLE user_ai_vendor_settings DROP COLUMN encrypted_api_key
+    `);
+    console.log("[migrate] AI vendor keys migration complete: keys moved to user_ai_vendor_keys");
+  }
 }

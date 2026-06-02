@@ -129,14 +129,18 @@ Verify routing by model family:
 - `gemini-*` -> `/zen/v1/models/...`
 - `big-pickle`, `minimax-*`, `glm-*`, `kimi-*`, `qwen*`, `nemotron-*` -> `/zen/v1/chat/completions`
 
+For validated piece generation, confirm Zen chat-completions requests include `thinking: { type: "disabled" }`, include the no-`<think>` system directive, keep the gateway-safe `max_tokens: 4096` cap, and still return final HTML/CSS/JS code blocks.
+
 Unknown Zen model slugs must fail fast before any outbound request.
 
 ### OpenCode Go
 
 - Verify documented Go endpoint routing:
   - `glm-5.1`, `glm-5`, `kimi-k2.6`, `kimi-k2.5`, `deepseek-v4-pro`, `deepseek-v4-flash`, `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5-pro`, `mimo-v2.5`, `qwen3.6-plus`, `qwen3.5-plus` -> `/zen/go/v1/chat/completions`
+  - `minimax-m3` -> `/zen/go/v1/chat/completions`
   - `minimax-m2.7`, `minimax-m2.5` -> `/zen/go/v1/messages`
 - Confirm both raw model IDs and `opencode-go/<model-id>` prefixed slugs behave correctly when saved in `/admin/ai`.
+- For validated piece generation, confirm Go chat-completions requests include `thinking: { type: "disabled" }`, include the no-`<think>` system directive, keep the gateway-safe `max_tokens: 4096` cap, and still return final HTML/CSS/JS code blocks.
 - Unknown Go model slugs must fail fast before any outbound request.
 
 ### Google
@@ -176,7 +180,7 @@ Unknown Zen model slugs must fail fast before any outbound request.
 - Confirm returned `choices[0].message.content` parses correctly.
 - Confirm DeepSeek appears for text improvement and validated piece generation across `p5`, `c2`, and `three`.
 - Confirm DeepSeek piece-generation requests include `thinking: { type: "disabled" }` and use the larger code-generation output budget. Ordinary DeepSeek text rewriting should keep the normal chat-completions request shape.
-- If piece generation fails, check the provider diagnostics for `finish_reason`, `reasoning_content` length, and `rawResponsePreview`. `finish_reason: "length"` means the response was truncated; `content_filter` means the provider filtered the final answer; `insufficient_system_resource` means an upstream resource-limit failure; non-empty `reasoning_content` with empty `message.content` means the model reasoned but did not emit usable final code.
+- If piece generation fails, check the provider diagnostics for `failureStage`, `finish_reason`, `reasoning_content` length, and `rawResponsePreview`. `provider_upstream_http` means the upstream gateway returned an HTTP failure; `provider_timeout` means the local provider request timed out; `finish_reason: "length"` means the response was truncated; `content_filter` means the provider filtered the final answer; `insufficient_system_resource` means an upstream resource-limit failure; non-empty `reasoning_content` with empty `message.content` means the model reasoned but did not emit usable final code.
 - Confirm DeepSeek does not appear in the Admin AI "Visual descriptions" preference and that a direct `/api/ai/describe-image` request with `vendor: "deepseek"` returns `422` with `code: "vision_not_supported"`.
 
 ## Recording Template

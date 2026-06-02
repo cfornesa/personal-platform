@@ -174,9 +174,9 @@ CREATE TABLE IF NOT EXISTS `users` (
   `color_muted_foreground`       VARCHAR(64),
   `color_destructive`            VARCHAR(64),
   `color_destructive_foreground` VARCHAR(64),
-  `preferred_art_piece_vendor`   VARCHAR(64),
-  `preferred_vendor_text_improve` VARCHAR(64),
-  `preferred_vendor_alt_text`    VARCHAR(64),
+  `preferred_art_piece_profile_id`   INT,
+  `preferred_text_improve_profile_id` INT,
+  `preferred_alt_text_profile_id`    INT,
 
   UNIQUE KEY `users_email_unique`    (`email`),                     -- one account per OAuth email
   UNIQUE KEY `users_username_unique` (`username`)                   -- one /users/@<handle> per username
@@ -187,15 +187,29 @@ CREATE TABLE IF NOT EXISTS `users` (
 --    keep credentials on file for multiple AI gateways at once.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `user_ai_vendor_settings` (
+  `id`                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `user_id`            VARCHAR(191) NOT NULL,                       -- FK -> users.id
   `vendor`             VARCHAR(64) NOT NULL,                        -- stable backend slug, e.g. 'opencode-zen'
-  `enabled`            INT NOT NULL DEFAULT 0,                      -- 0 = off, 1 = on for this vendor
+  `profile_name`       VARCHAR(128) NOT NULL DEFAULT 'Default',     -- user-visible name, e.g. 'Opencode Go - minimax-m3'
+  `endpoint_kind`      VARCHAR(32),                                 -- null = auto-detect; 'chat-completions' | 'anthropic-messages' | 'openai-responses' | 'google-generate'
+  `enabled`            INT NOT NULL DEFAULT 0,                      -- 0 = off, 1 = on for this profile
   `model`              VARCHAR(191),                                -- user-supplied vendor model slug
-  `encrypted_api_key`  TEXT,                                        -- encrypted at rest with AI_SETTINGS_ENCRYPTION_KEY
   `created_at`         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at`         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`user_id`, `vendor`),
+  UNIQUE KEY `uq_user_vendor_profile` (`user_id`, `vendor`, `profile_name`),
   CONSTRAINT `user_ai_vendor_settings_user_id_fk`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `user_ai_vendor_keys` (
+  `id`                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_id`            VARCHAR(191) NOT NULL,                       -- FK -> users.id
+  `vendor`             VARCHAR(64) NOT NULL,                        -- stable backend slug, one row per vendor per user
+  `encrypted_api_key`  TEXT NOT NULL,                               -- encrypted at rest with AI_SETTINGS_ENCRYPTION_KEY
+  `created_at`         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY `uq_user_vendor_key` (`user_id`, `vendor`),
+  CONSTRAINT `user_ai_vendor_keys_user_id_fk`
     FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

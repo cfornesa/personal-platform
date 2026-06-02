@@ -684,6 +684,8 @@ export const GetProfilePhotoParams = zod.object({
 })
 
 
+const aiProfileEndpointKind = zod.enum(['chat-completions', 'anthropic-messages', 'openai-responses', 'google-generate']).nullable();
+
 /**
  * @summary Get owner AI writing assistant settings
  */
@@ -692,64 +694,87 @@ export const GetMyAiSettingsResponse = zod.object({
   "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "label": zod.string()
 })),
-  "settings": zod.array(zod.object({
+  "vendorKeys": zod.array(zod.object({
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "vendorLabel": zod.string(),
+  "hasKey": zod.boolean()
+})),
+  "profiles": zod.array(zod.object({
+  "id": zod.number().int(),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "vendorLabel": zod.string(),
+  "profileName": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
-  "model": zod.string().nullish()
+  "model": zod.string().nullish(),
+  "endpointKind": aiProfileEndpointKind
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable()
+  "preferredArtPieceProfileId": zod.number().int().nullable(),
+  "preferredTextImproveProfileId": zod.number().int().nullable(),
+  "preferredAltTextProfileId": zod.number().int().nullable()
 })
 
 
 /**
  * @summary Update owner AI writing assistant settings
  */
-export const updateMyAiSettingsBodySettingsItemModelMax = 191;
+export const updateMyAiSettingsBodyProfileModelMax = 191;
 
-export const updateMyAiSettingsBodySettingsItemApiKeyMax = 4096;
+export const updateMyAiSettingsBodyProfileApiKeyMax = 4096;
 
+export const updateMyAiSettingsBodyProfileNameMax = 128;
 
 
 export const UpdateMyAiSettingsBody = zod.object({
-  "settings": zod.array(zod.object({
+  "vendorKeys": zod.array(zod.object({
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "apiKey": zod.string().min(1).max(updateMyAiSettingsBodyProfileApiKeyMax)
+})).optional(),
+  "profiles": zod.array(zod.object({
+  "id": zod.number().int().optional(),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "profileName": zod.string().min(1).max(updateMyAiSettingsBodyProfileNameMax),
   "enabled": zod.boolean().optional(),
-  "model": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemModelMax).optional(),
-  "apiKey": zod.string().min(1).max(updateMyAiSettingsBodySettingsItemApiKeyMax).optional()
-})),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish()
-}).describe('Owner AI settings for all supported vendors. Each vendor keeps its own\nenabled flag, model slug, and encrypted API key so the editor can\nswitch vendors without re-entering credentials.\n')
+  "model": zod.string().min(1).max(updateMyAiSettingsBodyProfileModelMax).optional(),
+  "endpointKind": aiProfileEndpointKind.optional()
+})).optional(),
+  "deletedProfileIds": zod.array(zod.number().int()).optional(),
+  "preferredArtPieceProfileId": zod.number().int().nullish(),
+  "preferredTextImproveProfileId": zod.number().int().nullish(),
+  "preferredAltTextProfileId": zod.number().int().nullish()
+}).describe('Owner AI settings. vendorKeys stores one API key per vendor; profiles\nare independent of keys and share the vendor key automatically.\n')
 
 export const UpdateMyAiSettingsResponse = zod.object({
   "availableVendors": zod.array(zod.object({
   "id": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "label": zod.string()
 })),
-  "settings": zod.array(zod.object({
+  "vendorKeys": zod.array(zod.object({
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "vendorLabel": zod.string(),
+  "hasKey": zod.boolean()
+})),
+  "profiles": zod.array(zod.object({
+  "id": zod.number().int(),
+  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "vendorLabel": zod.string(),
+  "profileName": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
-  "model": zod.string().nullish()
+  "model": zod.string().nullish(),
+  "endpointKind": aiProfileEndpointKind
 })),
-  "preferredArtPieceVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable(),
-  "preferredVendorTextImprove": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable(),
-  "preferredVendorAltText": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullable()
+  "preferredArtPieceProfileId": zod.number().int().nullable(),
+  "preferredTextImproveProfileId": zod.number().int().nullable(),
+  "preferredAltTextProfileId": zod.number().int().nullable()
 })
 
 
 /**
- * Uses the owner's saved AI settings for the vendor selected in the
-editor. The request body contains editor content plus the chosen
-vendor; the model and API key come from the owner's Admin AI settings.
+ * Uses the owner's saved AI profile for the profileId selected in the
+editor. The model and API key come from the owner's Admin AI settings.
 
- * @summary Process editor content with the owner-selected AI vendor
+ * @summary Process editor content with the owner-selected AI vendor profile
  */
 export const processAiTextBodyContentMax = 40000;
 
@@ -757,7 +782,7 @@ export const processAiTextBodyContentMax = 40000;
 
 export const ProcessAiTextBody = zod.object({
   "content": zod.string().max(processAiTextBodyContentMax),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "profileId": zod.number().int(),
   "mode": zod.enum(['html', 'text']).optional()
 })
 
@@ -765,16 +790,17 @@ export const ProcessAiTextResponse = zod.object({
   "text": zod.string(),
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "vendorLabel": zod.string(),
+  "profileName": zod.string(),
   "model": zod.string()
 })
 
 
 /**
- * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor profile
  */
 export const DescribeImageBody = zod.object({
   "imageUrl": zod.string(),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "profileId": zod.number().int(),
   "existingAltText": zod.string().optional().describe('Optional existing alt text to use as context for refinement')
 })
 
@@ -855,7 +881,7 @@ export const generateArtPieceBodyPromptMax = 4000;
 export const GenerateArtPieceBody = zod.object({
   "prompt": zod.string().min(1).max(generateArtPieceBodyPromptMax),
   "engine": zod.enum(['p5', 'c2', 'three']),
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek'])
+  "profileId": zod.number().int()
 })
 
 export const GenerateArtPieceResponse = zod.object({

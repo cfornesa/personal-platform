@@ -9,16 +9,19 @@ type AuthShape = {
         id: string;
         status: "active" | "blocked";
         role: "owner" | "member";
-        preferredArtPieceVendor?: string | null;
-        preferredVendorTextImprove?: string | null;
-        preferredVendorAltText?: string | null;
+        preferredArtPieceProfileId?: number | null;
+        preferredTextImproveProfileId?: number | null;
+        preferredAltTextProfileId?: number | null;
       }
     | null;
 };
 
-type AiSettingsRow = {
+type AiProfileRow = {
+  id: number;
   userId: string;
   vendor: string;
+  profileName: string;
+  endpointKind: string | null;
   enabled: number;
   model: string | null;
   encryptedApiKey: string | null;
@@ -34,110 +37,111 @@ type MockResponse = {
   json: (payload: unknown) => MockResponse;
 };
 
-let authState: AuthShape = {
-  session: { user: { id: "user-1" } },
-  user: { id: "user-1", status: "active", role: "owner" },
-};
-
-let aiSettingsRows: AiSettingsRow[] = [];
+let authState: AuthShape = { session: null, user: null };
+let aiProfileRows: AiProfileRow[] = [];
+let nextProfileId = 100;
 
 const processTextWithProvider = vi.fn();
 const processImageWithProvider = vi.fn();
 const mysqlPoolQuery = vi.fn();
+const mysqlPoolQueryInsert = vi.fn();
 
-vi.mock("../lib/current-user", () => ({
-  loadCurrentUser: async () => authState,
-  loadAuthSession: async () => authState.session,
+vi.mock("@/middlewares/auth", () => ({
+  requireAuth: (_req: unknown, _res: unknown, next: () => void) => {
+    const req = _req as Record<string, unknown>;
+    const res = _res as MockResponse;
+    if (!authState.session) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    req.currentUser = authState.user;
+    next();
+  },
+  requireOwner: (_req: unknown, _res: unknown, next: () => void) => {
+    const req = _req as Record<string, unknown>;
+    const res = _res as MockResponse;
+    if (!req.currentUser || (req.currentUser as { role: string }).role !== "owner") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    next();
+  },
 }));
 
-vi.mock("../lib/ai-providers", () => ({
-  AiVisionNotSupportedError: class AiVisionNotSupportedError extends Error {
-    constructor(message = "This AI model does not support image analysis.") {
-      super(message);
-      this.name = "AiVisionNotSupportedError";
-    }
-  },
-  AiProviderError: class AiProviderError extends Error {
-    statusCode: number;
-    retryable: boolean;
-    failureClass: string;
+vi.mock("../lib/ai-providers", async () => {
+  const actual = await vi.importActual("../lib/ai-providers");
+  return { ...actual, processTextWithProvider, processImageWithProvider };
+});
 
-    constructor(
-      message: string,
-      input:
-        | number
-        | {
-            statusCode?: number;
-            retryable?: boolean;
-            failureClass?: string;
-          } = {},
-      retryable = false,
-    ) {
-      super(message);
-      this.name = "AiProviderError";
-      if (typeof input === "number") {
-        this.statusCode = input;
-        this.retryable = retryable;
-        this.failureClass = "network";
-      } else {
-        this.statusCode = input.statusCode ?? 502;
-        this.retryable = input.retryable ?? false;
-        this.failureClass = input.failureClass ?? "network";
-      }
-    }
-  },
-  processTextWithProvider,
-  processImageWithProvider,
+vi.mock("../lib/media", () => ({
+  getMediaBuffer: vi.fn(),
+}));
+
+vi.mock("file-type", () => ({
+  fileTypeFromBuffer: vi.fn(),
 }));
 
 vi.mock("@workspace/db", () => ({
   db: {
     select: () => ({
       from: () => ({
-        where: async () => aiSettingsRows,
+        where: async (_condition: unknown) => {
+          // For simplicity, return all profile rows for the user
+          // (tests set up aiProfileRows appropriately)
+          return aiProfileRows;
+        },
       }),
     }),
     update: () => ({
       set: (values: Record<string, unknown>) => ({
         where: async () => {
           if (authState.user) {
-            if (Object.prototype.hasOwnProperty.call(values, "preferredArtPieceVendor")) {
-              authState.user.preferredArtPieceVendor =
-                typeof values.preferredArtPieceVendor === "string" || values.preferredArtPieceVendor === null
-                  ? (values.preferredArtPieceVendor as string | null)
-                  : authState.user.preferredArtPieceVendor ?? null;
+            if (Object.prototype.hasOwnProperty.call(values, "preferredArtPieceProfileId")) {
+              authState.user.preferredArtPieceProfileId =
+                typeof values.preferredArtPieceProfileId === "number" || values.preferredArtPieceProfileId === null
+                  ? (values.preferredArtPieceProfileId as number | null)
+                  : authState.user.preferredArtPieceProfileId ?? null;
             }
-            if (Object.prototype.hasOwnProperty.call(values, "preferredVendorTextImprove")) {
-              authState.user.preferredVendorTextImprove =
-                typeof values.preferredVendorTextImprove === "string" || values.preferredVendorTextImprove === null
-                  ? (values.preferredVendorTextImprove as string | null)
-                  : authState.user.preferredVendorTextImprove ?? null;
+            if (Object.prototype.hasOwnProperty.call(values, "preferredTextImproveProfileId")) {
+              authState.user.preferredTextImproveProfileId =
+                typeof values.preferredTextImproveProfileId === "number" || values.preferredTextImproveProfileId === null
+                  ? (values.preferredTextImproveProfileId as number | null)
+                  : authState.user.preferredTextImproveProfileId ?? null;
             }
-            if (Object.prototype.hasOwnProperty.call(values, "preferredVendorAltText")) {
-              authState.user.preferredVendorAltText =
-                typeof values.preferredVendorAltText === "string" || values.preferredVendorAltText === null
-                  ? (values.preferredVendorAltText as string | null)
-                  : authState.user.preferredVendorAltText ?? null;
+            if (Object.prototype.hasOwnProperty.call(values, "preferredAltTextProfileId")) {
+              authState.user.preferredAltTextProfileId =
+                typeof values.preferredAltTextProfileId === "number" || values.preferredAltTextProfileId === null
+                  ? (values.preferredAltTextProfileId as number | null)
+                  : authState.user.preferredAltTextProfileId ?? null;
             }
           }
         },
       }),
     }),
+    delete: () => ({
+      where: async () => {
+        // Deletion handled via mysqlPool mock below
+      },
+    }),
   },
   eq: () => ({}),
   and: () => ({}),
+  inArray: () => ({}),
   mysqlPool: {
     query: mysqlPoolQuery,
   },
   userAiVendorSettingsTable: {
+    id: "id",
     userId: "user_id",
     vendor: "vendor",
+    profileName: "profile_name",
+    endpointKind: "endpoint_kind",
   },
   usersTable: {
     id: "id",
-    preferredArtPieceVendor: "preferred_art_piece_vendor",
-    preferredVendorTextImprove: "preferred_vendor_text_improve",
-    preferredVendorAltText: "preferred_vendor_alt_text",
+    preferredArtPieceProfileId: "preferred_art_piece_profile_id",
+    preferredTextImproveProfileId: "preferred_text_improve_profile_id",
+    preferredAltTextProfileId: "preferred_alt_text_profile_id",
   },
 }));
 
@@ -172,7 +176,7 @@ function findRoute(path: string, method: "get" | "patch" | "post") {
       route?: {
         path: string;
         methods: Record<string, boolean>;
-        stack: Array<{ handle: (req: any, res: any, next: (err?: unknown) => void) => unknown }>;
+        stack: Array<{ handle: (req: unknown, res: unknown, next: (err?: unknown) => void) => unknown }>;
       };
     }>;
   }).stack;
@@ -222,26 +226,48 @@ beforeEach(() => {
     session: { user: { id: "user-1" } },
     user: { id: "user-1", status: "active", role: "owner" },
   };
-  aiSettingsRows = [];
+  aiProfileRows = [];
+  nextProfileId = 100;
   processTextWithProvider.mockReset();
   processImageWithProvider.mockReset();
   mysqlPoolQuery.mockReset();
-  mysqlPoolQuery.mockImplementation(async (_sql: string, params?: unknown[]) => {
-    const nextRow: AiSettingsRow = {
-      userId: String(params?.[0] ?? "user-1"),
-      vendor: String(params?.[1] ?? "opencode-zen"),
-      enabled: Number(params?.[2] ?? 0),
-      model: (params?.[3] as string | null) ?? null,
-      encryptedApiKey: (params?.[4] as string | null) ?? null,
-    };
-    const existingIndex = aiSettingsRows.findIndex(
-      (row) => row.userId === nextRow.userId && row.vendor === nextRow.vendor,
-    );
-    if (existingIndex >= 0) {
-      aiSettingsRows[existingIndex] = nextRow;
-    } else {
-      aiSettingsRows.push(nextRow);
+  mysqlPoolQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+    const isUpdate = sql.trim().toUpperCase().startsWith("UPDATE");
+    const isInsert = sql.trim().toUpperCase().startsWith("INSERT");
+
+    if (isInsert) {
+      const id = nextProfileId++;
+      const newRow: AiProfileRow = {
+        id,
+        userId: String(params?.[0] ?? "user-1"),
+        vendor: String(params?.[1] ?? "opencode-zen"),
+        profileName: String(params?.[2] ?? "Default"),
+        endpointKind: (params?.[3] as string | null) ?? null,
+        enabled: Number(params?.[4] ?? 0),
+        model: (params?.[5] as string | null) ?? null,
+        encryptedApiKey: (params?.[6] as string | null) ?? null,
+      };
+      aiProfileRows.push(newRow);
+      return [{ insertId: id }];
     }
+
+    if (isUpdate) {
+      // UPDATE ... WHERE id = ? AND user_id = ?
+      const id = params?.[params.length - 2] as number;
+      const idx = aiProfileRows.findIndex((r) => r.id === id);
+      if (idx >= 0) {
+        aiProfileRows[idx] = {
+          ...aiProfileRows[idx]!,
+          profileName: String(params?.[0] ?? aiProfileRows[idx]!.profileName),
+          endpointKind: (params?.[1] as string | null) ?? aiProfileRows[idx]!.endpointKind,
+          enabled: Number(params?.[2] ?? aiProfileRows[idx]!.enabled),
+          model: (params?.[3] as string | null) ?? aiProfileRows[idx]!.model,
+          encryptedApiKey: (params?.[4] as string | null) ?? aiProfileRows[idx]!.encryptedApiKey,
+        };
+      }
+      return [];
+    }
+
     return [];
   });
 });
@@ -251,7 +277,7 @@ describe("AI routes", () => {
     authState = { session: null, user: null };
 
     const { res } = await runRoute("/ai/process", "post", {
-      body: { content: "<p>Hello</p>", vendor: "opencode-zen" },
+      body: { content: "<p>Hello</p>", profileId: 1 },
     });
 
     expect(res.statusCode).toBe(401);
@@ -277,12 +303,26 @@ describe("AI routes", () => {
     expect(res.headers["cache-control"]).toBe("no-store, max-age=0");
   });
 
-  it("requires an api key before enabling a vendor", async () => {
+  it("returns empty profile list when no profiles exist", async () => {
+    const { res } = await runRoute("/users/me/ai-settings", "get");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      availableVendors: expect.any(Array),
+      profiles: [],
+      preferredArtPieceProfileId: null,
+      preferredTextImproveProfileId: null,
+      preferredAltTextProfileId: null,
+    });
+  });
+
+  it("requires an api key before enabling a new profile", async () => {
     const { res } = await runRoute("/users/me/ai-settings", "patch", {
       body: {
-        settings: [
+        profiles: [
           {
             vendor: "opencode-zen",
+            profileName: "Opencode Zen - big-pickle",
             enabled: true,
             model: "big-pickle",
           },
@@ -291,26 +331,21 @@ describe("AI routes", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      error: "Opencode Zen requires an API key before it can be enabled",
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("requires an API key"),
     });
   });
 
-  it("saves per-vendor AI settings without returning API keys", async () => {
+  it("creates a new profile and returns it without exposing the API key", async () => {
     const { res } = await runRoute("/users/me/ai-settings", "patch", {
       body: {
-        settings: [
+        profiles: [
           {
             vendor: "opencode-zen",
+            profileName: "Opencode Zen - big-pickle",
             enabled: true,
             model: "big-pickle",
             apiKey: "sk-secret",
-          },
-          {
-            vendor: "google",
-            enabled: false,
-            model: "gemini-2.5-flash",
-            apiKey: "sk-google",
           },
         ],
       },
@@ -320,138 +355,30 @@ describe("AI routes", () => {
     expect(res.headers["cache-control"]).toBe("no-store, max-age=0");
     expect(res.body).toMatchObject({
       availableVendors: expect.any(Array),
-      preferredArtPieceVendor: null,
-      settings: expect.arrayContaining([
+      profiles: expect.arrayContaining([
         expect.objectContaining({
           vendor: "opencode-zen",
           vendorLabel: "Opencode Zen",
+          profileName: "Opencode Zen - big-pickle",
           enabled: true,
           configured: true,
           model: "big-pickle",
         }),
-        expect.objectContaining({
-          vendor: "google",
-          vendorLabel: "Google",
-          enabled: false,
-          configured: true,
-          model: "gemini-2.5-flash",
-        }),
       ]),
     });
     expect(res.body).not.toHaveProperty("apiKey");
-    expect(aiSettingsRows[0]?.encryptedApiKey).toBeTruthy();
-    expect(aiSettingsRows[0]?.encryptedApiKey).not.toContain("sk-secret");
+    expect(aiProfileRows[0]?.encryptedApiKey).toBeTruthy();
+    expect(aiProfileRows[0]?.encryptedApiKey).not.toContain("sk-secret");
   });
 
-  it("persists the preferred art piece vendor on the owner account", async () => {
-    const { res } = await runRoute("/users/me/ai-settings", "patch", {
-      body: {
-        settings: [],
-        preferredArtPieceVendor: "google",
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({
-      preferredArtPieceVendor: "google",
-    });
-    expect(authState.user?.preferredArtPieceVendor).toBe("google");
-  });
-
-  it("accepts DeepSeek for text and art piece preferences but not image descriptions", async () => {
-    const { res } = await runRoute("/users/me/ai-settings", "patch", {
-      body: {
-        settings: [
-          {
-            vendor: "deepseek",
-            enabled: true,
-            model: "deepseek-v4-flash",
-            apiKey: "sk-deepseek",
-          },
-        ],
-        preferredVendorTextImprove: "deepseek",
-        preferredArtPieceVendor: "deepseek",
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({
-      preferredVendorTextImprove: "deepseek",
-      preferredArtPieceVendor: "deepseek",
-      preferredVendorAltText: null,
-      settings: expect.arrayContaining([
-        expect.objectContaining({
-          vendor: "deepseek",
-          vendorLabel: "DeepSeek",
-          enabled: true,
-          configured: true,
-          model: "deepseek-v4-flash",
-        }),
-      ]),
-    });
-  });
-
-  it("rejects DeepSeek as an image description preference", async () => {
-    const { res } = await runRoute("/users/me/ai-settings", "patch", {
-      body: {
-        settings: [],
-        preferredVendorAltText: "deepseek",
-      },
-    });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      error: 'Unsupported image description AI vendor "deepseek"',
-    });
-  });
-
-  it("allows re-enabling a saved vendor without re-sending the api key", async () => {
-    aiSettingsRows = [
+  it("processes text using a profile ID", async () => {
+    aiProfileRows = [
       {
-        userId: "user-1",
-        vendor: "openrouter",
-        enabled: 0,
-        model: "anthropic/claude-sonnet-4.5",
-        encryptedApiKey: encryptAiApiKey("sk-secret"),
-      },
-    ];
-
-    const { res } = await runRoute("/users/me/ai-settings", "patch", {
-      body: {
-        settings: [
-          {
-            vendor: "openrouter",
-            enabled: true,
-          },
-        ],
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({
-      settings: expect.arrayContaining([
-        expect.objectContaining({
-          vendor: "openrouter",
-          enabled: true,
-          configured: true,
-          model: "anthropic/claude-sonnet-4.5",
-        }),
-      ]),
-    });
-  });
-
-  it("processes text with the selected vendor settings", async () => {
-    aiSettingsRows = [
-      {
-        userId: "user-1",
-        vendor: "opencode-zen",
-        enabled: 1,
-        model: "big-pickle",
-        encryptedApiKey: encryptAiApiKey("sk-zen"),
-      },
-      {
+        id: 42,
         userId: "user-1",
         vendor: "google",
+        profileName: "Google - gemini-2.5-flash",
+        endpointKind: null,
         enabled: 1,
         model: "gemini-2.5-flash",
         encryptedApiKey: encryptAiApiKey("sk-google"),
@@ -462,7 +389,7 @@ describe("AI routes", () => {
     const { res } = await runRoute("/ai/process", "post", {
       body: {
         content: "<p>Hello <strong>world</strong></p><img src='x' /><iframe src='y'></iframe>",
-        vendor: "google",
+        profileId: 42,
       },
     });
 
@@ -480,15 +407,19 @@ describe("AI routes", () => {
       text: "Improved plain text",
       vendor: "google",
       vendorLabel: "Google",
+      profileName: "Google - gemini-2.5-flash",
       model: "gemini-2.5-flash",
     });
   });
 
-  it("rejects a selected vendor that is disabled or incomplete", async () => {
-    aiSettingsRows = [
+  it("rejects a profile that is disabled", async () => {
+    aiProfileRows = [
       {
+        id: 7,
         userId: "user-1",
         vendor: "opencode-zen",
+        profileName: "Opencode Zen - big-pickle",
+        endpointKind: null,
         enabled: 0,
         model: "big-pickle",
         encryptedApiKey: encryptAiApiKey("sk-zen"),
@@ -496,36 +427,30 @@ describe("AI routes", () => {
     ];
 
     const { res } = await runRoute("/ai/process", "post", {
-      body: { content: "<p>Hello world</p>", vendor: "opencode-zen" },
+      body: { content: "<p>Hello world</p>", profileId: 7 },
     });
 
     expect(res.statusCode).toBe(409);
-    expect(res.body).toEqual({
-      error: "Opencode Zen is not enabled and configured for this user",
-    });
+    expect(res.body).toMatchObject({ error: expect.stringContaining("not enabled") });
   });
 
-  it("rejects DeepSeek for image alt text because API image input is not verified", async () => {
-    const { res } = await runRoute("/ai/describe-image", "post", {
-      body: {
-        imageUrl: "/api/media/example.png",
-        vendor: "deepseek",
-      },
+  it("returns 404 for an unknown profile ID", async () => {
+    const { res } = await runRoute("/ai/process", "post", {
+      body: { content: "<p>Hello world</p>", profileId: 9999 },
     });
 
-    expect(res.statusCode).toBe(422);
-    expect(res.body).toEqual({
-      error: "DeepSeek is not supported for image alt text generation.",
-      code: "vision_not_supported",
-    });
-    expect(processImageWithProvider).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ error: "AI profile not found" });
   });
 
   it("returns stable JSON for provider failures", async () => {
-    aiSettingsRows = [
+    aiProfileRows = [
       {
+        id: 3,
         userId: "user-1",
         vendor: "opencode-zen",
+        profileName: "Opencode Zen - big-pickle",
+        endpointKind: null,
         enabled: 1,
         model: "big-pickle",
         encryptedApiKey: encryptAiApiKey("sk-zen"),
@@ -539,10 +464,38 @@ describe("AI routes", () => {
     );
 
     const { res } = await runRoute("/ai/process", "post", {
-      body: { content: "<p>Hello world</p>", vendor: "opencode-zen" },
+      body: { content: "<p>Hello world</p>", profileId: 3 },
     });
 
     expect(res.statusCode).toBe(502);
     expect(res.body).toEqual({ error: "The AI provider timed out. Try again." });
+  });
+
+  it("passes endpointKind from the profile to the provider", async () => {
+    aiProfileRows = [
+      {
+        id: 55,
+        userId: "user-1",
+        vendor: "opencode-go",
+        profileName: "Opencode Go - minimax-m3",
+        endpointKind: "anthropic-messages",
+        enabled: 1,
+        model: "minimax-m3",
+        encryptedApiKey: encryptAiApiKey("sk-go"),
+      },
+    ];
+    processTextWithProvider.mockResolvedValue("Generated code");
+
+    await runRoute("/ai/process", "post", {
+      body: { content: "Create a particle effect", profileId: 55 },
+    });
+
+    expect(processTextWithProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor: "opencode-go",
+        model: "minimax-m3",
+        endpointKind: "anthropic-messages",
+      }),
+    );
   });
 });

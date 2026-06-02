@@ -18,7 +18,6 @@ import {
   useSetArtPieceExhibits,
   type ArtPiece,
   type GeneratedArtPieceDraft,
-  type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
 import { ExhibitMultiSelect } from "@/components/post/ExhibitMultiSelect";
 import { Code, Sparkles, Trash2 } from "lucide-react";
@@ -136,12 +135,12 @@ canvas { display: block; }`,
 export default function AdminPiecesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, pieceVendors, preferredArtPieceVendor, preferredVendorTextImprove } = useOwnerAiVendors();
+  const { textProfiles, pieceProfiles, preferredArtPieceProfileId, preferredTextImproveProfileId } = useOwnerAiVendors();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [selectedVendor, setSelectedVendor] = useState<ProcessAiTextBodyVendor | "">("");
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const [selectedEngine, setSelectedEngine] = useState<ArtPieceEngine>("p5");
   const [htmlCode, setHtmlCode] = useState("");
   const [cssCode, setCssCode] = useState("");
@@ -150,6 +149,7 @@ export default function AdminPiecesPage() {
   const [creationMode, setCreationMode] = useState<null | "ai" | "manual">(null);
   const [draft, setDraft] = useState<GeneratedArtPieceDraft | null>(null);
   const [draftOpen, setDraftOpen] = useState(false);
+  const [savingDraftToken, setSavingDraftToken] = useState<string | null>(null);
   const [generationState, setGenerationState] = useState<ArtPieceGenerationState | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   const [isImprovingText, setIsImprovingText] = useState(false);
@@ -181,17 +181,17 @@ export default function AdminPiecesPage() {
   }, [creationMode, filtered, selectedId]);
 
   useEffect(() => {
-    if (pieceVendors.length > 0 && !pieceVendors.some((vendor) => vendor.id === selectedVendor)) {
-      const preferredVendorStillAvailable =
-        preferredArtPieceVendor &&
-        pieceVendors.some((vendor) => vendor.id === preferredArtPieceVendor);
-      setSelectedVendor(
-        preferredVendorStillAvailable ? preferredArtPieceVendor : pieceVendors[0]!.id,
+    if (pieceProfiles.length > 0 && !pieceProfiles.some((p) => p.id === selectedProfileId)) {
+      const preferredStillAvailable =
+        preferredArtPieceProfileId != null &&
+        pieceProfiles.some((p) => p.id === preferredArtPieceProfileId);
+      setSelectedProfileId(
+        preferredStillAvailable ? preferredArtPieceProfileId : pieceProfiles[0]!.id,
       );
-    } else if (pieceVendors.length === 0 && selectedVendor !== "") {
-      setSelectedVendor("");
+    } else if (pieceProfiles.length === 0 && selectedProfileId !== null) {
+      setSelectedProfileId(null);
     }
-  }, [pieceVendors, preferredArtPieceVendor, selectedVendor]);
+  }, [pieceProfiles, preferredArtPieceProfileId, selectedProfileId]);
 
   const detail = useGetArtPiece(selectedId ?? 0, {
     query: {
@@ -411,21 +411,34 @@ canvas { display: block; }`;
   }
 
   async function handleCreatePiece(data: Parameters<typeof createPiece.mutateAsync>[0]["data"]) {
+    if (data.draftToken && savingDraftToken === data.draftToken) {
+      return;
+    }
+    if (data.draftToken) {
+      setSavingDraftToken(data.draftToken);
+    }
+    let pieceWasCreated = false;
     try {
       const response = await createPiece.mutateAsync({ data });
+      pieceWasCreated = true;
       if (pieceExhibitIds.length > 0) {
         setArtPieceExhibits.mutate({ id: response.id, data: { exhibitIds: pieceExhibitIds } });
       }
       queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
       setSelectedId(response.id);
-      await handleSavedCurrentPiece(response);
       setCreationMode(null);
       setDraftOpen(false);
       setDraft(null);
+      setSavingDraftToken(null);
+      await handleSavedCurrentPiece(response);
       toast({ title: "New piece saved" });
     } catch (error) {
       if (error instanceof Error && error.message === "Thumbnail generation failed.") return;
       toast({ title: "Failed to save piece", variant: "destructive" });
+    } finally {
+      if (!pieceWasCreated && data.draftToken) {
+        setSavingDraftToken((current) => current === data.draftToken ? null : current);
+      }
     }
   }
 
@@ -433,8 +446,16 @@ canvas { display: block; }`;
     id: number,
     data: Parameters<typeof createVersion.mutateAsync>[0]["data"],
   ) {
+    if (data.draftToken && savingDraftToken === data.draftToken) {
+      return;
+    }
+    if (data.draftToken) {
+      setSavingDraftToken(data.draftToken);
+    }
+    let versionWasCreated = false;
     try {
       const response = await createVersion.mutateAsync({ id, data });
+      versionWasCreated = true;
       setTitle(response.piece.title);
       setPrompt(response.piece.prompt);
       setSelectedEngine(response.version.engine);
@@ -444,15 +465,20 @@ canvas { display: block; }`;
       setArtPieceExhibits.mutate({ id: response.piece.id, data: { exhibitIds: pieceExhibitIds } });
       queryClient.invalidateQueries({ queryKey: getListArtPiecesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetArtPieceQueryKey(response.piece.id) });
+      setDraftOpen(false);
+      setDraft(null);
+      setSavingDraftToken(null);
       if (response.piece.currentVersionId === response.version.id) {
         await handleSavedCurrentPiece(response.piece);
       }
-      setDraftOpen(false);
-      setDraft(null);
       toast({ title: "New piece version saved" });
     } catch (error) {
       if (error instanceof Error && error.message === "Thumbnail generation failed.") return;
       toast({ title: "Failed to save new version", variant: "destructive" });
+    } finally {
+      if (!versionWasCreated && data.draftToken) {
+        setSavingDraftToken((current) => current === data.draftToken ? null : current);
+      }
     }
   }
 
@@ -461,14 +487,14 @@ canvas { display: block; }`;
       toast({ title: "Text required", description: "Enter a prompt or description before using AI improvement.", variant: "destructive" });
       return;
     }
-    const descriptionVendor = preferredVendorTextImprove ?? aiVendors[0]?.id ?? null;
-    if (!descriptionVendor) {
-      toast({ title: "No AI vendor", description: "Configure a vendor in Admin → AI first.", variant: "destructive" });
+    const profileId = preferredTextImproveProfileId ?? textProfiles[0]?.id ?? null;
+    if (!profileId) {
+      toast({ title: "No AI profile configured", description: "Go to Admin → AI to add a text generation profile.", variant: "destructive" });
       return;
     }
     setIsImprovingText(true);
     try {
-      const result = await processAiText.mutateAsync({ data: { content: prompt, vendor: descriptionVendor, mode: "text" } });
+      const result = await processAiText.mutateAsync({ data: { content: prompt, profileId, mode: "text" } });
       setPrompt(result.text);
     } catch {
       toast({ title: "AI failed", description: "Could not improve the text.", variant: "destructive" });
@@ -477,12 +503,12 @@ canvas { display: block; }`;
     }
   }
 
-  function handleVendorChange(nextVendor: ProcessAiTextBodyVendor) {
-    setSelectedVendor(nextVendor);
+  function handleProfileChange(nextProfileId: number) {
+    setSelectedProfileId(nextProfileId);
     updateAiSettings.mutate({
       data: {
-        settings: [],
-        preferredArtPieceVendor: nextVendor,
+        profiles: [],
+        preferredArtPieceProfileId: nextProfileId,
       },
     });
   }
@@ -504,12 +530,12 @@ canvas { display: block; }`;
   }
 
   async function handleGenerate() {
-    if (!selectedVendor) return;
+    if (!selectedProfileId) return;
 
     generationAbortRef.current?.abort();
     const controller = new AbortController();
     generationAbortRef.current = controller;
-    const vendorLabel = aiVendors.find((vendor) => vendor.id === selectedVendor)?.label ?? selectedVendor;
+    const vendorLabel = pieceProfiles.find((p) => p.id === selectedProfileId)?.label ?? String(selectedProfileId);
 
     setGenerationState({
       open: true,
@@ -530,7 +556,7 @@ canvas { display: block; }`;
         {
           prompt,
           engine: selectedEngine,
-          vendor: selectedVendor,
+          profileId: selectedProfileId ?? 0,
         },
         { signal: controller.signal },
       );
@@ -758,20 +784,20 @@ canvas { display: block; }`;
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="new-piece-vendor">AI vendor</Label>
+                    <Label htmlFor="new-piece-vendor">AI profile</Label>
                     <select
                       id="new-piece-vendor"
                       className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={selectedVendor}
+                      value={selectedProfileId ?? ""}
                       onChange={(event) =>
-                        handleVendorChange(event.target.value as ProcessAiTextBodyVendor)
+                        handleProfileChange(Number(event.target.value))
                       }
-                      disabled={pieceVendors.length === 0}
+                      disabled={pieceProfiles.length === 0}
                     >
-                      {pieceVendors.length === 0
-                        ? <option value="">No piece vendors enabled — configure in Admin → AI</option>
-                        : pieceVendors.map((vendor) => (
-                            <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
+                      {pieceProfiles.length === 0
+                        ? <option value="">No piece profiles enabled — configure in Admin → AI</option>
+                        : pieceProfiles.map((profile) => (
+                            <option key={profile.id} value={profile.id}>{profile.label}</option>
                           ))
                       }
                     </select>
@@ -793,7 +819,8 @@ canvas { display: block; }`;
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isImprovingText || !(preferredVendorTextImprove ?? aiVendors[0]?.id)}
+                    disabled={isImprovingText}
+                    title={!(preferredTextImproveProfileId ?? textProfiles[0]?.id) ? "No text generation profile configured — go to Admin → AI to add one" : undefined}
                     onClick={() => void handleImproveText()}
                   >
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
@@ -801,7 +828,7 @@ canvas { display: block; }`;
                   </Button>
                   <Button
                     type="button"
-                    disabled={!selectedVendor || !prompt.trim() || generationState?.phase === "generating"}
+                    disabled={!selectedProfileId || !prompt.trim() || generationState?.phase === "generating"}
                     onClick={() => void handleGenerate()}
                   >
                     {generationState?.phase === "generating" ? "Generating..." : "Generate piece"}
@@ -872,20 +899,20 @@ canvas { display: block; }`;
                           </select>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="piece-vendor">AI vendor for new versions</Label>
+                          <Label htmlFor="piece-vendor">AI profile for new versions</Label>
                           <select
                             id="piece-vendor"
                             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                            value={selectedVendor}
+                            value={selectedProfileId ?? ""}
                             onChange={(event) =>
-                              handleVendorChange(event.target.value as ProcessAiTextBodyVendor)
+                              handleProfileChange(Number(event.target.value))
                             }
-                            disabled={pieceVendors.length === 0}
+                            disabled={pieceProfiles.length === 0}
                           >
-                            {pieceVendors.length === 0
-                              ? <option value="">No piece vendors enabled — configure in Admin → AI</option>
-                              : pieceVendors.map((vendor) => (
-                                  <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
+                            {pieceProfiles.length === 0
+                              ? <option value="">No piece profiles enabled — configure in Admin → AI</option>
+                              : pieceProfiles.map((profile) => (
+                                  <option key={profile.id} value={profile.id}>{profile.label}</option>
                                 ))
                             }
                           </select>
@@ -971,7 +998,8 @@ canvas { display: block; }`;
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isImprovingText || !(preferredVendorTextImprove ?? aiVendors[0]?.id)}
+                    disabled={isImprovingText}
+                    title={!(preferredTextImproveProfileId ?? textProfiles[0]?.id) ? "No text generation profile configured — go to Admin → AI to add one" : undefined}
                     onClick={() => void handleImproveText()}
                   >
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
@@ -1041,7 +1069,7 @@ canvas { display: block; }`;
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={!selectedVendor || generationState?.phase === "generating"}
+                      disabled={!selectedProfileId || generationState?.phase === "generating"}
                       onClick={() => void handleGenerate()}
                     >
                       {generationState?.phase === "generating" ? "Generating..." : "Generate new version"}
@@ -1106,11 +1134,12 @@ canvas { display: block; }`;
           setDraftOpen(open);
           if (!open) {
             setDraft(null);
+            setSavingDraftToken(null);
           }
         }}
         draft={draft}
         prompt={prompt}
-        isSaving={creationMode === "ai" ? createPiece.isPending || isPersistingThumbnail : createVersion.isPending || isPersistingThumbnail}
+        isSaving={Boolean(savingDraftToken) || (creationMode === "ai" ? createPiece.isPending || isPersistingThumbnail : createVersion.isPending || isPersistingThumbnail)}
         onSaveAndInsert={() => {
           if (!draft) return;
           if (creationMode === "ai") {

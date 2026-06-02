@@ -75,7 +75,7 @@ export function PostEditor({
   const { currentUser, isOwner } = useCurrentUser();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { aiVendors, pieceVendors, preferredVendorTextImprove, preferredVendorAltText } = useOwnerAiVendors();
+  const { textProfiles, pieceProfiles, preferredTextImproveProfileId, preferredAltTextProfileId } = useOwnerAiVendors();
   const { connections: platformConnections } = useEnabledPlatformConnections();
 
   const [isExpanded, setIsExpanded] = useState(
@@ -375,10 +375,10 @@ export function PostEditor({
       submitLabel={submitLabel}
       cancelLabel="Cancel"
       isSubmitting={createPost.isPending || updatePost.isPending || uploadMedia.isPending}
-      aiVendors={aiVendors}
-      pieceVendors={pieceVendors}
-      preferredVendorTextImprove={preferredVendorTextImprove}
-      preferredVendorAltText={preferredVendorAltText}
+      textProfiles={textProfiles}
+      pieceProfiles={pieceProfiles}
+      preferredTextImproveProfileId={preferredTextImproveProfileId}
+      preferredAltTextProfileId={preferredAltTextProfileId}
       onCancel={() => {
         if (isEditMode) {
           onClose?.();

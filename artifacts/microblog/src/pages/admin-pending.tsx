@@ -13,7 +13,6 @@ import {
   getListFeedSourcesQueryKey,
   type PendingPost,
   type PendingPostsPage,
-  type ProcessAiTextBodyVendor,
 } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOwnerAiVendors } from "@/hooks/use-owner-ai-vendors";
@@ -75,9 +74,9 @@ function groupBySource(posts: PendingPost[]): SourceGroup[] {
 type PendingPostCardProps = {
   post: PendingPost;
   isMutating: boolean;
-  aiVendors: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
-  pieceVendors: Array<{ id: ProcessAiTextBodyVendor; label: string }>;
-  preferredVendorAltText?: ProcessAiTextBodyVendor | null;
+  textProfiles: import("@/hooks/use-owner-ai-vendors").AiProfile[];
+  pieceProfiles: import("@/hooks/use-owner-ai-vendors").AiProfile[];
+  preferredAltTextProfileId?: number | null;
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
 };
@@ -85,7 +84,7 @@ type PendingPostCardProps = {
 // Per-row component so each card owns its own edit state and editor
 // instance — keeps the editor unmounted (and out of memory) for posts
 // the owner isn't actively touching.
-function PendingPostCard({ post, isMutating, aiVendors, pieceVendors, preferredVendorAltText, onApprove, onReject }: PendingPostCardProps) {
+function PendingPostCard({ post, isMutating, textProfiles, pieceProfiles, preferredAltTextProfileId, onApprove, onReject }: PendingPostCardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -165,9 +164,9 @@ function PendingPostCard({ post, isMutating, aiVendors, pieceVendors, preferredV
               submitLabel="Save edits"
               cancelLabel="Cancel"
               isSubmitting={isSavingEdit}
-              aiVendors={aiVendors}
-              pieceVendors={pieceVendors}
-              preferredVendorAltText={preferredVendorAltText}
+              textProfiles={textProfiles}
+              pieceProfiles={pieceProfiles}
+              preferredAltTextProfileId={preferredAltTextProfileId}
               onCancel={() => setIsEditing(false)}
               onUpload={async (file) => {
                 const uploaded = await uploadMedia.mutateAsync({ data: { file } });
@@ -216,7 +215,7 @@ function PendingPostCard({ post, isMutating, aiVendors, pieceVendors, preferredV
 
 export default function AdminPendingPage() {
   const { isOwner, isLoading: isUserLoading } = useCurrentUser();
-  const { aiVendors, pieceVendors, preferredVendorAltText } = useOwnerAiVendors();
+  const { textProfiles, pieceProfiles, preferredAltTextProfileId } = useOwnerAiVendors();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -372,9 +371,9 @@ export default function AdminPendingPage() {
                     key={post.id}
                     post={post}
                     isMutating={isMutating}
-                    aiVendors={aiVendors}
-                    pieceVendors={pieceVendors}
-                    preferredVendorAltText={preferredVendorAltText}
+                    textProfiles={textProfiles}
+                    pieceProfiles={pieceProfiles}
+                    preferredAltTextProfileId={preferredAltTextProfileId}
                     onApprove={(id) => approve.mutate({ id })}
                     onReject={(id) => reject.mutate({ id })}
                   />

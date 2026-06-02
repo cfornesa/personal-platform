@@ -2,8 +2,11 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
   eq,
+  and,
+  inArray,
   mysqlPool,
   userAiVendorSettingsTable,
+  userAiVendorKeysTable,
   usersTable,
 } from "@workspace/db";
 import {
@@ -21,16 +24,17 @@ import {
   isAiVendor,
   isPieceGenerationVendor,
   isTextGenerationVendor,
-  normalizeAiVendorSettingsInput,
+  normalizeAiProfileInput,
   normalizeOptionalString,
   toSafeAiSettingsResponse,
-  validateAiVendorSettingsInput,
+  validateAiProfileInput,
   type AiVendor,
 } from "../lib/ai-settings";
 import { fileTypeFromBuffer } from "file-type";
 import { stripHtmlToText } from "../lib/html";
 import { AiProviderError, AiVisionNotSupportedError, processImageWithProvider, processTextWithProvider } from "../lib/ai-providers";
 import { getMediaBuffer } from "../lib/media";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const AI_SYSTEM_PROMPT =
@@ -53,30 +57,61 @@ function setAiNoStoreHeaders(res: Response) {
   res.setHeader("Cache-Control", AI_NO_STORE_CACHE_CONTROL);
 }
 
-async function loadUserAiSettings(userId: string) {
+async function loadUserAiProfiles(userId: string) {
   return db
     .select()
     .from(userAiVendorSettingsTable)
     .where(eq(userAiVendorSettingsTable.userId, userId));
 }
 
-function indexRowsByVendor(
-  rows: Awaited<ReturnType<typeof loadUserAiSettings>>,
-) {
-  return new Map(rows.map((row) => [row.vendor, row] as const));
+async function loadProfileById(userId: string, profileId: number) {
+  const rows = await db
+    .select()
+    .from(userAiVendorSettingsTable)
+    .where(and(eq(userAiVendorSettingsTable.id, profileId), eq(userAiVendorSettingsTable.userId, userId)));
+  return rows[0] ?? null;
+}
+
+async function loadVendorKeyMap(userId: string): Promise<Map<AiVendor, boolean>> {
+  const rows = await db
+    .select()
+    .from(userAiVendorKeysTable)
+    .where(eq(userAiVendorKeysTable.userId, userId));
+  return new Map(rows.map((r) => [r.vendor as AiVendor, true]));
+}
+
+async function loadVendorKey(userId: string, vendor: AiVendor): Promise<string | null> {
+  const rows = await db
+    .select()
+    .from(userAiVendorKeysTable)
+    .where(and(eq(userAiVendorKeysTable.userId, userId), eq(userAiVendorKeysTable.vendor, vendor)));
+  return rows[0]?.encryptedApiKey ?? null;
 }
 
 // GET /users/me/ai-settings
 router.get("/users/me/ai-settings", requireAuth, requireOwner, async (req: Request, res: Response) => {
   try {
     setAiNoStoreHeaders(res);
-    const rows = await loadUserAiSettings(req.currentUser!.id);
+    const [profiles, vendorKeyMap] = await Promise.all([
+      loadUserAiProfiles(req.currentUser!.id),
+      loadVendorKeyMap(req.currentUser!.id),
+    ]);
     const user = req.currentUser!;
-    const response = GetMyAiSettingsResponse.parse(
-      toSafeAiSettingsResponse(rows, user.preferredArtPieceVendor, user.preferredVendorTextImprove, user.preferredVendorAltText),
+    const safeData = toSafeAiSettingsResponse(
+      profiles,
+      vendorKeyMap,
+      user.preferredArtPieceProfileId ?? null,
+      user.preferredTextImproveProfileId ?? null,
+      user.preferredAltTextProfileId ?? null,
     );
-    return res.json(response);
-  } catch {
+    const parsed = GetMyAiSettingsResponse.safeParse(safeData);
+    if (!parsed.success) {
+      logger.error({ err: parsed.error, data: JSON.stringify(safeData) }, "AI settings GET: Zod validation failed");
+      return res.status(500).json({ error: "Server error" });
+    }
+    return res.json(parsed.data);
+  } catch (err) {
+    logger.error({ err }, "AI settings GET: unexpected error");
     return res.status(500).json({ error: "Server error" });
   }
 });
@@ -94,98 +129,188 @@ router.patch("/users/me/ai-settings", requireAuth, requireOwner, async (req: Req
     }
 
     const currentUser = req.currentUser!;
-    const existingRows = await loadUserAiSettings(currentUser.id);
-    const existingByVendor = indexRowsByVendor(existingRows);
-    let preferredArtPieceVendor = currentUser.preferredArtPieceVendor ?? null;
-    let preferredVendorTextImprove = currentUser.preferredVendorTextImprove ?? null;
-    let preferredVendorAltText = currentUser.preferredVendorAltText ?? null;
+    const existingProfiles = await loadUserAiProfiles(currentUser.id);
+    const existingById = new Map(existingProfiles.map((row) => [row.id, row]));
 
-    const userPrefsUpdate: Partial<{ preferredArtPieceVendor: string | null; preferredVendorTextImprove: string | null; preferredVendorAltText: string | null }> = {};
-
-    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredArtPieceVendor")) {
-      const requested = parsed.data.preferredArtPieceVendor;
-      if (typeof requested === "string" && !isPieceGenerationVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported art piece AI vendor "${requested}"` });
-      }
-      preferredArtPieceVendor = requested ?? null;
-      userPrefsUpdate.preferredArtPieceVendor = preferredArtPieceVendor;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorTextImprove")) {
-      const requested = (parsed.data as { preferredVendorTextImprove?: string | null }).preferredVendorTextImprove;
-      if (typeof requested === "string" && !isTextGenerationVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported text AI vendor "${requested}"` });
-      }
-      preferredVendorTextImprove = requested ?? null;
-      userPrefsUpdate.preferredVendorTextImprove = preferredVendorTextImprove;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredVendorAltText")) {
-      const requested = (parsed.data as { preferredVendorAltText?: string | null }).preferredVendorAltText;
-      if (typeof requested === "string" && !isImageDescriptionVendor(requested)) {
-        return res.status(400).json({ error: `Unsupported image description AI vendor "${requested}"` });
-      }
-      preferredVendorAltText = requested ?? null;
-      userPrefsUpdate.preferredVendorAltText = preferredVendorAltText;
-    }
-
-    if (Object.keys(userPrefsUpdate).length > 0) {
-      await db
-        .update(usersTable)
-        .set(userPrefsUpdate)
-        .where(eq(usersTable.id, currentUser.id));
-    }
-
-    for (const item of parsed.data.settings) {
-      const normalized = normalizeAiVendorSettingsInput(item);
-      if (!normalized) {
-        return res.status(400).json({ error: `Unsupported AI vendor "${item.vendor}"` });
-      }
-
-      const existing = existingByVendor.get(normalized.vendor);
-      const nextEnabled = normalized.enabled ?? (existing?.enabled === 1);
-      const nextModel = normalized.model ?? normalizeOptionalString(existing?.model) ?? null;
-      const nextEncryptedApiKey = normalized.apiKey
-        ? encryptAiApiKey(normalized.apiKey)
-        : normalizeOptionalString(existing?.encryptedApiKey) ?? null;
-      const vendorLabel = getAiVendorLabel(normalized.vendor) ?? normalized.vendor;
-
-      const validationError = validateAiVendorSettingsInput({
-        vendorLabel,
-        enabled: nextEnabled,
-        model: nextModel,
-        encryptedApiKey: nextEncryptedApiKey,
-      });
-
-      if (validationError) {
-        return res.status(400).json({ error: validationError });
-      }
-
+    // Save vendor API keys
+    for (const keyEntry of parsed.data.vendorKeys ?? []) {
+      const vendor = keyEntry.vendor.trim();
+      if (!isAiVendor(vendor)) continue;
+      const encryptedApiKey = encryptAiApiKey(keyEntry.apiKey);
       await mysqlPool.query(
-        `INSERT INTO user_ai_vendor_settings
-           (user_id, vendor, enabled, model, encrypted_api_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
-         ON DUPLICATE KEY UPDATE
-           enabled = VALUES(enabled),
-           model = VALUES(model),
-           encrypted_api_key = VALUES(encrypted_api_key),
-           updated_at = CURRENT_TIMESTAMP(3)`,
-        [
-          currentUser.id,
-          normalized.vendor,
-          nextEnabled ? 1 : 0,
-          nextModel,
-          nextEncryptedApiKey,
-        ],
+        `INSERT INTO user_ai_vendor_keys (user_id, vendor, encrypted_api_key, created_at, updated_at)
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
+         ON DUPLICATE KEY UPDATE encrypted_api_key = VALUES(encrypted_api_key), updated_at = CURRENT_TIMESTAMP(3)`,
+        [currentUser.id, vendor, encryptedApiKey],
       );
     }
 
-    const rows = await loadUserAiSettings(currentUser.id);
-    const response = GetMyAiSettingsResponse.parse(
-      toSafeAiSettingsResponse(rows, preferredArtPieceVendor, preferredVendorTextImprove, preferredVendorAltText),
+    // Load fresh key map after saving vendor keys
+    const vendorKeyMap = await loadVendorKeyMap(currentUser.id);
+
+    // Handle profile upserts
+    for (const item of parsed.data.profiles ?? []) {
+      const normalized = normalizeAiProfileInput(item);
+      if (!normalized) {
+        return res.status(400).json({ error: `Invalid profile data (vendor "${item.vendor}" not supported)` });
+      }
+
+      if (normalized.id !== undefined) {
+        const existing = existingById.get(normalized.id);
+        if (!existing) {
+          return res.status(404).json({ error: `Profile ${normalized.id} not found` });
+        }
+
+        const nextEnabled = normalized.enabled ?? (existing.enabled === 1);
+        const nextModel = normalized.model ?? normalizeOptionalString(existing.model) ?? null;
+        const nextEndpointKind = normalized.endpointKind !== undefined ? normalized.endpointKind : existing.endpointKind;
+        const nextProfileName = normalized.profileName;
+        const vendorLabel = getAiVendorLabel(normalized.vendor) ?? normalized.vendor;
+        const hasVendorKey = vendorKeyMap.get(normalized.vendor) ?? false;
+
+        const validationError = validateAiProfileInput({
+          vendorLabel,
+          profileName: nextProfileName,
+          enabled: nextEnabled,
+          hasVendorKey,
+          model: nextModel,
+        });
+        if (validationError) {
+          return res.status(400).json({ error: validationError });
+        }
+
+        await mysqlPool.query(
+          `UPDATE user_ai_vendor_settings
+           SET profile_name = ?, endpoint_kind = ?, enabled = ?, model = ?, updated_at = CURRENT_TIMESTAMP(3)
+           WHERE id = ? AND user_id = ?`,
+          [nextProfileName, nextEndpointKind ?? null, nextEnabled ? 1 : 0, nextModel, normalized.id, currentUser.id],
+        );
+      } else {
+        const nextEnabled = normalized.enabled ?? false;
+        const nextModel = normalized.model ?? null;
+        const nextEndpointKind = normalized.endpointKind ?? null;
+        const vendorLabel = getAiVendorLabel(normalized.vendor) ?? normalized.vendor;
+        const hasVendorKey = vendorKeyMap.get(normalized.vendor) ?? false;
+
+        const validationError = validateAiProfileInput({
+          vendorLabel,
+          profileName: normalized.profileName,
+          enabled: nextEnabled,
+          hasVendorKey,
+          model: nextModel,
+        });
+        if (validationError) {
+          return res.status(400).json({ error: validationError });
+        }
+
+        await mysqlPool.query(
+          `INSERT INTO user_ai_vendor_settings
+             (user_id, vendor, profile_name, endpoint_kind, enabled, model, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
+          [currentUser.id, normalized.vendor, normalized.profileName, nextEndpointKind, nextEnabled ? 1 : 0, nextModel],
+        );
+      }
+    }
+
+    // Handle deletions
+    const deletedIds = parsed.data.deletedProfileIds ?? [];
+    if (deletedIds.length > 0) {
+      const ownedIds = deletedIds.filter((id) => existingById.has(id));
+      if (ownedIds.length > 0) {
+        await db
+          .delete(userAiVendorSettingsTable)
+          .where(and(inArray(userAiVendorSettingsTable.id, ownedIds), eq(userAiVendorSettingsTable.userId, currentUser.id)));
+      }
+    }
+
+    // Resolve preference updates
+    const freshProfiles = await loadUserAiProfiles(currentUser.id);
+    const freshById = new Set(freshProfiles.map((r) => r.id));
+
+    const userPrefsUpdate: Partial<{
+      preferredArtPieceProfileId: number | null;
+      preferredTextImproveProfileId: number | null;
+      preferredAltTextProfileId: number | null;
+    }> = {};
+
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredArtPieceProfileId")) {
+      const id = parsed.data.preferredArtPieceProfileId ?? null;
+      if (id !== null) {
+        const profile = freshProfiles.find((r) => r.id === id);
+        if (!profile) return res.status(400).json({ error: `Profile ${id} not found for art piece preference` });
+        if (!isPieceGenerationVendor(profile.vendor)) {
+          return res.status(400).json({ error: `Profile ${id} vendor "${profile.vendor}" is not supported for art piece generation` });
+        }
+      }
+      userPrefsUpdate.preferredArtPieceProfileId = id;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredTextImproveProfileId")) {
+      const id = parsed.data.preferredTextImproveProfileId ?? null;
+      if (id !== null) {
+        const profile = freshProfiles.find((r) => r.id === id);
+        if (!profile) return res.status(400).json({ error: `Profile ${id} not found for text improve preference` });
+        if (!isTextGenerationVendor(profile.vendor)) {
+          return res.status(400).json({ error: `Profile ${id} vendor "${profile.vendor}" is not supported for text generation` });
+        }
+      }
+      userPrefsUpdate.preferredTextImproveProfileId = id;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "preferredAltTextProfileId")) {
+      const id = parsed.data.preferredAltTextProfileId ?? null;
+      if (id !== null) {
+        const profile = freshProfiles.find((r) => r.id === id);
+        if (!profile) return res.status(400).json({ error: `Profile ${id} not found for alt text preference` });
+        if (!isImageDescriptionVendor(profile.vendor)) {
+          return res.status(400).json({ error: `Profile ${id} vendor "${profile.vendor}" is not supported for image description` });
+        }
+      }
+      userPrefsUpdate.preferredAltTextProfileId = id;
+    }
+
+    // Clear preferences that point to deleted profiles
+    const currentPrefs = {
+      preferredArtPieceProfileId: currentUser.preferredArtPieceProfileId ?? null,
+      preferredTextImproveProfileId: currentUser.preferredTextImproveProfileId ?? null,
+      preferredAltTextProfileId: currentUser.preferredAltTextProfileId ?? null,
+    };
+    if (currentPrefs.preferredArtPieceProfileId !== null && !freshById.has(currentPrefs.preferredArtPieceProfileId)) {
+      userPrefsUpdate.preferredArtPieceProfileId = null;
+    }
+    if (currentPrefs.preferredTextImproveProfileId !== null && !freshById.has(currentPrefs.preferredTextImproveProfileId)) {
+      userPrefsUpdate.preferredTextImproveProfileId = null;
+    }
+    if (currentPrefs.preferredAltTextProfileId !== null && !freshById.has(currentPrefs.preferredAltTextProfileId)) {
+      userPrefsUpdate.preferredAltTextProfileId = null;
+    }
+
+    if (Object.keys(userPrefsUpdate).length > 0) {
+      await db.update(usersTable).set(userPrefsUpdate).where(eq(usersTable.id, currentUser.id));
+    }
+
+    const resolvedPrefs = {
+      preferredArtPieceProfileId: userPrefsUpdate.preferredArtPieceProfileId ?? currentUser.preferredArtPieceProfileId ?? null,
+      preferredTextImproveProfileId: userPrefsUpdate.preferredTextImproveProfileId ?? currentUser.preferredTextImproveProfileId ?? null,
+      preferredAltTextProfileId: userPrefsUpdate.preferredAltTextProfileId ?? currentUser.preferredAltTextProfileId ?? null,
+    };
+
+    const freshVendorKeyMap = await loadVendorKeyMap(currentUser.id);
+    const safeData = toSafeAiSettingsResponse(
+      freshProfiles,
+      freshVendorKeyMap,
+      resolvedPrefs.preferredArtPieceProfileId,
+      resolvedPrefs.preferredTextImproveProfileId,
+      resolvedPrefs.preferredAltTextProfileId,
     );
-    return res.json(response);
-  } catch {
+    const responseParsed = GetMyAiSettingsResponse.safeParse(safeData);
+    if (!responseParsed.success) {
+      logger.error({ err: responseParsed.error }, "AI settings PATCH: response Zod validation failed");
+      return res.status(500).json({ error: "Server error" });
+    }
+    return res.json(responseParsed.data);
+  } catch (err) {
+    logger.error({ err }, "AI settings PATCH: unexpected error");
     return res.status(500).json({ error: "Server error" });
   }
 });
@@ -202,14 +327,27 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
       });
     }
 
-    const rows = await loadUserAiSettings(req.currentUser!.id);
-    const selected = rows.find((row) => row.vendor === parsed.data.vendor);
-    const model = normalizeOptionalString(selected?.model);
-    const encryptedApiKey = normalizeOptionalString(selected?.encryptedApiKey);
+    const userId = req.currentUser!.id;
+    const profile = await loadProfileById(userId, parsed.data.profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "AI profile not found" });
+    }
 
-    if (selected?.enabled !== 1 || !model || !encryptedApiKey) {
+    const model = normalizeOptionalString(profile.model);
+    if (profile.enabled !== 1 || !model) {
       return res.status(409).json({
-        error: `${getAiVendorLabel(parsed.data.vendor) ?? "Selected AI vendor"} is not enabled and configured for this user`,
+        error: `AI profile "${profile.profileName}" is not enabled and configured`,
+      });
+    }
+
+    if (!isTextGenerationVendor(profile.vendor)) {
+      return res.status(422).json({ error: `Vendor "${profile.vendor}" is not supported for text generation` });
+    }
+
+    const encryptedApiKey = await loadVendorKey(userId, profile.vendor as AiVendor);
+    if (!encryptedApiKey) {
+      return res.status(409).json({
+        error: `No API key saved for ${getAiVendorLabel(profile.vendor) ?? profile.vendor}. Add one in Admin → AI.`,
       });
     }
 
@@ -221,17 +359,19 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
 
     const apiKey = decryptAiApiKey(encryptedApiKey);
     const text = await processTextWithProvider({
-      vendor: parsed.data.vendor as AiVendor,
+      vendor: profile.vendor as AiVendor,
       model,
       apiKey,
+      endpointKind: profile.endpointKind,
       plainText: inputText,
       systemPrompt: isPlainMode ? AI_PLAIN_TEXT_SYSTEM_PROMPT : AI_SYSTEM_PROMPT,
     });
 
     const response = ProcessAiTextResponse.parse({
       text,
-      vendor: parsed.data.vendor,
-      vendorLabel: getAiVendorLabel(parsed.data.vendor) ?? parsed.data.vendor,
+      vendor: profile.vendor,
+      vendorLabel: getAiVendorLabel(profile.vendor) ?? profile.vendor,
+      profileName: profile.profileName,
       model,
     });
 
@@ -250,39 +390,48 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
   try {
     setAiNoStoreHeaders(res);
 
-    const { imageUrl, vendor, existingAltText } = req.body as {
+    const { imageUrl, profileId, existingAltText } = req.body as {
       imageUrl?: unknown;
-      vendor?: unknown;
+      profileId?: unknown;
       existingAltText?: unknown;
     };
     if (typeof imageUrl !== "string" || !imageUrl.trim()) {
       return res.status(400).json({ error: "imageUrl is required" });
     }
-    if (typeof vendor !== "string" || !vendor.trim()) {
-      return res.status(400).json({ error: "vendor is required" });
+    if (typeof profileId !== "number" || !Number.isInteger(profileId)) {
+      return res.status(400).json({ error: "profileId is required and must be an integer" });
     }
-    if (!isAiVendor(vendor)) {
-      return res.status(400).json({ error: `Unsupported AI vendor "${vendor}"` });
+
+    const userId = req.currentUser!.id;
+    const profile = await loadProfileById(userId, profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "AI profile not found" });
     }
-    if (!isImageDescriptionVendor(vendor)) {
+
+    if (!isAiVendor(profile.vendor)) {
+      return res.status(400).json({ error: `Unsupported AI vendor "${profile.vendor}"` });
+    }
+    if (!isImageDescriptionVendor(profile.vendor)) {
       return res.status(422).json({
-        error: `${getAiVendorLabel(vendor) ?? "Selected AI vendor"} is not supported for image alt text generation.`,
+        error: `${getAiVendorLabel(profile.vendor) ?? "Selected AI vendor"} is not supported for image description.`,
         code: "vision_not_supported",
       });
     }
 
-    const rows = await loadUserAiSettings(req.currentUser!.id);
-    const selected = rows.find((row) => row.vendor === vendor);
-    const model = normalizeOptionalString(selected?.model);
-    const encryptedApiKey = normalizeOptionalString(selected?.encryptedApiKey);
-
-    if (selected?.enabled !== 1 || !model || !encryptedApiKey) {
+    const model = normalizeOptionalString(profile.model);
+    if (profile.enabled !== 1 || !model) {
       return res.status(409).json({
-        error: `${getAiVendorLabel(vendor) ?? "Selected AI vendor"} is not enabled and configured for this user`,
+        error: `AI profile "${profile.profileName}" is not enabled and configured`,
       });
     }
 
-    // Read image from filesystem (only local /api/media/ URLs are supported)
+    const encryptedApiKey = await loadVendorKey(userId, profile.vendor as AiVendor);
+    if (!encryptedApiKey) {
+      return res.status(409).json({
+        error: `No API key saved for ${getAiVendorLabel(profile.vendor) ?? profile.vendor}. Add one in Admin → AI.`,
+      });
+    }
+
     const trimmedUrl = imageUrl.trim();
     const mediaPrefix = "/api/media/";
     if (!trimmedUrl.startsWith(mediaPrefix)) {
@@ -313,9 +462,10 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
 
     const apiKey = decryptAiApiKey(encryptedApiKey);
     const altText = await processImageWithProvider({
-      vendor: vendor as AiVendor,
+      vendor: profile.vendor as AiVendor,
       model,
       apiKey,
+      endpointKind: profile.endpointKind,
       imageBase64,
       imageMimeType,
       plainText: `Describe this image for use as alt text.${contextNote}`,
@@ -334,4 +484,5 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
   }
 });
 
+export { loadVendorKey };
 export default router;

@@ -4,6 +4,9 @@ import type { AiVendor } from "./ai-settings";
 const AI_TIMEOUT_MS = 120_000;
 const DEFAULT_CHAT_MAX_TOKENS = 4096;
 const ART_PIECE_CHAT_MAX_TOKENS = 12000;
+const ART_PIECE_PROVIDER_TIMEOUT_MS = 1_200_000;
+const ART_PIECE_NO_THINKING_DIRECTIVE =
+  "CRITICAL: Do not output <think>, reasoning, analysis, planning notes, explanations, or prose. Output only the required fenced HTML, CSS, and JavaScript code blocks.";
 
 type FailureClass = "timeout" | "upstream_http" | "network" | "parse" | "unknown_model";
 type EndpointFamily = "responses" | "chat_completions" | "messages" | "generate_content";
@@ -15,6 +18,7 @@ type ProcessTextInput = {
   apiKey: string;
   systemPrompt: string;
   vendor: AiVendor;
+  endpointKind?: string | null;
   intent?: ProviderIntent;
   signal?: AbortSignal;
 };
@@ -352,9 +356,9 @@ function getTransportAttempts(input: ProcessTextInput): TransportAttempt[] {
         },
       ];
     case "opencode-zen":
-      return getOpencodeZenTransportAttempt(input.model);
+      return getOpencodeZenTransportAttempt(input.model, input.endpointKind);
     case "opencode-go":
-      return getOpencodeGoTransportAttempt(input.model);
+      return getOpencodeGoTransportAttempt(input.model, input.endpointKind);
     case "mistral":
     case "mistral-vibe":
       return [
@@ -367,45 +371,31 @@ function getTransportAttempts(input: ProcessTextInput): TransportAttempt[] {
   }
 }
 
-function getOpencodeZenTransportAttempt(model: string): TransportAttempt[] {
+function getOpencodeZenTransportAttempt(model: string, endpointKind?: string | null): TransportAttempt[] {
+  if (endpointKind === "openai-responses") {
+    return [{ kind: "openai-responses", url: "https://opencode.ai/zen/v1/responses", endpointFamily: "responses" }];
+  }
+  if (endpointKind === "anthropic-messages") {
+    return [{ kind: "anthropic-messages", url: "https://opencode.ai/zen/v1/messages", endpointFamily: "messages" }];
+  }
+  if (endpointKind === "google-generate") {
+    return [{ kind: "google-generate-content", url: "https://opencode.ai/zen/v1/models", endpointFamily: "generate_content" }];
+  }
+  if (endpointKind === "chat-completions") {
+    return [{ kind: "chat-completions", url: "https://opencode.ai/zen/v1/chat/completions", endpointFamily: "chat_completions" }];
+  }
+
   if (isOpencodeZenResponsesModel(model)) {
-    return [
-      {
-        kind: "openai-responses",
-        url: "https://opencode.ai/zen/v1/responses",
-        endpointFamily: "responses",
-      },
-    ];
+    return [{ kind: "openai-responses", url: "https://opencode.ai/zen/v1/responses", endpointFamily: "responses" }];
   }
-
   if (isOpencodeZenAnthropicModel(model)) {
-    return [
-      {
-        kind: "anthropic-messages",
-        url: "https://opencode.ai/zen/v1/messages",
-        endpointFamily: "messages",
-      },
-    ];
+    return [{ kind: "anthropic-messages", url: "https://opencode.ai/zen/v1/messages", endpointFamily: "messages" }];
   }
-
   if (isOpencodeZenGoogleModel(model)) {
-    return [
-      {
-        kind: "google-generate-content",
-        url: "https://opencode.ai/zen/v1/models",
-        endpointFamily: "generate_content",
-      },
-    ];
+    return [{ kind: "google-generate-content", url: "https://opencode.ai/zen/v1/models", endpointFamily: "generate_content" }];
   }
-
   if (isOpencodeZenChatCompletionsModel(model)) {
-    return [
-      {
-        kind: "chat-completions",
-        url: "https://opencode.ai/zen/v1/chat/completions",
-        endpointFamily: "chat_completions",
-      },
-    ];
+    return [{ kind: "chat-completions", url: "https://opencode.ai/zen/v1/chat/completions", endpointFamily: "chat_completions" }];
   }
 
   throw new AiProviderError(
@@ -441,29 +431,23 @@ function isOpencodeZenChatCompletionsModel(model: string): boolean {
   ].some((prefix) => model.startsWith(prefix));
 }
 
-function getOpencodeGoTransportAttempt(model: string): TransportAttempt[] {
-  if (isOpencodeGoChatCompletionsModel(model)) {
-    return [
-      {
-        kind: "chat-completions",
-        url: "https://opencode.ai/zen/go/v1/chat/completions",
-        endpointFamily: "chat_completions",
-      },
-    ];
+function getOpencodeGoTransportAttempt(model: string, endpointKind?: string | null): TransportAttempt[] {
+  if (endpointKind === "anthropic-messages") {
+    return [{ kind: "anthropic-messages", url: "https://opencode.ai/zen/go/v1/messages", endpointFamily: "messages" }];
+  }
+  if (endpointKind === "chat-completions") {
+    return [{ kind: "chat-completions", url: "https://opencode.ai/zen/go/v1/chat/completions", endpointFamily: "chat_completions" }];
   }
 
+  if (isOpencodeGoChatCompletionsModel(model)) {
+    return [{ kind: "chat-completions", url: "https://opencode.ai/zen/go/v1/chat/completions", endpointFamily: "chat_completions" }];
+  }
   if (isOpencodeGoAnthropicModel(model)) {
-    return [
-      {
-        kind: "anthropic-messages",
-        url: "https://opencode.ai/zen/go/v1/messages",
-        endpointFamily: "messages",
-      },
-    ];
+    return [{ kind: "anthropic-messages", url: "https://opencode.ai/zen/go/v1/messages", endpointFamily: "messages" }];
   }
 
   throw new AiProviderError(
-    `Unknown OpenCode Go model slug "${model}". Pick a documented OpenCode Go model and try again.`,
+    `Unknown OpenCode Go model slug "${model}". Set an Endpoint Kind in Admin → AI to override auto-detection, or pick a documented OpenCode Go model.`,
     {
       statusCode: 400,
       retryable: false,
@@ -486,6 +470,9 @@ function normalizeModelForProvider(vendor: AiVendor, model: string): string {
 }
 
 function isOpencodeGoChatCompletionsModel(model: string): boolean {
+  if (model.startsWith("minimax-m3")) {
+    return true;
+  }
   return new Set([
     "glm-5.1",
     "glm-5",
@@ -558,11 +545,18 @@ async function postOpenAiResponses(url: string, input: ProcessTextInput): Promis
 }
 
 async function postChatCompletions(url: string, input: ProcessTextInput): Promise<TransportResult> {
-  const isDeepSeekArtPieceRequest = input.vendor === "deepseek" && input.intent === "art-piece";
+  const isArtPieceRequest = input.intent === "art-piece";
+  const isDeepSeek = input.vendor === "deepseek" || input.model.includes("deepseek");
+  const isOpencode = input.vendor === "opencode-zen" || input.vendor === "opencode-go";
+  const shouldDisableThinking = isArtPieceRequest && (isDeepSeek || isOpencode);
+  const systemPrompt = isArtPieceRequest && isOpencode
+    ? `${input.systemPrompt} ${ART_PIECE_NO_THINKING_DIRECTIVE}`
+    : input.systemPrompt;
   const result = await postJson(url, {
     transportKind: "chat-completions",
     endpointFamily: "chat_completions",
     signal: input.signal,
+    timeoutMs: isArtPieceRequest ? ART_PIECE_PROVIDER_TIMEOUT_MS : undefined,
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       ...(input.vendor === "openrouter"
@@ -578,10 +572,10 @@ async function postChatCompletions(url: string, input: ProcessTextInput): Promis
     },
     body: {
       model: input.model,
-      max_tokens: isDeepSeekArtPieceRequest ? ART_PIECE_CHAT_MAX_TOKENS : DEFAULT_CHAT_MAX_TOKENS,
-      ...(isDeepSeekArtPieceRequest ? { thinking: { type: "disabled" } } : {}),
+      max_tokens: isArtPieceRequest && isDeepSeek ? ART_PIECE_CHAT_MAX_TOKENS : DEFAULT_CHAT_MAX_TOKENS,
+      ...(shouldDisableThinking ? { thinking: { type: "disabled" } } : {}),
       messages: [
-        { role: "system", content: input.systemPrompt },
+        { role: "system", content: systemPrompt },
         { role: "user", content: input.plainText },
       ],
     },
@@ -600,18 +594,22 @@ async function postChatCompletions(url: string, input: ProcessTextInput): Promis
 }
 
 async function postAnthropicMessages(url: string, input: ProcessTextInput): Promise<TransportResult> {
+  const isArtPieceRequest = input.intent === "art-piece";
   const result = await postJson(url, {
     transportKind: "anthropic-messages",
     endpointFamily: "messages",
     signal: input.signal,
+    timeoutMs: isArtPieceRequest ? ART_PIECE_PROVIDER_TIMEOUT_MS : undefined,
     headers: {
       "x-api-key": input.apiKey,
       "anthropic-version": "2023-06-01",
     },
     body: {
       model: input.model,
-      max_tokens: 4096,
-      system: input.systemPrompt,
+      max_tokens: isArtPieceRequest ? 8192 : 4096,
+      system: isArtPieceRequest
+        ? `${input.systemPrompt} CRITICAL: Skip all internal chain-of-thought, reasoning steps, or step-by-step planning. Output the three requested code blocks directly and immediately to prevent gateway timeouts.`
+        : input.systemPrompt,
       messages: [
         { role: "user", content: input.plainText },
       ],
@@ -641,10 +639,12 @@ async function postAnthropicMessages(url: string, input: ProcessTextInput): Prom
 async function postGoogleGenerateContent(url: string, input: ProcessTextInput): Promise<TransportResult> {
   const modelPath = input.model.startsWith("models/") ? input.model : `models/${input.model}`;
   const endpoint = `${url}/${modelPath.replace(/^models\//, "")}:generateContent?key=${encodeURIComponent(input.apiKey)}`;
+  const isArtPieceRequest = input.intent === "art-piece";
   const result = await postJson(endpoint, {
     transportKind: "google-generate-content",
     endpointFamily: "generate_content",
     signal: input.signal,
+    timeoutMs: isArtPieceRequest ? ART_PIECE_PROVIDER_TIMEOUT_MS : undefined,
     body: {
       systemInstruction: {
         parts: [{ text: input.systemPrompt }],
@@ -656,7 +656,7 @@ async function postGoogleGenerateContent(url: string, input: ProcessTextInput): 
         },
       ],
       generationConfig: {
-        maxOutputTokens: 4096,
+        maxOutputTokens: isArtPieceRequest ? 8192 : 4096,
       },
     },
   });
@@ -689,13 +689,15 @@ async function postJson(
     headers?: Record<string, string>;
     body: unknown;
     signal?: AbortSignal;
+    timeoutMs?: number;
   },
 ): Promise<
   | { ok: true; json: unknown; rawText: string }
   | Extract<TransportResult, { ok: false }>
 > {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  const timeoutMs = input.timeoutMs ?? AI_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const abortListener = () => controller.abort();
   input.signal?.addEventListener("abort", abortListener);
 

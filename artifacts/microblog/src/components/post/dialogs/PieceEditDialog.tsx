@@ -15,7 +15,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   initialTitle: string;
   initialDescription: string;
-  altTextVendor: string | null;
+  aiProfileId: number | null;
   onSave: (description: string) => Promise<void>;
   onAiImprove: (text: string) => Promise<string | null>;
   onReplace: () => void;
@@ -27,7 +27,7 @@ export function PieceEditDialog({
   onOpenChange,
   initialTitle,
   initialDescription,
-  altTextVendor,
+  aiProfileId,
   onSave,
   onAiImprove,
   onReplace,
@@ -89,19 +89,17 @@ export function PieceEditDialog({
                 rows={4}
                 className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
               />
-              {altTextVendor && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  className="h-auto w-9 shrink-0 self-start"
-                  disabled={isImproving}
-                  title="Improve description with AI"
-                  onClick={() => void handleImprove()}
-                >
-                  {isImproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                </Button>
-              )}
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-auto w-9 shrink-0 self-start"
+                disabled={isImproving}
+                title={aiProfileId !== null ? "Improve description with AI" : "No text generation AI profile configured — go to Admin → AI to add one"}
+                onClick={() => void handleImprove()}
+              >
+                {isImproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
         </div>

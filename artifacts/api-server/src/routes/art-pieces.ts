@@ -6,9 +6,11 @@ import {
   db,
   desc,
   eq,
+  and,
   inArray,
   mysqlPool,
   userAiVendorSettingsTable,
+  userAiVendorKeysTable,
   type ArtPiece,
   type ArtPieceVersion,
 } from "@workspace/db";
@@ -56,7 +58,7 @@ const thumbnailUrlSchema = z
 const GenerateArtPieceBody = z.object({
   prompt: z.string().trim().min(1).max(4000),
   engine: artPieceEngineSchema,
-  vendor: aiVendorSchema,
+  profileId: z.number().int(),
 });
 
 const CreateArtPieceBody = z.object({
@@ -108,11 +110,20 @@ async function attachExhibitIds<T extends { id: number }>(
   return items.map((i) => ({ ...i, exhibitIds: map.get(i.id) ?? [] }));
 }
 
-async function loadOwnerAiSettings(userId: string) {
-  return db
+async function loadProfileForPiece(userId: string, profileId: number) {
+  const rows = await db
     .select()
     .from(userAiVendorSettingsTable)
-    .where(eq(userAiVendorSettingsTable.userId, userId));
+    .where(and(eq(userAiVendorSettingsTable.id, profileId), eq(userAiVendorSettingsTable.userId, userId)));
+  return rows[0] ?? null;
+}
+
+async function loadVendorKeyForPiece(userId: string, vendor: string): Promise<string | null> {
+  const rows = await db
+    .select()
+    .from(userAiVendorKeysTable)
+    .where(and(eq(userAiVendorKeysTable.userId, userId), eq(userAiVendorKeysTable.vendor, vendor)));
+  return rows[0]?.encryptedApiKey ?? null;
 }
 
 async function loadPiecesWithVersions(ownerUserId: string) {
@@ -165,21 +176,26 @@ async function loadVersionById(id: number) {
   return rows[0] ?? null;
 }
 
-function createGenerationAbortController(req: Request) {
+export function createGenerationAbortController(req: Request, res?: Response) {
   const controller = new AbortController();
   const { timeoutMs } = getArtPieceGenerationLimits();
   const timeout = setTimeout(() => controller.abort("timed_out"), timeoutMs);
   const cancel = () => controller.abort("cancelled");
+  const cancelIfResponseClosedBeforeEnd = () => {
+    if (!res?.writableEnded) {
+      cancel();
+    }
+  };
 
   req.on("aborted", cancel);
-  req.on("close", cancel);
+  res?.on("close", cancelIfResponseClosedBeforeEnd);
 
   return {
     signal: controller.signal,
     cleanup() {
       clearTimeout(timeout);
       req.off("aborted", cancel);
-      req.off("close", cancel);
+      res?.off("close", cancelIfResponseClosedBeforeEnd);
     },
   };
 }
@@ -226,13 +242,30 @@ function classifyGenerationFailureStage(message: string): string {
   return "generation_validation";
 }
 
-async function generateValidatedDraft(input: {
+function classifyAiProviderFailureStage(error: AiProviderError): string {
+  if (error.failureClass === "timeout") {
+    return "provider_timeout";
+  }
+  if (error.failureClass === "upstream_http") {
+    return "provider_upstream_http";
+  }
+  if (error.failureClass === "parse") {
+    return "provider_parse";
+  }
+  if (error.failureClass === "unknown_model") {
+    return "provider_unknown_model";
+  }
+  return "provider_request";
+}
+
+export async function generateValidatedDraft(input: {
   ownerUserId: string;
   prompt: string;
   engine: z.infer<typeof artPieceEngineSchema>;
-  vendor: z.infer<typeof aiVendorSchema>;
+  vendor: AiVendor;
   model: string;
   apiKey: string;
+  endpointKind?: string | null;
   signal: AbortSignal;
 }) {
   const { maxAttempts } = getArtPieceGenerationLimits();
@@ -255,9 +288,10 @@ async function generateValidatedDraft(input: {
 
     try {
       const responseText = await processTextWithProvider({
-        vendor: input.vendor as AiVendor,
+        vendor: input.vendor,
         model: input.model,
         apiKey: input.apiKey,
+        endpointKind: input.endpointKind,
         plainText,
         systemPrompt: getArtPieceGenerationSystemPrompt(input.engine),
         intent: "art-piece",
@@ -319,15 +353,38 @@ async function generateValidatedDraft(input: {
       if (input.signal.aborted) {
         throwIfGenerationAborted(input.signal, attemptCount);
       }
-      if (error instanceof AiProviderError && attemptCount >= maxAttempts) {
-        throw new ArtPieceGenerationError(error.message, {
-          statusCode: error.statusCode,
+
+      if (error instanceof AiProviderError) {
+        previousFailureMessage = error.message;
+        const failureStage = classifyAiProviderFailureStage(error);
+        console.warn("Art piece provider attempt failed", {
+          engine: input.engine,
+          vendor: input.vendor,
+          model: input.model,
           attemptCount,
           maxAttempts,
-          engine: input.engine,
-          failureStage: "provider_request",
+          failureStage,
+          failureMessage: error.message,
+          failureClass: error.failureClass,
+          transportKind: error.transportKind,
+          endpointFamily: error.endpointFamily,
+          upstreamStatus: error.upstreamStatus,
+          retryable: error.retryable,
           rawResponsePreview: error.rawResponsePreview?.slice(0, 600) ?? previousRawResponse?.slice(0, 600) ?? null,
         });
+
+        if (!error.retryable || attemptCount >= maxAttempts) {
+          throw new ArtPieceGenerationError(error.message, {
+            statusCode: error.statusCode,
+            attemptCount,
+            maxAttempts,
+            engine: input.engine,
+            failureStage,
+            rawResponsePreview: error.rawResponsePreview?.slice(0, 600) ?? previousRawResponse?.slice(0, 600) ?? null,
+          });
+        }
+
+        continue;
       }
 
       previousFailureMessage = error instanceof Error
@@ -483,7 +540,7 @@ router.get("/art-pieces/:id/embed", async (req: Request, res: Response) => {
 });
 
 router.post("/art-pieces/generate", requireAuth, requireOwner, async (req: Request, res: Response) => {
-  const generation = createGenerationAbortController(req);
+  const generation = createGenerationAbortController(req, res);
 
   try {
     const parsed = GenerateArtPieceBody.safeParse(req.body);
@@ -494,20 +551,29 @@ router.post("/art-pieces/generate", requireAuth, requireOwner, async (req: Reque
       });
     }
 
-    const rows = await loadOwnerAiSettings(req.currentUser!.id);
-    const selected = rows.find((row) => row.vendor === parsed.data.vendor);
-    const model = normalizeOptionalString(selected?.model);
-    const encryptedApiKey = normalizeOptionalString(selected?.encryptedApiKey);
+    const userId = req.currentUser!.id;
+    const selected = await loadProfileForPiece(userId, parsed.data.profileId);
+    if (!selected) {
+      return res.status(404).json({ error: "AI profile not found" });
+    }
 
-    if (selected?.enabled !== 1 || !model || !encryptedApiKey) {
+    const model = normalizeOptionalString(selected.model);
+    if (selected.enabled !== 1 || !model) {
       return res.status(409).json({
-        error: `${getAiVendorLabel(parsed.data.vendor) ?? "Selected AI vendor"} is not enabled and configured for this user`,
+        error: `AI profile "${selected.profileName}" is not enabled and configured`,
       });
     }
 
-    if (!isPieceGenerationVendor(parsed.data.vendor)) {
+    if (!isPieceGenerationVendor(selected.vendor)) {
       return res.status(422).json({
-        error: `${getAiVendorLabel(parsed.data.vendor) ?? "Selected AI vendor"} is not supported for piece generation. Use Google, Mistral AI, Mistral Vibe, or DeepSeek.`,
+        error: `${getAiVendorLabel(selected.vendor) ?? "Selected AI vendor"} is not supported for piece generation.`,
+      });
+    }
+
+    const encryptedApiKey = await loadVendorKeyForPiece(userId, selected.vendor);
+    if (!encryptedApiKey) {
+      return res.status(409).json({
+        error: `No API key saved for ${getAiVendorLabel(selected.vendor) ?? selected.vendor}. Add one in Admin → AI.`,
       });
     }
 
@@ -516,9 +582,10 @@ router.post("/art-pieces/generate", requireAuth, requireOwner, async (req: Reque
       ownerUserId: req.currentUser!.id,
       prompt: parsed.data.prompt,
       engine: parsed.data.engine,
-      vendor: parsed.data.vendor,
+      vendor: selected.vendor as AiVendor,
       model,
       apiKey,
+      endpointKind: selected.endpointKind,
       signal: generation.signal,
     });
 

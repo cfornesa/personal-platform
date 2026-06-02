@@ -8,10 +8,11 @@ import {
   isImageDescriptionVendor,
   isPieceGenerationVendor,
   PIECE_GENERATION_VENDORS,
-  normalizeAiVendorSettingsInput,
+  normalizeAiProfileInput,
   TEXT_GENERATION_VENDORS,
   toSafeAiSettingsResponse,
-  validateAiVendorSettingsInput,
+  validateAiProfileInput,
+  type AiVendor,
 } from "./ai-settings";
 
 describe("ai-settings", () => {
@@ -31,130 +32,102 @@ describe("ai-settings", () => {
     ]);
   });
 
-  it("exposes task capability allowlists", () => {
-    expect(TEXT_GENERATION_VENDORS).toContain("deepseek");
-    expect(PIECE_GENERATION_VENDORS).toContain("deepseek");
-    expect(IMAGE_DESCRIPTION_VENDORS).not.toContain("deepseek");
-    expect(isPieceGenerationVendor("deepseek")).toBe(true);
+  it("exposes vendor capability arrays", () => {
+    expect(TEXT_GENERATION_VENDORS).toContain("openrouter");
+    expect(IMAGE_DESCRIPTION_VENDORS).toContain("google");
+    expect(PIECE_GENERATION_VENDORS).toContain("opencode-zen");
+    expect(isImageDescriptionVendor("google")).toBe(true);
     expect(isImageDescriptionVendor("deepseek")).toBe(false);
+    expect(isPieceGenerationVendor("opencode-go")).toBe(true);
+    expect(isPieceGenerationVendor("openrouter")).toBe(false);
   });
 
-  it("normalizes and trims incoming vendor settings input", () => {
+  it("normalizes and trims incoming profile input", () => {
     expect(
-      normalizeAiVendorSettingsInput({
+      normalizeAiProfileInput({
         vendor: " opencode-zen ",
+        profileName: " My Profile ",
         enabled: true,
         model: " big-pickle ",
-        apiKey: " sk-123 ",
       }),
     ).toEqual({
       vendor: "opencode-zen",
+      profileName: "My Profile",
       enabled: true,
       model: "big-pickle",
-      apiKey: "sk-123",
+      endpointKind: null,
     });
   });
 
-  it("requires a model and api key when a vendor is enabled", () => {
-    expect(
-      validateAiVendorSettingsInput({
-        vendorLabel: "OpenCode Zen",
-        enabled: true,
-        model: null,
-        encryptedApiKey: null,
-      }),
-    ).toBe("OpenCode Zen requires a model before it can be enabled");
-    expect(
-      validateAiVendorSettingsInput({
-        vendorLabel: "OpenCode Zen",
-        enabled: true,
-        model: "big-pickle",
-        encryptedApiKey: null,
-      }),
-    ).toBe("OpenCode Zen requires an API key before it can be enabled");
+  it("rejects profiles with unknown vendors", () => {
+    expect(normalizeAiProfileInput({ vendor: "not-real", profileName: "x" })).toBeNull();
   });
 
-  it("returns disabled-by-default safe settings for every supported vendor", () => {
-    expect(toSafeAiSettingsResponse([])).toEqual({
-      availableVendors: AI_VENDOR_OPTIONS,
-      preferredArtPieceVendor: null,
-      preferredVendorTextImprove: null,
-      preferredVendorAltText: null,
-      settings: [
+  it("requires a model before enabling a profile", () => {
+    expect(
+      validateAiProfileInput({
+        vendorLabel: "Opencode Zen",
+        profileName: "My Profile",
+        enabled: true,
+        hasVendorKey: true,
+        model: null,
+      }),
+    ).toBe('Opencode Zen profile "My Profile" requires a model before it can be enabled');
+  });
+
+  it("requires a vendor API key before enabling a profile", () => {
+    expect(
+      validateAiProfileInput({
+        vendorLabel: "Opencode Zen",
+        profileName: "My Profile",
+        enabled: true,
+        hasVendorKey: false,
+        model: "big-pickle",
+      }),
+    ).toContain("requires an API key");
+  });
+
+  it("returns empty profile list and all-false vendor keys when no rows are provided", () => {
+    const response = toSafeAiSettingsResponse([], new Map());
+    expect(response.profiles).toEqual([]);
+    expect(response.vendorKeys.every((vk) => !vk.hasKey)).toBe(true);
+    expect(response.preferredArtPieceProfileId).toBeNull();
+    expect(response.preferredTextImproveProfileId).toBeNull();
+    expect(response.preferredAltTextProfileId).toBeNull();
+  });
+
+  it("sets configured=true when vendor has a key and profile has a model", () => {
+    const vendorKeyMap = new Map<AiVendor, boolean>([["openrouter", true]]);
+    const response = toSafeAiSettingsResponse(
+      [
         {
+          id: 1,
           vendor: "openrouter",
-          vendorLabel: "OpenRouter",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "opencode-zen",
-          vendorLabel: "Opencode Zen",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "opencode-go",
-          vendorLabel: "Opencode Go",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "google",
-          vendorLabel: "Google",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "mistral",
-          vendorLabel: "Mistral AI",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "mistral-vibe",
-          vendorLabel: "Mistral Vibe",
-          enabled: false,
-          configured: false,
-          model: null,
-        },
-        {
-          vendor: "deepseek",
-          vendorLabel: "DeepSeek",
-          enabled: false,
-          configured: false,
-          model: null,
+          profileName: "openrouter - anthropic/claude-sonnet-4.5",
+          endpointKind: null,
+          enabled: 1,
+          model: "anthropic/claude-sonnet-4.5",
         },
       ],
-    });
-  });
+      vendorKeyMap,
+      1, 1, null,
+    );
 
-  it("never exposes encrypted api keys in the safe response", () => {
-    const response = toSafeAiSettingsResponse([
-      {
-        vendor: "openrouter",
-        enabled: 1,
-        model: "anthropic/claude-sonnet-4.5",
-        encryptedApiKey: "secret-payload",
-      },
-    ], "openrouter", "openrouter", "google");
-
-    expect(response.settings[0]).toEqual({
+    expect(response.profiles[0]).toEqual({
+      id: 1,
       vendor: "openrouter",
       vendorLabel: "OpenRouter",
+      profileName: "openrouter - anthropic/claude-sonnet-4.5",
       enabled: true,
       configured: true,
       model: "anthropic/claude-sonnet-4.5",
+      endpointKind: null,
     });
-    expect(response.preferredArtPieceVendor).toBe("openrouter");
-    expect(response.preferredVendorTextImprove).toBe("openrouter");
-    expect(response.preferredVendorAltText).toBe("google");
-    expect("encryptedApiKey" in response.settings[0]!).toBe(false);
+    expect(response.vendorKeys.find((vk) => vk.vendor === "openrouter")?.hasKey).toBe(true);
+    expect(response.preferredArtPieceProfileId).toBe(1);
+    expect(response.preferredTextImproveProfileId).toBe(1);
+    expect(response.preferredAltTextProfileId).toBeNull();
+    expect("encryptedApiKey" in response.profiles[0]!).toBe(false);
   });
 
   it("encrypts and decrypts api keys round-trip", () => {
