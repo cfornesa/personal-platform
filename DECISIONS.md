@@ -34,6 +34,35 @@ options regardless of session context. -->
 
 ---
 
+## 2026-06-05 — AI Image Description Bug Fixes
+
+### Root Causes Identified and Fixed
+
+**500 on `POST /api/ai/describe-image`**
+- `decryptAiApiKey` (wrapping `decryptSecret` in `crypto.ts`) throws a plain `Error` when the stored encrypted API key cannot be decrypted — this happens when `AI_SETTINGS_ENCRYPTION_KEY` has changed since the key was saved, or when the payload is malformed.
+- Neither `AiVisionNotSupportedError` nor `AiProviderError` catches a plain `Error`, so the route's catch block fell through to the generic `res.status(500)` branch with no logging.
+- Fix: both the text-generation and describe-image routes now wrap `decryptAiApiKey` in an isolated try-catch that returns a 409 with a user-facing message ("The stored API key for [vendor] could not be read. Try re-saving it in Admin → AI."). `logger.error` was added at the top of both catch blocks so any remaining unexpected error is visible in server logs.
+- Resolution path for end users: re-save the affected vendor's API key in Admin → AI. The key is re-encrypted with the current `AI_SETTINGS_ENCRYPTION_KEY` and the 409 clears.
+
+**Task preference settings requiring multiple saves + hard refreshes**
+- New (unsaved) AI profiles generate temporary keys like `"new-1"`. `Number("new-1")` = `NaN`, so `safePref` silently returned `null` for any preference pointing at an unsaved profile. Fix: added `!d.isNew` to the `enabledProfiles` filter so new profiles are excluded from the task-preference dropdowns until they have a server-issued numeric ID.
+- `setQueryData` after save updated the in-memory cache but didn't trigger a refetch for late-mounting subscribers. Fix: `invalidateQueries` added immediately after `setQueryData` in the `onSuccess` handler.
+
+**Frontend swallowing server error messages**
+- All three describe-image error sites (`admin-library.tsx`, `FeaturedImagePicker.tsx`, `RichPostEditor.tsx`) showed a hardcoded "Could not generate alt text." toast regardless of the actual server response. Fix: the `else` branch now extracts `error?.data?.error` (or delegates to `getAiFailureMessage`) before falling back to the generic string.
+
+### Files Changed
+- `artifacts/api-server/src/routes/ai.ts` — `decryptAiApiKey` try-catch + `logger.error` in both route catch blocks.
+- `artifacts/microblog/src/pages/admin/admin-ai.tsx` — `!d.isNew` filter + `invalidateQueries`.
+- `artifacts/microblog/src/pages/admin/admin-library.tsx` — surface `error?.data?.error` in toast.
+- `artifacts/microblog/src/components/media/FeaturedImagePicker.tsx` — surface `error?.data?.error` in toast.
+- `artifacts/microblog/src/components/post/RichPostEditor.tsx` — use `getAiFailureMessage` in describe-image catch.
+
+### Applied To
+`personal-platform`, `creatrweb-platform`, `fornesusart-platform`, `fornesus-platform`.
+
+---
+
 ## 2026-05-30 — Codebase State Audit For Documentation Recovery
 
 ### Decisions Confirmed

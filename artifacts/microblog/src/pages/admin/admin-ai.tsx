@@ -194,6 +194,7 @@ export default function AdminAiPage() {
     mutation: {
       onSuccess: (data) => {
         queryClient.setQueryData(getGetMyAiSettingsQueryKey(), data);
+        queryClient.invalidateQueries({ queryKey: getGetMyAiSettingsQueryKey() });
         const newDrafts: DraftState = {};
         for (const profile of data.profiles) {
           const [key, draft] = buildDraftFromProfile(profile);
@@ -318,7 +319,7 @@ export default function AdminAiPage() {
   }));
 
   const enabledProfiles = draftEntries
-    .filter(([, d]) => d.enabled && !d.toDelete)
+    .filter(([, d]) => !d.isNew && d.enabled && !d.toDelete)
     .map(([k, d]) => ({ id: Number(k), vendor: d.vendor, profileName: d.profileName.trim() || autoProfileName(d.vendorLabel, d.model) }));
 
   const enabledTextProfiles = enabledProfiles.filter((p) => TEXT_GENERATION_VENDORS.includes(p.vendor as (typeof TEXT_GENERATION_VENDORS)[number]));

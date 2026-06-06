@@ -1338,7 +1338,8 @@ export function RichPostEditor({
             if (code === "vision_not_supported") {
               toast({ title: "Vision not supported", description: "This AI model does not support image analysis. Choose a vision-capable model in Admin → AI → Task Preferences.", variant: "destructive" });
             } else {
-              toast({ title: "AI failed", description: "Could not generate alt text.", variant: "destructive" });
+              const message = getAiFailureMessage(err) || "Could not generate alt text.";
+              toast({ title: "AI failed", description: message, variant: "destructive" });
             }
             return null;
           }

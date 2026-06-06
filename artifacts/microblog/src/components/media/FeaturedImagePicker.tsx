@@ -219,7 +219,8 @@ export function FeaturedImagePicker({
           variant: "destructive",
         });
       } else {
-        toast({ title: "AI failed", description: "Could not generate alt text.", variant: "destructive" });
+        const message = (error?.data as any)?.error ?? "Could not generate alt text.";
+        toast({ title: "AI failed", description: message, variant: "destructive" });
       }
     } finally {
       setIsGeneratingAlt(false);

@@ -357,7 +357,14 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
       return res.status(400).json({ error: "Content must contain visible text" });
     }
 
-    const apiKey = decryptAiApiKey(encryptedApiKey);
+    let apiKey: string;
+    try {
+      apiKey = decryptAiApiKey(encryptedApiKey);
+    } catch {
+      return res.status(409).json({
+        error: `The stored API key for ${getAiVendorLabel(profile.vendor) ?? profile.vendor} could not be read. Try re-saving it in Admin → AI.`,
+      });
+    }
     const text = await processTextWithProvider({
       vendor: profile.vendor as AiVendor,
       model,
@@ -377,6 +384,7 @@ router.post("/ai/process", requireAuth, requireOwner, async (req: Request, res: 
 
     return res.json(response);
   } catch (error) {
+    logger.error({ err: error }, "process-ai-text route error");
     if (error instanceof AiProviderError) {
       return res.status(error.statusCode).json({ error: error.message });
     }
@@ -460,7 +468,14 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
         ? ` Current description: "${existingAltText.trim()}". Refine or replace it based on the actual image content.`
         : "";
 
-    const apiKey = decryptAiApiKey(encryptedApiKey);
+    let apiKey: string;
+    try {
+      apiKey = decryptAiApiKey(encryptedApiKey);
+    } catch {
+      return res.status(409).json({
+        error: `The stored API key for ${getAiVendorLabel(profile.vendor) ?? profile.vendor} could not be read. Try re-saving it in Admin → AI.`,
+      });
+    }
     const altText = await processImageWithProvider({
       vendor: profile.vendor as AiVendor,
       model,
@@ -474,6 +489,7 @@ router.post("/ai/describe-image", requireAuth, requireOwner, async (req: Request
 
     return res.json({ altText: altText.trim().slice(0, 125) });
   } catch (error) {
+    logger.error({ err: error }, "describe-image route error");
     if (error instanceof AiVisionNotSupportedError) {
       return res.status(422).json({ error: error.message, code: "vision_not_supported" });
     }
