@@ -5,14 +5,18 @@ import {
   categoriesTable,
   postCategoriesTable,
   pagesTable,
+  siteSettingsTable,
+  usersTable,
   desc,
   eq,
   and,
+  isNull,
 } from "@workspace/db";
 import { stripHtmlToText } from "../lib/html";
 import { attachCategoriesToPosts, type HydratedCategory } from "../lib/post-categories";
 
 import { getCanonicalOrigin } from "../lib/origin";
+import { loadBootstrapStatus } from "../lib/bootstrap";
 
 export type FeedPost = {
   id: number;
@@ -40,21 +44,57 @@ type FeedScope = {
   alternatePath: string;
 };
 
+type FeedSiteMetadata = {
+  siteTitle: string;
+  siteDescription: string;
+  siteAuthorName: string;
+};
+
 const router: IRouter = Router();
 
 export function getOrigin(req: Request): string {
   return getCanonicalOrigin(req);
 }
 
-function getSiteTitle(): string {
-  return process.env.SITE_TITLE?.trim() || "Microblog";
+export async function loadFeedSiteMetadata(posts: FeedPost[]): Promise<FeedSiteMetadata> {
+  const [settingsRows, ownerRows] = await Promise.all([
+    db
+      .select({
+        siteTitle: siteSettingsTable.siteTitle,
+        heroSubheading: siteSettingsTable.heroSubheading,
+      })
+      .from(siteSettingsTable)
+      .where(eq(siteSettingsTable.id, 1))
+      .limit(1),
+    db
+      .select({
+        name: usersTable.name,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.role, "owner"))
+      .limit(1),
+  ]);
+
+  const settings = settingsRows[0];
+  const owner = ownerRows[0];
+  return {
+    siteTitle:
+      settings?.siteTitle?.trim() && !settings.siteTitle.trim().startsWith("<<")
+        ? settings.siteTitle.trim()
+        : "Microblog",
+    siteDescription:
+      settings?.heroSubheading?.trim() && !settings.heroSubheading.trim().startsWith("<<")
+        ? settings.heroSubheading.trim()
+        : "A personal microblog with rich posts, comments, and portable feed exports.",
+    siteAuthorName:
+      owner?.name?.trim() && !owner.name.trim().startsWith("<<")
+        ? owner.name.trim()
+        : posts[0]?.authorName || "Microblog Author",
+  };
 }
 
-function getSiteDescription(): string {
-  return (
-    process.env.SITE_DESCRIPTION?.trim() ||
-    "A personal microblog with rich posts, comments, and portable feed exports."
-  );
+function getAuthorName(posts: FeedPost[], metadata: FeedSiteMetadata): string {
+  return metadata.siteAuthorName || posts[0]?.authorName || "Microblog Author";
 }
 
 function toVisibleText(post: FeedPost): string {
@@ -91,26 +131,25 @@ function getCanonicalPostUrl(origin: string, postId: number): string {
   return `${origin}/posts/${postId}`;
 }
 
-function getAuthorName(posts: FeedPost[]): string {
-  return process.env.SITE_AUTHOR_NAME?.trim() || posts[0]?.authorName || "Microblog Author";
-}
-
-export function siteScope(): FeedScope {
+export function siteScope(metadata: FeedSiteMetadata): FeedScope {
   return {
     id: "",
-    title: getSiteTitle(),
-    description: getSiteDescription(),
+    title: metadata.siteTitle,
+    description: metadata.siteDescription,
     atomPath: "/feed.xml",
     jsonPath: "/feed.json",
     alternatePath: "/",
   };
 }
 
-export function categoryScope(category: { slug: string; name: string; description: string | null }): FeedScope {
+export function categoryScope(
+  category: { slug: string; name: string; description: string | null },
+  metadata: FeedSiteMetadata,
+): FeedScope {
   const path = `/categories/${category.slug}`;
   return {
     id: path,
-    title: `${getSiteTitle()} — ${category.name}`,
+    title: `${metadata.siteTitle} — ${category.name}`,
     description:
       category.description?.trim() ||
       `Posts in the “${category.name}” category.`,
@@ -144,6 +183,7 @@ export async function loadPosts(opts: { categoryId?: number } = {}): Promise<Fee
         .where(
           and(
             eq(postsTable.status, "published"),
+            isNull(postsTable.deletedAt),
             eq(postCategoriesTable.categoryId, opts.categoryId),
           ),
         )
@@ -151,7 +191,7 @@ export async function loadPosts(opts: { categoryId?: number } = {}): Promise<Fee
     : await db
         .select(baseSelect)
         .from(postsTable)
-        .where(eq(postsTable.status, "published"))
+        .where(and(eq(postsTable.status, "published"), isNull(postsTable.deletedAt)))
         .orderBy(desc(postsTable.createdAt));
 
   const hydrated = await attachCategoriesToPosts(posts);
@@ -172,8 +212,8 @@ function normalizePieceUrlsInHtml(html: string, origin: string): string {
   );
 }
 
-export function buildAtom(origin: string, scope: FeedScope, posts: FeedPost[]): string {
-  const authorName = getAuthorName(posts);
+export function buildAtom(origin: string, scope: FeedScope, posts: FeedPost[], metadata: FeedSiteMetadata): string {
+  const authorName = metadata.siteAuthorName;
   const updatedAt = posts[0]?.createdAt ?? new Date().toISOString();
   const selfUrl = `${origin}${scope.atomPath}`;
   const alternateUrl = `${origin}${scope.alternatePath}`;
@@ -222,8 +262,8 @@ ${entries}
 </feed>`;
 }
 
-export function buildJsonFeed(origin: string, scope: FeedScope, posts: FeedPost[]) {
-  const authorName = getAuthorName(posts);
+export function buildJsonFeed(origin: string, scope: FeedScope, posts: FeedPost[], metadata: FeedSiteMetadata) {
+  const authorName = metadata.siteAuthorName;
   return {
     version: "https://jsonfeed.org/version/1.1",
     title: scope.title,
@@ -256,45 +296,65 @@ export function buildJsonFeed(origin: string, scope: FeedScope, posts: FeedPost[
 
 router.get("/feed.xml", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    res.send(buildAtom(origin, siteScope(), posts));
+    return res.send(buildAtom(origin, siteScope(metadata), posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate Atom feed" });
+    return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
 });
 
 router.get("/atom", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    res.send(buildAtom(origin, siteScope(), posts));
+    return res.send(buildAtom(origin, siteScope(metadata), posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate Atom feed" });
+    return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
 });
 
 router.get("/feed.json", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    res.json(buildJsonFeed(origin, siteScope(), posts));
+    return res.json(buildJsonFeed(origin, siteScope(metadata), posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate JSON feed" });
+    return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
 });
 
 router.get("/jsonfeed", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    res.json(buildJsonFeed(origin, siteScope(), posts));
+    return res.json(buildJsonFeed(origin, siteScope(metadata), posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate JSON feed" });
+    return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
 });
 
@@ -311,12 +371,17 @@ export async function loadCategoryBySlug(rawSlug: unknown) {
 
 router.get("/categories/:slug/feed.xml", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const cat = await loadCategoryBySlug(req.params.slug);
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildAtom(origin, categoryScope(cat), posts));
+    return res.send(buildAtom(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -324,12 +389,17 @@ router.get("/categories/:slug/feed.xml", async (req: Request, res: Response) => 
 
 router.get("/categories/:slug/atom", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const cat = await loadCategoryBySlug(req.params.slug);
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildAtom(origin, categoryScope(cat), posts));
+    return res.send(buildAtom(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -337,12 +407,17 @@ router.get("/categories/:slug/atom", async (req: Request, res: Response) => {
 
 router.get("/categories/:slug/feed.json", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const cat = await loadCategoryBySlug(req.params.slug);
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildJsonFeed(origin, categoryScope(cat), posts));
+    return res.json(buildJsonFeed(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
@@ -350,12 +425,17 @@ router.get("/categories/:slug/feed.json", async (req: Request, res: Response) =>
 
 router.get("/categories/:slug/jsonfeed", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const cat = await loadCategoryBySlug(req.params.slug);
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildJsonFeed(origin, categoryScope(cat), posts));
+    return res.json(buildJsonFeed(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
@@ -386,7 +466,7 @@ function pageScope(page: PageRow): FeedScope {
   const path = `/p/${page.slug}`;
   return {
     id: path,
-    title: `${getSiteTitle()} — ${page.title}`,
+    title: page.title,
     description: `Updates to the “${page.title}” page.`,
     atomPath: `${path}/feed.xml`,
     jsonPath: `${path}/feed.json`,
@@ -394,9 +474,12 @@ function pageScope(page: PageRow): FeedScope {
   };
 }
 
-export function buildPageAtom(origin: string, page: PageRow): string {
-  const scope = pageScope(page);
-  const authorName = getAuthorName([]);
+export function buildPageAtom(origin: string, page: PageRow, metadata: FeedSiteMetadata): string {
+  const scope = {
+    ...pageScope(page),
+    title: `${metadata.siteTitle} — ${page.title}`,
+  };
+  const authorName = metadata.siteAuthorName;
   const updatedAt = page.updatedAt;
   const selfUrl = `${origin}${scope.atomPath}`;
   const alternateUrl = `${origin}${scope.alternatePath}`;
@@ -431,9 +514,12 @@ export function buildPageAtom(origin: string, page: PageRow): string {
 </feed>`;
 }
 
-export function buildPageJsonFeed(origin: string, page: PageRow) {
-  const scope = pageScope(page);
-  const authorName = getAuthorName([]);
+export function buildPageJsonFeed(origin: string, page: PageRow, metadata: FeedSiteMetadata) {
+  const scope = {
+    ...pageScope(page),
+    title: `${metadata.siteTitle} — ${page.title}`,
+  };
+  const authorName = metadata.siteAuthorName;
   const visibleText =
     page.contentFormat === "html" ? stripHtmlToText(page.content) : page.content;
   const summary = summarize(visibleText);
@@ -464,11 +550,16 @@ export function buildPageJsonFeed(origin: string, page: PageRow) {
 
 router.get("/p/:slug/feed.xml", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const page = await loadPublishedPageBySlug(req.params.slug);
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
+    const metadata = await loadFeedSiteMetadata([]);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildPageAtom(origin, page));
+    return res.send(buildPageAtom(origin, page, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -476,11 +567,16 @@ router.get("/p/:slug/feed.xml", async (req: Request, res: Response) => {
 
 router.get("/p/:slug/atom", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const page = await loadPublishedPageBySlug(req.params.slug);
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
+    const metadata = await loadFeedSiteMetadata([]);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildPageAtom(origin, page));
+    return res.send(buildPageAtom(origin, page, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -488,11 +584,16 @@ router.get("/p/:slug/atom", async (req: Request, res: Response) => {
 
 router.get("/p/:slug/feed.json", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const page = await loadPublishedPageBySlug(req.params.slug);
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
+    const metadata = await loadFeedSiteMetadata([]);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildPageJsonFeed(origin, page));
+    return res.json(buildPageJsonFeed(origin, page, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
@@ -500,19 +601,24 @@ router.get("/p/:slug/feed.json", async (req: Request, res: Response) => {
 
 router.get("/p/:slug/jsonfeed", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const page = await loadPublishedPageBySlug(req.params.slug);
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
+    const metadata = await loadFeedSiteMetadata([]);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildPageJsonFeed(origin, page));
+    return res.json(buildPageJsonFeed(origin, page, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
 });
 
 
-export function buildMf2Export(origin: string, posts: FeedPost[]) {
-  const authorName = getAuthorName(posts);
+export function buildMf2Export(origin: string, posts: FeedPost[], metadata: FeedSiteMetadata) {
+  const authorName = getAuthorName(posts, metadata);
 
   return {
     items: posts.map((post) => {
@@ -553,23 +659,33 @@ export function buildMf2Export(origin: string, posts: FeedPost[]) {
 
 router.get("/export/json", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/json; charset=utf-8");
-    res.json(buildMf2Export(origin, posts));
+    return res.json(buildMf2Export(origin, posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate export" });
+    return res.status(500).json({ error: "Failed to generate export" });
   }
 });
 
 router.get("/export.json", async (req: Request, res: Response) => {
   try {
+    const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+    if (bootstrap.requiresSetup) {
+      return res.status(503).json({ error: "Site setup is not complete." });
+    }
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/json; charset=utf-8");
-    res.json(buildMf2Export(origin, posts));
+    return res.json(buildMf2Export(origin, posts, metadata));
   } catch {
-    res.status(500).json({ error: "Failed to generate export" });
+    return res.status(500).json({ error: "Failed to generate export" });
   }
 });
 

@@ -350,6 +350,38 @@ export function pieceEmbedHtml(title: string, engine: string, code: string, html
         if (document.hidden) stopFrame();
       });
     `;
+  } else if (engine === "svg") {
+    // SVG animates natively — no runtime library needed; JS is optional (CSS @keyframes handles most motion)
+    engineInit = `
+      try {
+        const codeContent = ${safeCode};
+        let sketchFactory;
+        try {
+          sketchFactory = new Function('return (' + codeContent + ')')();
+        } catch(e) {
+          new Function(codeContent)();
+          sketchFactory = window.sketch;
+        }
+        // Provide svgRoot + intercept common container IDs so AI-generated code using Three.js/P5 patterns doesn't crash
+        const _svgEl = document.querySelector('svg');
+        if (_svgEl) {
+          window.svgRoot = _svgEl;
+          const _origGetById = document.getElementById.bind(document);
+          document.getElementById = function(id) {
+            if (!_origGetById(id) && (id === 'container' || id === 'canvas-container' || id === 'sketch-container')) {
+              return _svgEl;
+            }
+            return _origGetById(id);
+          };
+        }
+        if (typeof sketchFactory === 'function') {
+          sketchFactory();
+        }
+        window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
+      } catch(err) {
+        window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
+      }
+    `;
   } else {
     // p5 and any future engines
     engineInit = `
@@ -397,9 +429,12 @@ export function pieceEmbedHtml(title: string, engine: string, code: string, html
     : `<script type="text/javascript">${engineInit}</script>`;
 
   const defaultContainerId = engine === "three" ? "container" : "canvas-container";
+  const svgFallback = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>';
   const bodyContent = htmlCode !== null && htmlCode !== undefined
     ? `${safeHtml}\n${scriptTag}`
-    : `<div id="${defaultContainerId}"></div>\n${scriptTag}`;
+    : engine === "svg"
+      ? `${svgFallback}\n${scriptTag}`
+      : `<div id="${defaultContainerId}"></div>\n${scriptTag}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -408,7 +443,7 @@ export function pieceEmbedHtml(title: string, engine: string, code: string, html
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${safeTitle}</title>
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
+    html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; ${engine === "svg" ? "background: #0a0a14;" : ""} }
     canvas { display: block; }
     ${safeCss}
   </style>

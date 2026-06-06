@@ -164,7 +164,7 @@ INSERT IGNORE INTO `site_settings` (
   '60 100% 50%',   '0 0% 0%',                    -- accent (yellow)    / on-accent (black)
   '60 100% 50%',   '0 0% 0%',                    -- muted              / on-muted
   '0 100% 50%',    '0 0% 100%',                  -- destructive (red)  / on-destructive (white)
-  '',              '',            'text_only',   'system',     -- logo_url, logo_dark_url, logo_layout, default_theme_mode
+  '/api/site-assets/logo-light', '/api/site-assets/logo-dark', 'text_only', 'system', -- logo_url, logo_dark_url, logo_layout, default_theme_mode
   '',              '',                           -- primary dark / on-primary dark
   '',              '',                           -- secondary dark / on-secondary dark
   '',              '',                           -- accent dark / on-accent dark

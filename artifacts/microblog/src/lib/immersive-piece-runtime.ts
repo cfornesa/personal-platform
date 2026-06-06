@@ -84,6 +84,7 @@ export function createImmersiveHost(
   cssCode: string | null | undefined,
   defaultHtml: string,
   size: ImmersiveRuntimeSize,
+  engine?: string,
 ) {
   const host = document.createElement("div");
   host.style.position = "fixed";
@@ -112,7 +113,10 @@ export function createImmersiveHost(
   const markup = document.createElement("div");
   markup.style.width = "100%";
   markup.style.height = "100%";
-  markup.innerHTML = sanitizeArtPieceHtml(htmlCode, defaultHtml);
+  // SVG bypasses the DIV/CANVAS allowlist sanitizer — SVG markup must be preserved as-is
+  markup.innerHTML = engine === "svg"
+    ? (htmlCode?.trim() ? htmlCode : defaultHtml)
+    : sanitizeArtPieceHtml(htmlCode, defaultHtml);
   host.appendChild(markup);
   document.body.appendChild(host);
   return host;

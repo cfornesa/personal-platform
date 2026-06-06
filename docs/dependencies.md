@@ -4,7 +4,7 @@
 
 - **Purpose:** App-owned authentication layer running inside the existing Express server.
 - **Sends data off-domain:** No.
-- **What breaks if it changes or is removed:** Local sign-in/session handling breaks until replaced, but content, roles, and authorization data remain local to the app database.
+- **What breaks if it changes or is removed:** Local sign-in/session handling, first-owner auto-claim, and setup-gate state transitions break until replaced, but content, roles, and authorization data remain local to the app database.
 - **Self-hosting alternative:** Not applicable. Auth.js already runs in-repo.
 
 ## GitHub OAuth
@@ -23,10 +23,17 @@
 
 ## Hostinger MySQL
 
-- **Purpose:** Canonical relational datastore for posts, users, comments, reactions, Auth.js session data, profile-only image bytes, reusable media metadata, and feed-source profile metadata across both local and deployed app runtimes.
+- **Purpose:** Canonical relational datastore for the CMS-shell state: posts, pages, users, comments, reactions, Auth.js session data, bootstrap/setup state, profile-only image bytes, reusable media metadata, piece thumbnails, site branding/settings, seeded site assets, and feed-source profile metadata across both local and deployed app runtimes.
 - **Sends data off-domain:** Yes, when the app connects remotely from a local machine to the hosted MySQL service.
-- **What breaks if it changes or is removed:** Publishing, comment writes, authentication persistence, and feed-backed content reads stop working until database connectivity is restored or reconfigured.
+- **What breaks if it changes or is removed:** The replaceable-shell model breaks. Publishing, auth persistence, site identity, durable assets, bootstrap state, and feed-backed content reads stop working until database connectivity is restored or reconfigured.
 - **Self-hosting alternative:** A self-managed MySQL-compatible database or reverting to self-hosted SQLite on infrastructure that guarantees persistent storage outside the deployment build artifact.
+
+## Orval Contract Generation
+
+- **Purpose:** Regenerate deterministic API client and Zod contract artifacts from `lib/api-spec/openapi.yaml` during `postinstall`, build, and typecheck flows so copied shell repos do not rely on stale generated files.
+- **Sends data off-domain:** No.
+- **What breaks if it changes or is removed:** Root `npm install`, `npm run build`, and `npm run dev` lose their self-healing contract behavior and copied sibling repos can fail from generated-surface drift.
+- **Self-hosting alternative:** This is already the self-hosted path.
 
 ## TipTap
 

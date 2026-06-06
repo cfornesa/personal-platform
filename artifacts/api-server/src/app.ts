@@ -19,6 +19,8 @@ import {
   injectThemeData,
   injectUserTheme,
 } from "./lib/meta-injection";
+import { sendSiteAssetResponse } from "./lib/site-assets";
+import { loadBootstrapStatus } from "./lib/bootstrap";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nmRoot = path.resolve(__dirname, "../../..", "node_modules");
@@ -125,6 +127,161 @@ app.use(pieceEmbedHtmlRouter);
 app.use("/api/auth", ExpressAuth(authConfig));
 
 app.use(hydrateAuth);
+
+function isHtmlNavigationRequest(req: Request): boolean {
+  if (req.method !== "GET") {
+    return false;
+  }
+
+  if (req.path.startsWith("/api/")) {
+    return false;
+  }
+
+  if (path.extname(req.path)) {
+    return false;
+  }
+
+  const accept = req.headers.accept ?? "";
+  return accept.includes("text/html");
+}
+
+function isBootstrapAllowedPath(pathname: string): boolean {
+  return (
+    pathname === "/sign-in" ||
+    pathname === "/sign-up" ||
+    pathname === "/settings" ||
+    pathname === "/admin/setup"
+  );
+}
+
+function renderSetupGateHtml(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Site setup in progress</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050b16;
+        --fg: #f8fafc;
+        --muted: rgba(248, 250, 252, 0.72);
+        --card: rgba(15, 23, 42, 0.9);
+        --line: rgba(148, 163, 184, 0.3);
+        --accent: #facc15;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(250, 204, 21, 0.16), transparent 36%),
+          linear-gradient(180deg, #08101d 0%, var(--bg) 100%);
+        color: var(--fg);
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .card {
+        width: min(100%, 720px);
+        border: 1px solid var(--line);
+        background: var(--card);
+        border-radius: 24px;
+        padding: 32px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      }
+      .logo {
+        width: 72px;
+        height: 72px;
+        margin-bottom: 20px;
+        object-fit: contain;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2rem, 4vw, 3rem);
+        line-height: 1.05;
+      }
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      a {
+        text-decoration: none;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 999px;
+        font-weight: 600;
+      }
+      .button-primary {
+        background: var(--accent);
+        color: #111827;
+      }
+      .button-secondary {
+        border: 1px solid var(--line);
+        color: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <img class="logo" src="/api/site-assets/logo-light" alt="" />
+      <h1>Site setup in progress</h1>
+      <p>This CreatrWeb shell is connected, but the owner has not finished the first-run CMS setup yet.</p>
+      <p>If you are the intended owner, sign in with an allowed account to claim the site and complete onboarding.</p>
+      <div class="actions">
+        <a class="button button-primary" href="/sign-in?next=%2Fadmin%2Fsetup">Sign in to continue setup</a>
+        <a class="button button-secondary" href="/sign-in">View sign-in options</a>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
+
+app.use(async (req, res, next) => {
+  if (!isHtmlNavigationRequest(req)) {
+    next();
+    return;
+  }
+
+  const bootstrap = await loadBootstrapStatus(req.currentUser ?? null);
+  if (!bootstrap.requiresSetup) {
+    next();
+    return;
+  }
+
+  if (bootstrap.currentUserNeedsSetup && !isBootstrapAllowedPath(req.path)) {
+    res.redirect(302, bootstrap.setupPath);
+    return;
+  }
+
+  if (isBootstrapAllowedPath(req.path)) {
+    next();
+    return;
+  }
+
+  res.status(503).type("text/html").send(renderSetupGateHtml());
+});
+
+app.get("/api/site-assets/:assetKey", async (req, res) => {
+  const sent = await sendSiteAssetResponse(res, req.params.assetKey);
+  if (!sent) {
+    res.status(404).json({ error: "Site asset not found" });
+  }
+});
 app.use("/api", router);
 
 const staticPath = process.env.STATIC_FILES_PATH
@@ -133,6 +290,13 @@ const staticPath = process.env.STATIC_FILES_PATH
 
 if (fs.existsSync(staticPath)) {
   const indexPath = path.join(staticPath, "index.html");
+
+  app.get("/favicon.svg", async (_req, res, next) => {
+    const sent = await sendSiteAssetResponse(res, "favicon");
+    if (!sent) {
+      next();
+    }
+  });
 
   app.get("/robots.txt", (_req, res) => {
     res.type("text/plain").send("User-agent: *\nAllow: /\n");

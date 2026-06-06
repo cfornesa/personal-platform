@@ -128,6 +128,7 @@ export const ExhibitWallPieceItemEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 /**
@@ -731,13 +732,22 @@ export interface MyAiVendorProfile {
   enabled: boolean;
   configured: boolean;
   model?: string | null;
-  endpointKind: MyAiVendorProfileEndpointKind;
+  endpointKind?: MyAiVendorProfileEndpointKind;
 }
 
-export type MyAiVendorKeyVendor = typeof MyAiVendorKeyVendor[keyof typeof MyAiVendorKeyVendor];
+/**
+ * Per-vendor API key status returned in GET /users/me/ai-settings
+ */
+export interface AiVendorKeyStatus {
+  vendor: string;
+  vendorLabel: string;
+  hasKey: boolean;
+}
+
+export type UpdateMyAiVendorKeyBodyVendor = typeof UpdateMyAiVendorKeyBodyVendor[keyof typeof UpdateMyAiVendorKeyBodyVendor];
 
 
-export const MyAiVendorKeyVendor = {
+export const UpdateMyAiVendorKeyBodyVendor = {
   openrouter: 'openrouter',
   'opencode-zen': 'opencode-zen',
   'opencode-go': 'opencode-go',
@@ -747,15 +757,22 @@ export const MyAiVendorKeyVendor = {
   deepseek: 'deepseek',
 } as const;
 
-export interface MyAiVendorKey {
-  vendor: MyAiVendorKeyVendor;
-  vendorLabel: string;
-  hasKey: boolean;
+/**
+ * A single vendor API key to save or update
+ */
+export interface UpdateMyAiVendorKeyBody {
+  vendor: UpdateMyAiVendorKeyBodyVendor;
+  /**
+     * @minLength 1
+     * @maxLength 4096
+     */
+  apiKey: string;
 }
 
 export interface MyAiSettings {
   availableVendors: AiVendorOption[];
-  vendorKeys: MyAiVendorKey[];
+  /** Per-vendor API key status (one entry per supported vendor) */
+  vendorKeys: AiVendorKeyStatus[];
   profiles: MyAiVendorProfile[];
   preferredArtPieceProfileId: number | null;
   preferredTextImproveProfileId: number | null;
@@ -800,39 +817,25 @@ export interface UpdateMyAiProfileBody {
      * @maxLength 191
      */
   model?: string;
-  endpointKind?: UpdateMyAiProfileBodyEndpointKind;
-}
-
-export type UpdateMyAiVendorKeyBodyVendor = typeof UpdateMyAiVendorKeyBodyVendor[keyof typeof UpdateMyAiVendorKeyBodyVendor];
-
-
-export const UpdateMyAiVendorKeyBodyVendor = {
-  openrouter: 'openrouter',
-  'opencode-zen': 'opencode-zen',
-  'opencode-go': 'opencode-go',
-  google: 'google',
-  mistral: 'mistral',
-  'mistral-vibe': 'mistral-vibe',
-  deepseek: 'deepseek',
-} as const;
-
-export interface UpdateMyAiVendorKeyBody {
-  vendor: UpdateMyAiVendorKeyBodyVendor;
   /**
      * @minLength 1
      * @maxLength 4096
      */
-  apiKey: string;
+  apiKey?: string;
+  endpointKind?: UpdateMyAiProfileBodyEndpointKind;
 }
 
 /**
- * Owner AI settings. vendorKeys stores one API key per vendor; profiles
-are independent of keys and share the vendor key automatically.
+ * Owner AI settings as named profiles. Each profile has its own vendor,
+model slug, API key, and optional endpoint kind. Multiple profiles per
+vendor are supported so the same key can be reused with different models
+or endpoint formats.
 
  */
 export interface UpdateMyAiSettingsBody {
+  /** Vendor-level API keys to save (one per vendor, shared across all profiles for that vendor) */
   vendorKeys?: UpdateMyAiVendorKeyBody[];
-  profiles?: UpdateMyAiProfileBody[];
+  profiles: UpdateMyAiProfileBody[];
   deletedProfileIds?: number[];
   preferredArtPieceProfileId?: number | null;
   preferredTextImproveProfileId?: number | null;
@@ -850,6 +853,7 @@ export const ProcessAiTextBodyMode = {
 export interface ProcessAiTextBody {
   /** @maxLength 40000 */
   content: string;
+  /** ID of the AI vendor profile to use */
   profileId: number;
   mode?: ProcessAiTextBodyMode;
 }
@@ -884,6 +888,7 @@ export const ArtPieceVersionEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export type ArtPieceVersionGenerationVendor = typeof ArtPieceVersionGenerationVendor[keyof typeof ArtPieceVersionGenerationVendor] | null;
@@ -930,6 +935,7 @@ export const ArtPieceEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export type ArtPieceStatus = typeof ArtPieceStatus[keyof typeof ArtPieceStatus];
@@ -972,6 +978,7 @@ export const GenerateArtPieceBodyEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export interface GenerateArtPieceBody {
@@ -992,6 +999,7 @@ export const GeneratedArtPieceDraftEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export type GeneratedArtPieceDraftStructuredSpec = { [key: string]: unknown } | null;
@@ -1043,6 +1051,7 @@ export const CreateArtPieceBodyEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export interface CreateArtPieceBody {
@@ -1134,6 +1143,7 @@ export const EmbeddedArtPieceEngine = {
   p5: 'p5',
   c2: 'c2',
   three: 'three',
+  svg: 'svg',
 } as const;
 
 export interface EmbeddedArtPiece {
@@ -1179,6 +1189,26 @@ export interface UploadedMedia {
   mimeType: string;
   width?: number | null;
   height?: number | null;
+}
+
+export interface BootstrapChecklist {
+  ownerDisplayNameReady: boolean;
+  ownerUsernameReady: boolean;
+  siteTitleReady: boolean;
+  heroHeadingReady: boolean;
+  heroSubheadingReady: boolean;
+  aboutBodyReady: boolean;
+}
+
+export interface BootstrapStatus {
+  hasOwner: boolean;
+  isSetupComplete: boolean;
+  requiresSetup: boolean;
+  currentUserCanSetup: boolean;
+  currentUserNeedsSetup: boolean;
+  ownerAutoClaimEnabled: boolean;
+  setupPath: string;
+  checklist: BootstrapChecklist;
 }
 
 export type SiteSettingsTheme = typeof SiteSettingsTheme[keyof typeof SiteSettingsTheme];
@@ -1981,6 +2011,81 @@ export interface UpsertPlatformOAuthAppBody {
   blogUrl?: string;
 }
 
+export interface TrashedPost {
+  id: number;
+  title?: string | null;
+  content: string;
+  contentFormat: string;
+  status: string;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface TrashedPiece {
+  id: number;
+  title: string;
+  engine: string;
+  thumbnailUrl?: string | null;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface TrashedMedia {
+  id: number;
+  url: string;
+  filename: string;
+  title?: string | null;
+  mimeType: string;
+  altText?: string | null;
+  uploadedAt: string;
+  deletedAt?: string | null;
+}
+
+export interface TrashedExhibit {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface TrashedPage {
+  id: number;
+  slug: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface TrashedCategory {
+  id: number;
+  slug: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface RecycleBinResponse {
+  posts: TrashedPost[];
+  pieces: TrashedPiece[];
+  media: TrashedMedia[];
+  exhibits: TrashedExhibit[];
+  pages: TrashedPage[];
+  categories: TrashedCategory[];
+}
+
+export interface BulkPermanentDeleteBody {
+  postIds?: number[];
+  pieceIds?: number[];
+  mediaIds?: number[];
+  exhibitIds?: number[];
+  pageIds?: number[];
+  categoryIds?: number[];
+}
+
 export type ListPostsParams = {
 page?: number;
 limit?: number;
@@ -2073,6 +2178,7 @@ export type UploadProfilePhotoBody = {
 
 export type DescribeImageBody = {
   imageUrl: string;
+  /** ID of the AI vendor profile to use */
   profileId: number;
   /** Optional existing alt text to use as context for refinement */
   existingAltText?: string;

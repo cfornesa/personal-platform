@@ -14,8 +14,8 @@ import { z } from "zod/v4";
  *      so the response body already contains
  *      `<style id="site-settings-theme">` and
  *      `<html ... data-theme="bauhaus">` before the bundle runs.
- *   2. Real static assets under `staticPath` (e.g. `/favicon.svg`)
- *      are still served untouched by `express.static`.
+ *   2. Durable identity assets (e.g. `/favicon.svg`) are served as
+ *      raw image responses and never run through theme injection.
  */
 
 const tmpStatic = fs.mkdtempSync(path.join(os.tmpdir(), "api-server-static-"));
@@ -30,12 +30,6 @@ const indexHtml = `<!DOCTYPE html>
   </body>
 </html>`;
 fs.writeFileSync(path.join(tmpStatic, "index.html"), indexHtml, "utf-8");
-fs.writeFileSync(
-  path.join(tmpStatic, "favicon.svg"),
-  '<svg xmlns="http://www.w3.org/2000/svg"/>',
-  "utf-8",
-);
-
 process.env.STATIC_FILES_PATH = tmpStatic;
 // Disable rate limiting to keep the test deterministic.
 process.env.NODE_ENV = "test";
@@ -156,6 +150,25 @@ vi.mock("../middlewares/auth", () => {
   };
 });
 
+vi.mock("../lib/site-assets", () => ({
+  DEFAULT_SITE_ASSET_URLS: {
+    favicon: "/favicon.svg",
+    logoLight: "/api/site-assets/logo-light",
+    logoDark: "/api/site-assets/logo-dark",
+  },
+  sendSiteAssetResponse: async (res: { type: (value: string) => { send: (body: string) => void } }, assetKey: string) => {
+    if (assetKey === "favicon") {
+      res.type("image/svg+xml").send('<svg xmlns="http://www.w3.org/2000/svg" data-asset="db"/>');
+      return true;
+    }
+    if (assetKey === "logo-light" || assetKey === "logo-dark") {
+      res.type("image/svg+xml").send('<svg xmlns="http://www.w3.org/2000/svg" data-asset="logo"/>');
+      return true;
+    }
+    return false;
+  },
+}));
+
 // `ExpressAuth` is mounted at `/api/auth` and configured at module load.
 vi.mock("@auth/express", () => ({
   ExpressAuth: () => (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -204,14 +217,22 @@ describe("GET / and /index.html — root theme injection", () => {
   });
 });
 
-describe("static assets are still served by express.static", () => {
+describe("durable identity assets are served outside theme injection", () => {
   it("serves /favicon.svg verbatim", async () => {
     const res = await fetchText("/favicon.svg");
     expect(res.status).toBe(200);
     expect(res.contentType).toContain("image/svg");
-    expect(res.body).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+    expect(res.body).toContain('data-asset="db"');
     // Theme-injection markers must NOT appear on a real static asset.
     expect(res.body).not.toContain("site-settings-theme");
     expect(res.body).not.toContain("data-theme=");
+  });
+
+  it("serves DB-backed site asset routes verbatim", async () => {
+    const res = await fetchText("/api/site-assets/logo-light");
+    expect(res.status).toBe(200);
+    expect(res.contentType).toContain("image/svg");
+    expect(res.body).toContain('data-asset="logo"');
+    expect(res.body).not.toContain("site-settings-theme");
   });
 });

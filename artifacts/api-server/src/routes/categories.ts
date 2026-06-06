@@ -10,6 +10,7 @@ import {
   desc,
   count,
   and,
+  isNull,
   sql,
   formatMysqlDateTime,
 } from "@workspace/db";
@@ -62,6 +63,7 @@ router.get("/categories", async (_req: Request, res: Response) => {
         eq(postCategoriesTable.categoryId, categoriesTable.id),
       )
       .leftJoin(postsTable, eq(postsTable.id, postCategoriesTable.postId))
+      .where(isNull(categoriesTable.deletedAt))
       .groupBy(categoriesTable.id)
       .orderBy(categoriesTable.name);
 
@@ -143,7 +145,7 @@ router.get("/categories/:slug", async (req: Request, res: Response) => {
     const rows = await db
       .select()
       .from(categoriesTable)
-      .where(eq(categoriesTable.slug, slug))
+      .where(and(eq(categoriesTable.slug, slug), isNull(categoriesTable.deletedAt)))
       .limit(1);
     const cat = rows[0];
     if (!cat) return res.status(404).json({ error: "Not found" });
@@ -183,7 +185,7 @@ router.patch(
       const rows = await db
         .select()
         .from(categoriesTable)
-        .where(eq(categoriesTable.id, id))
+        .where(and(eq(categoriesTable.id, id), isNull(categoriesTable.deletedAt)))
         .limit(1);
       const cat = rows[0];
       if (!cat) return res.status(404).json({ error: "Not found" });
@@ -240,7 +242,9 @@ router.patch(
   },
 );
 
-// DELETE /categories/:id — owner only. ON DELETE CASCADE drops join rows.
+// DELETE /categories/:id — soft-delete (moves to Recycle Bin).
+// post_categories join rows are preserved so the category's post assignments
+// are restored intact when the category is recovered.
 router.delete(
   "/categories/:id",
   requireAuth,
@@ -254,10 +258,10 @@ router.delete(
       const rows = await db
         .select({ id: categoriesTable.id })
         .from(categoriesTable)
-        .where(eq(categoriesTable.id, id))
+        .where(and(eq(categoriesTable.id, id), isNull(categoriesTable.deletedAt)))
         .limit(1);
       if (!rows[0]) return res.status(404).json({ error: "Not found" });
-      await db.delete(categoriesTable).where(eq(categoriesTable.id, id));
+      await db.update(categoriesTable).set({ deletedAt: sql`CURRENT_TIMESTAMP(3)` }).where(eq(categoriesTable.id, id));
       return res.status(204).send();
     } catch (err) {
       return res.status(400).json({ error: "Invalid request" });

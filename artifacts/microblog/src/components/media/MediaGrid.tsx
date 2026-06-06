@@ -276,9 +276,9 @@ function MediaDetailsDialog({
       <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this image?</AlertDialogTitle>
+            <AlertDialogTitle>Move this image to the Recycle Bin?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove "{getAssetTitle(asset)}" from the Image Library. Posts that already reference this image may no longer display it.
+              "{getAssetTitle(asset)}" will be moved to the Recycle Bin. You can restore it or permanently delete it from the Recycle Bin in the Admin panel.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -291,7 +291,7 @@ function MediaDetailsDialog({
                 onOpenChange(false);
               }}
             >
-              Delete image
+              Move to Recycle Bin
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -4,6 +4,8 @@ import { ensureTables } from "@workspace/db";
 import { backfillMediaAssetsFromFilesystem } from "./lib/media";
 import { backfillPostContentText } from "./lib/html";
 import { startPostScheduler } from "./lib/post-scheduler";
+import { ensureDefaultSiteAssets } from "./lib/site-assets";
+import { repairBootstrapState } from "./lib/bootstrap";
 
 const rawPort = process.env["PORT"] ?? "5000";
 
@@ -14,6 +16,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 ensureTables()
+  .then(() => ensureDefaultSiteAssets())
+  .then(() => repairBootstrapState())
   .then(() => backfillPostContentText())
   .then(() => backfillMediaAssetsFromFilesystem())
   .then(() => {

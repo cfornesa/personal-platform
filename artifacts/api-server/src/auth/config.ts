@@ -3,6 +3,7 @@ import GitHub from "@auth/express/providers/github";
 import Google from "@auth/express/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db, usersTable, accountsTable, sessionsTable, verificationTokensTable, eq, formatMysqlDateTime } from "@workspace/db";
+import { autoClaimOwnerIfEligible } from "../lib/bootstrap";
 
 // @auth/express derives the `/api/auth` base path from the Express mount.
 // Letting it derive the origin from request headers avoids stale localhost,
@@ -67,6 +68,11 @@ export const authConfig: ExpressAuthConfig = {
       if (!user?.id) {
         return;
       }
+
+      await autoClaimOwnerIfEligible({
+        userId: user.id,
+        email: user.email,
+      });
 
       await db
         .update(usersTable)

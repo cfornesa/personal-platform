@@ -28,6 +28,15 @@ function useReturnToPrevious() {
   const [, setLocation] = useLocation();
   return () => {
     const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    if (returnTo && returnTo.startsWith("/")) {
+      if (returnTo.includes("#")) {
+        window.location.href = returnTo;
+      } else {
+        setLocation(returnTo);
+      }
+      return;
+    }
     const postId = params.get("post");
     if (postId && !isNaN(Number(postId))) {
       setLocation(`/posts/${postId}`);
@@ -62,10 +71,9 @@ function ImmersiveImageStage({
     }
 
     const stageEl = container;
-    const presentation = createPresentationSurface(1200, 900, 72);
     const shell = createMountedGalleryShell(
       stageEl,
-      presentation.width / presentation.height,
+      16 / 9,
       NORMALIZED_PRESENTATION_GALLERY_PROFILE,
     );
 
@@ -85,6 +93,10 @@ function ImmersiveImageStage({
         const image = texture.image as { width?: number; height?: number } | undefined;
         const width = image?.width ?? 1600;
         const height = image?.height ?? 900;
+        const imgAspect = width / Math.max(height, 1);
+        const presW = 1200;
+        const presH = Math.round(presW / imgAspect);
+        const presentation = createPresentationSurface(presW, presH, 72);
         drawContainedIntoPresentationSurface(
           presentation,
           width,
@@ -97,7 +109,7 @@ function ImmersiveImageStage({
         texture.dispose();
         textureRef = new THREE.CanvasTexture(presentation.canvas);
         textureRef.colorSpace = THREE.SRGBColorSpace;
-        updateMountedGalleryLayout(shell, presentation.width / presentation.height);
+        updateMountedGalleryLayout(shell, imgAspect);
         shell.artMaterial.map = textureRef;
         shell.artMaterial.needsUpdate = true;
         fitMountedGalleryCamera(shell, stageEl);

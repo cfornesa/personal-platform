@@ -746,6 +746,35 @@ export async function ensureTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS site_assets (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      asset_key VARCHAR(64) NOT NULL,
+      filename VARCHAR(255) NOT NULL,
+      mime_type VARCHAR(64) NOT NULL,
+      file_data MEDIUMBLOB NOT NULL,
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE KEY site_assets_asset_key_unique (asset_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS site_bootstrap_state (
+      id INT NOT NULL PRIMARY KEY DEFAULT 1,
+      owner_claimed_by_user_id VARCHAR(191) NULL,
+      owner_claimed_at DATETIME(3) NULL,
+      setup_completed_by_user_id VARCHAR(191) NULL,
+      setup_completed_at DATETIME(3) NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await mysqlPool.query(`
+    INSERT IGNORE INTO site_bootstrap_state (id)
+    VALUES (1)
+  `);
+
   await ensureColumn(
     "site_settings",
     "theme",
@@ -908,8 +937,8 @@ export async function ensureTables(): Promise<void> {
       "0 0% 0%",       // color_muted_foreground
       "0 100% 50%",    // color_destructive     (red)
       "0 0% 100%",     // color_destructive_foreground (white)
-      "",              // logo_url
-      "",              // logo_dark_url
+      "/api/site-assets/logo-light", // logo_url
+      "/api/site-assets/logo-dark",  // logo_dark_url
       "text_only",     // logo_layout
       "system",        // default_theme_mode
       "",              // color_primary_dark
@@ -1590,6 +1619,26 @@ export async function ensureTables(): Promise<void> {
     `);
     await mysqlPool.query(`ALTER TABLE users DROP COLUMN preferred_vendor_alt_text`);
   }
+
+  // -------------------------------------------------------------------------
+  // Recycle Bin Migration (2026-06-03)
+  //
+  // Adds a nullable `deleted_at` column to posts, art_pieces, and media_assets
+  // so deletions can be soft-deleted (moved to a recoverable Recycle Bin) instead
+  // of immediately and permanently removed. Items with a non-null `deleted_at`
+  // are hidden from all normal read paths and surfaced only through
+  // GET /api/recycle-bin. Restoring sets the column back to NULL; permanent
+  // deletion is a real SQL DELETE.
+  //
+  // No FIRST or AFTER positional clauses — see the AI Vendor Profile Migration
+  // notes above for why these cause silent data loss on some MySQL 5.7 variants.
+  // -------------------------------------------------------------------------
+  await ensureColumn("posts", "deleted_at", "deleted_at DATETIME(3) NULL");
+  await ensureColumn("art_pieces", "deleted_at", "deleted_at DATETIME(3) NULL");
+  await ensureColumn("media_assets", "deleted_at", "deleted_at DATETIME(3) NULL");
+  await ensureColumn("exhibits", "deleted_at", "deleted_at DATETIME(3) NULL");
+  await ensureColumn("pages", "deleted_at", "deleted_at DATETIME(3) NULL");
+  await ensureColumn("categories", "deleted_at", "deleted_at DATETIME(3) NULL");
 
   // -------------------------------------------------------------------------
   // AI Vendor Keys Migration (2026-06-01 v2)

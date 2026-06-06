@@ -294,6 +294,7 @@ export default function AdminPageEditor() {
                   submitLabel="Apply"
                   cancelLabel="Reset"
                   showCategories={false}
+                  showTitle={false}
                   isSubmitting={isPending || uploadMedia.isPending}
                   onUpload={async (file) => {
                     const uploaded = await uploadMedia.mutateAsync({

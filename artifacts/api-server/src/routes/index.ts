@@ -17,10 +17,13 @@ import platformOAuthRouter from "./platform-oauth";
 import platformOAuthAppsRouter from "./platform-oauth-apps";
 import artPiecesRouter from "./art-pieces";
 import exhibitsRouter from "./exhibits";
+import recycleBinRouter from "./recycle-bin";
+import bootstrapRouter from "./bootstrap";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(bootstrapRouter);
 // Pending-posts router registers `/posts/pending`, `/posts/:id/approve`,
 // `/posts/:id/reject`. Mount it BEFORE the generic posts router so the
 // `/posts/pending` literal doesn't get swallowed by the `/posts/:id`
@@ -51,5 +54,6 @@ router.use(feedsCatalogRouter);
 router.use(platformConnectionsRouter);
 router.use(platformOAuthRouter);
 router.use(platformOAuthAppsRouter);
+router.use(recycleBinRouter);
 
 export default router;

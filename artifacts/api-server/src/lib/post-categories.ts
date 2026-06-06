@@ -9,7 +9,7 @@
  * page size.
  */
 
-import { db, categoriesTable, postCategoriesTable, eq, inArray } from "@workspace/db";
+import { db, categoriesTable, postCategoriesTable, eq, and, isNull, inArray } from "@workspace/db";
 
 // Drizzle's MySql2Database and MySqlTransaction don't share an
 // inheritance chain even though both expose the query builders we
@@ -44,7 +44,10 @@ export async function hydratePostCategories(
     })
     .from(postCategoriesTable)
     .innerJoin(categoriesTable, eq(categoriesTable.id, postCategoriesTable.categoryId))
-    .where(inArray(postCategoriesTable.postId, postIds as number[]));
+    .where(and(
+      inArray(postCategoriesTable.postId, postIds as number[]),
+      isNull(categoriesTable.deletedAt),
+    ));
 
   for (const row of rows) {
     const list = result.get(row.postId) ?? [];

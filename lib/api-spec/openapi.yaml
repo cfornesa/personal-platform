@@ -34,6 +34,8 @@ tags:
     description: Owner-authored reusable interactive art pieces rendered in app-owned embeds
   - name: syndication
     description: POSSE outbound syndication — platform connections, OAuth app credentials, and syndication history
+  - name: recycle-bin
+    description: Soft-deleted posts, art pieces, and images awaiting permanent deletion or restoration
 paths:
   /healthz:
     get:
@@ -977,6 +979,38 @@ paths:
                 $ref: "#/components/schemas/SiteSettings"
         "400":
           description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /bootstrap-status:
+    get:
+      operationId: getBootstrapStatus
+      tags: [site]
+      summary: Get CMS shell bootstrap status
+      responses:
+        "200":
+          description: Bootstrap state and setup checklist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapStatus"
+
+  /bootstrap/complete:
+    post:
+      operationId: completeBootstrapSetup
+      tags: [site]
+      summary: Mark first-run CMS shell setup complete (owner only)
+      responses:
+        "200":
+          description: Updated bootstrap state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapStatus"
+        "400":
+          description: Required setup fields are still missing
         "401":
           description: Unauthorized
         "403":
@@ -2182,6 +2216,306 @@ paths:
         "404":
           description: Not found
 
+  /recycle-bin:
+    get:
+      operationId: getRecycleBin
+      tags: [recycle-bin]
+      summary: List all soft-deleted posts, art pieces, and images
+      responses:
+        "200":
+          description: Recycle bin contents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecycleBinResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+    delete:
+      operationId: bulkPermanentDelete
+      tags: [recycle-bin]
+      summary: Permanently delete a selection of trashed items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkPermanentDeleteBody"
+      responses:
+        "204":
+          description: Permanently deleted
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /recycle-bin/posts/{id}/restore:
+    post:
+      operationId: restoreTrashedPost
+      tags: [recycle-bin]
+      summary: Restore a trashed post back to its original status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/pieces/{id}/restore:
+    post:
+      operationId: restoreTrashedPiece
+      tags: [recycle-bin]
+      summary: Restore a trashed art piece back to active status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/media/{id}/restore:
+    post:
+      operationId: restoreTrashedMedia
+      tags: [recycle-bin]
+      summary: Restore a trashed image back to the Image Library
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/posts/{id}:
+    delete:
+      operationId: permanentDeleteTrashedPost
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed post
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/pieces/{id}:
+    delete:
+      operationId: permanentDeleteTrashedPiece
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed art piece
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/media/{id}:
+    delete:
+      operationId: permanentDeleteTrashedMedia
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed image
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/exhibits/{id}/restore:
+    post:
+      operationId: restoreTrashedExhibit
+      tags: [recycle-bin]
+      summary: Restore a trashed exhibit
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/exhibits/{id}:
+    delete:
+      operationId: permanentDeleteTrashedExhibit
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed exhibit
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/pages/{id}/restore:
+    post:
+      operationId: restoreTrashedPage
+      tags: [recycle-bin]
+      summary: Restore a trashed page and re-show its nav link if applicable
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/pages/{id}:
+    delete:
+      operationId: permanentDeleteTrashedPage
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed page
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/categories/{id}/restore:
+    post:
+      operationId: restoreTrashedCategory
+      tags: [recycle-bin]
+      summary: Restore a trashed category (restores post assignments intact)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Restored
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
+  /recycle-bin/categories/{id}:
+    delete:
+      operationId: permanentDeleteTrashedCategory
+      tags: [recycle-bin]
+      summary: Permanently delete a single trashed category
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Permanently deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found in Recycle Bin
+
 components:
   schemas:
     HealthStatus:
@@ -2430,7 +2764,7 @@ components:
           type: string
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         thumbnailUrl:
           type: string
           nullable: true
@@ -3186,6 +3520,43 @@ components:
         - enabled
         - configured
 
+    AiVendorKeyStatus:
+      type: object
+      description: Per-vendor API key status returned in GET /users/me/ai-settings
+      properties:
+        vendor:
+          type: string
+        vendorLabel:
+          type: string
+        hasKey:
+          type: boolean
+      required:
+        - vendor
+        - vendorLabel
+        - hasKey
+
+    UpdateMyAiVendorKeyBody:
+      type: object
+      description: A single vendor API key to save or update
+      properties:
+        vendor:
+          type: string
+          enum:
+            - openrouter
+            - opencode-zen
+            - opencode-go
+            - google
+            - mistral
+            - mistral-vibe
+            - deepseek
+        apiKey:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      required:
+        - vendor
+        - apiKey
+
     MyAiSettings:
       type: object
       properties:
@@ -3193,6 +3564,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AiVendorOption"
+        vendorKeys:
+          type: array
+          description: Per-vendor API key status (one entry per supported vendor)
+          items:
+            $ref: "#/components/schemas/AiVendorKeyStatus"
         profiles:
           type: array
           items:
@@ -3208,6 +3584,7 @@ components:
           nullable: true
       required:
         - availableVendors
+        - vendorKeys
         - profiles
         - preferredArtPieceProfileId
         - preferredTextImproveProfileId
@@ -3263,6 +3640,11 @@ components:
         vendor are supported so the same key can be reused with different models
         or endpoint formats.
       properties:
+        vendorKeys:
+          type: array
+          description: Vendor-level API keys to save (one per vendor, shared across all profiles for that vendor)
+          items:
+            $ref: "#/components/schemas/UpdateMyAiVendorKeyBody"
         profiles:
           type: array
           items:
@@ -3352,7 +3734,7 @@ components:
           type: string
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         generationVendor:
           type: string
           enum:
@@ -3400,7 +3782,7 @@ components:
           type: string
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         status:
           type: string
           enum: [active, archived]
@@ -3471,7 +3853,7 @@ components:
           maxLength: 4000
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         profileId:
           type: integer
           description: ID of the AI vendor profile to use for generation
@@ -3489,7 +3871,7 @@ components:
           type: string
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         structuredSpec:
           type: object
           additionalProperties: true
@@ -3566,7 +3948,7 @@ components:
           nullable: true
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
           nullable: true
         htmlCode:
           type: string
@@ -3666,7 +4048,7 @@ components:
           type: string
         engine:
           type: string
-          enum: [p5, c2, three]
+          enum: [p5, c2, three, svg]
         version:
           $ref: "#/components/schemas/ArtPieceVersion"
       required:
@@ -3762,6 +4144,58 @@ components:
       required:
         - url
         - mimeType
+
+    BootstrapChecklist:
+      type: object
+      properties:
+        ownerDisplayNameReady:
+          type: boolean
+        ownerUsernameReady:
+          type: boolean
+        siteTitleReady:
+          type: boolean
+        heroHeadingReady:
+          type: boolean
+        heroSubheadingReady:
+          type: boolean
+        aboutBodyReady:
+          type: boolean
+      required:
+        - ownerDisplayNameReady
+        - ownerUsernameReady
+        - siteTitleReady
+        - heroHeadingReady
+        - heroSubheadingReady
+        - aboutBodyReady
+
+    BootstrapStatus:
+      type: object
+      properties:
+        hasOwner:
+          type: boolean
+        isSetupComplete:
+          type: boolean
+        requiresSetup:
+          type: boolean
+        currentUserCanSetup:
+          type: boolean
+        currentUserNeedsSetup:
+          type: boolean
+        ownerAutoClaimEnabled:
+          type: boolean
+        setupPath:
+          type: string
+        checklist:
+          $ref: "#/components/schemas/BootstrapChecklist"
+      required:
+        - hasOwner
+        - isSetupComplete
+        - requiresSetup
+        - currentUserCanSetup
+        - currentUserNeedsSetup
+        - ownerAutoClaimEnabled
+        - setupPath
+        - checklist
 
     SiteSettings:
       type: object
@@ -4884,3 +5318,213 @@ components:
       required:
         - clientId
         - clientSecret
+
+    TrashedPost:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        content:
+          type: string
+        contentFormat:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - content
+        - contentFormat
+        - status
+        - createdAt
+
+    TrashedPiece:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        engine:
+          type: string
+        thumbnailUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - title
+        - engine
+        - createdAt
+
+    TrashedMedia:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        filename:
+          type: string
+        title:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+        altText:
+          type: string
+          nullable: true
+        uploadedAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - url
+        - filename
+        - mimeType
+        - uploadedAt
+
+    RecycleBinResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedPost"
+        pieces:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedPiece"
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedMedia"
+        exhibits:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedExhibit"
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedPage"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashedCategory"
+      required:
+        - posts
+        - pieces
+        - media
+        - exhibits
+        - pages
+        - categories
+
+    TrashedExhibit:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - slug
+        - createdAt
+
+    TrashedPage:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - slug
+        - title
+        - status
+        - createdAt
+
+    TrashedCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - slug
+        - name
+        - createdAt
+
+    BulkPermanentDeleteBody:
+      type: object
+      properties:
+        postIds:
+          type: array
+          items:
+            type: integer
+        pieceIds:
+          type: array
+          items:
+            type: integer
+        mediaIds:
+          type: array
+          items:
+            type: integer
+        exhibitIds:
+          type: array
+          items:
+            type: integer
+        pageIds:
+          type: array
+          items:
+            type: integer
+        categoryIds:
+          type: array
+          items:
+            type: integer

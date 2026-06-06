@@ -24,6 +24,7 @@ export const pagesTable = mysqlTable(
     updatedAt: datetime("updated_at", { mode: "string", fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`),
+    deletedAt: datetime("deleted_at", { mode: "string", fsp: 3 }),
   },
   (t) => ({
     slugUnique: uniqueIndex("pages_slug_unique").on(t.slug),

@@ -16,6 +16,7 @@ export const exhibitsTable = mysqlTable(
     cols: tinyint("cols").notNull().default(1),
     createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
     updatedAt: datetime("updated_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    deletedAt: datetime("deleted_at", { mode: "string", fsp: 3 }),
   },
   (t) => ({
     slugUnique: uniqueIndex("exhibits_slug_unique").on(t.slug),

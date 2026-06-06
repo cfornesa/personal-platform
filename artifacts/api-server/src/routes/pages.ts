@@ -6,6 +6,8 @@ import {
   pagesTable,
   navLinksTable,
   eq,
+  and,
+  isNull,
   desc,
   sql,
   formatMysqlDateTime,
@@ -90,7 +92,10 @@ router.get("/pages", async (req: Request, res: Response) => {
     const rows = await db
       .select()
       .from(pagesTable)
-      .where(includeDrafts ? sql`1 = 1` : eq(pagesTable.status, "published"))
+      .where(and(
+        isNull(pagesTable.deletedAt),
+        includeDrafts ? sql`1 = 1` : eq(pagesTable.status, "published"),
+      ))
       .orderBy(desc(pagesTable.updatedAt));
     return res.json({ pages: rows.map(serialize) });
   } catch (err) {
@@ -106,7 +111,7 @@ router.get("/pages/:slug", async (req: Request, res: Response) => {
     const rows = await db
       .select()
       .from(pagesTable)
-      .where(eq(pagesTable.slug, slug))
+      .where(and(eq(pagesTable.slug, slug), isNull(pagesTable.deletedAt)))
       .limit(1);
     const page = rows[0];
     if (!page) return res.status(404).json({ error: "Not found" });
@@ -206,7 +211,7 @@ router.patch(
       const rows = await db
         .select()
         .from(pagesTable)
-        .where(eq(pagesTable.id, id))
+        .where(and(eq(pagesTable.id, id), isNull(pagesTable.deletedAt)))
         .limit(1);
       const page = rows[0];
       if (!page) return res.status(404).json({ error: "Not found" });
@@ -322,10 +327,12 @@ router.delete(
       const rows = await db
         .select({ id: pagesTable.id })
         .from(pagesTable)
-        .where(eq(pagesTable.id, id))
+        .where(and(eq(pagesTable.id, id), isNull(pagesTable.deletedAt)))
         .limit(1);
       if (!rows[0]) return res.status(404).json({ error: "Not found" });
-      await db.delete(pagesTable).where(eq(pagesTable.id, id));
+      await db.update(pagesTable).set({ deletedAt: sql`CURRENT_TIMESTAMP(3)` }).where(eq(pagesTable.id, id));
+      // Hide the page's nav_link while it is in the Recycle Bin.
+      await db.update(navLinksTable).set({ visible: false }).where(eq(navLinksTable.pageId, id));
       return res.status(204).send();
     } catch (err) {
       console.error("Failed to delete page:", err);

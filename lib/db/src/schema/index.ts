@@ -18,4 +18,6 @@ export * from "./art-pieces.ts";
 export * from "./media-assets.ts";
 export * from "./exhibits.ts";
 export * from "./profile-photo-assets.ts";
+export * from "./site-assets.ts";
+export * from "./site-bootstrap-state.ts";
 export * from "../lib/reserved-slugs.ts";

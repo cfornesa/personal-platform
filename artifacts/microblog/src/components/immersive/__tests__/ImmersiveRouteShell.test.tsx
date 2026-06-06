@@ -18,9 +18,11 @@ function setDocumentFlow(matches: boolean) {
 function StatefulImmersiveRouteShell({
   requestFullscreen,
   exitFullscreen,
+  isEmbedMode = false,
 }: {
   requestFullscreen?: (this: HTMLElement) => Promise<void>;
   exitFullscreen?: () => Promise<void>;
+  isEmbedMode?: boolean;
 } = {}) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -42,6 +44,7 @@ function StatefulImmersiveRouteShell({
       title="Tornado"
       onBack={() => undefined}
       isFullscreen={isFullscreen}
+      isEmbedMode={isEmbedMode}
       onToggleFullscreen={() => setIsFullscreen((current) => !current)}
       renderScene={({ fullscreen }) => (
         <div data-testid={fullscreen ? "fullscreen-scene" : "scene"}>Scene</div>
@@ -255,5 +258,73 @@ describe("ImmersiveRouteShell", () => {
 
     expect(screen.queryByLabelText("Expand immersive view")).toBeNull();
     expect(renderScene).toHaveBeenCalledWith({ fullscreen: false, isMobile: false });
+  });
+
+  it("requests native fullscreen when expanding an embed", async () => {
+    const user = userEvent.setup();
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    const requestFullscreen = vi.fn(function request(this: HTMLElement) {
+      fullscreenElement = this;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+
+    render(
+      <StatefulImmersiveRouteShell
+        isEmbedMode
+        requestFullscreen={requestFullscreen}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("fullscreen-scene")).toBeTruthy();
+    expect(screen.getByTestId("immersive-embed-expanded-root").className).toContain("fixed");
+  });
+
+  it("falls back to in-frame focus mode when embed fullscreen is rejected", async () => {
+    const user = userEvent.setup();
+    const requestFullscreen = vi.fn(() => Promise.reject(new Error("Rejected")));
+
+    render(
+      <StatefulImmersiveRouteShell
+        isEmbedMode
+        requestFullscreen={requestFullscreen}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("fullscreen-scene")).toBeTruthy();
+    expect(screen.getByLabelText("Return to gallery view")).toBeTruthy();
+    expect(screen.getByTestId("immersive-embed-expanded-root").className).toContain("fixed");
+  });
+
+  it("lets embed focus mode exit cleanly after fullscreen fallback", async () => {
+    const user = userEvent.setup();
+    const requestFullscreen = vi.fn(() => Promise.reject(new Error("Rejected")));
+
+    render(
+      <StatefulImmersiveRouteShell
+        isEmbedMode
+        requestFullscreen={requestFullscreen}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Expand immersive view"));
+    expect(screen.getByTestId("immersive-embed-expanded-root")).toBeTruthy();
+
+    await user.click(screen.getByLabelText("Return to gallery view"));
+
+    expect(screen.getByLabelText("Expand immersive view")).toBeTruthy();
+    expect(screen.queryByTestId("immersive-embed-expanded-root")).toBeNull();
+    expect(screen.getByTestId("immersive-embed-root")).toBeTruthy();
+    expect(screen.queryByTestId("fullscreen-scene")).toBeNull();
   });
 });

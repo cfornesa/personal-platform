@@ -7,7 +7,6 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * @summary Health check
  */
@@ -684,8 +683,6 @@ export const GetProfilePhotoParams = zod.object({
 })
 
 
-const aiProfileEndpointKind = zod.enum(['chat-completions', 'anthropic-messages', 'openai-responses', 'google-generate']).nullable();
-
 /**
  * @summary Get owner AI writing assistant settings
  */
@@ -695,54 +692,58 @@ export const GetMyAiSettingsResponse = zod.object({
   "label": zod.string()
 })),
   "vendorKeys": zod.array(zod.object({
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "vendor": zod.string(),
   "vendorLabel": zod.string(),
   "hasKey": zod.boolean()
-})),
+}).describe('Per-vendor API key status returned in GET \/users\/me\/ai-settings')).describe('Per-vendor API key status (one entry per supported vendor)'),
   "profiles": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.number(),
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "vendorLabel": zod.string(),
   "profileName": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
   "model": zod.string().nullish(),
-  "endpointKind": aiProfileEndpointKind
+  "endpointKind": zod.enum(['chat-completions', 'anthropic-messages', 'openai-responses', 'google-generate']).nullish()
 })),
-  "preferredArtPieceProfileId": zod.number().int().nullable(),
-  "preferredTextImproveProfileId": zod.number().int().nullable(),
-  "preferredAltTextProfileId": zod.number().int().nullable()
+  "preferredArtPieceProfileId": zod.number().nullable(),
+  "preferredTextImproveProfileId": zod.number().nullable(),
+  "preferredAltTextProfileId": zod.number().nullable()
 })
 
 
 /**
  * @summary Update owner AI writing assistant settings
  */
-export const updateMyAiSettingsBodyProfileModelMax = 191;
+export const updateMyAiSettingsBodyVendorKeysItemApiKeyMax = 4096;
 
-export const updateMyAiSettingsBodyProfileApiKeyMax = 4096;
+export const updateMyAiSettingsBodyProfilesItemProfileNameMax = 128;
 
-export const updateMyAiSettingsBodyProfileNameMax = 128;
+export const updateMyAiSettingsBodyProfilesItemModelMax = 191;
+
+export const updateMyAiSettingsBodyProfilesItemApiKeyMax = 4096;
+
 
 
 export const UpdateMyAiSettingsBody = zod.object({
   "vendorKeys": zod.array(zod.object({
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
-  "apiKey": zod.string().min(1).max(updateMyAiSettingsBodyProfileApiKeyMax)
-})).optional(),
+  "apiKey": zod.string().min(1).max(updateMyAiSettingsBodyVendorKeysItemApiKeyMax)
+}).describe('A single vendor API key to save or update')).optional().describe('Vendor-level API keys to save (one per vendor, shared across all profiles for that vendor)'),
   "profiles": zod.array(zod.object({
-  "id": zod.number().int().optional(),
+  "id": zod.number().optional().describe('Omit to create a new profile; include to update an existing one'),
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
-  "profileName": zod.string().min(1).max(updateMyAiSettingsBodyProfileNameMax),
+  "profileName": zod.string().min(1).max(updateMyAiSettingsBodyProfilesItemProfileNameMax),
   "enabled": zod.boolean().optional(),
-  "model": zod.string().min(1).max(updateMyAiSettingsBodyProfileModelMax).optional(),
-  "endpointKind": aiProfileEndpointKind.optional()
-})).optional(),
-  "deletedProfileIds": zod.array(zod.number().int()).optional(),
-  "preferredArtPieceProfileId": zod.number().int().nullish(),
-  "preferredTextImproveProfileId": zod.number().int().nullish(),
-  "preferredAltTextProfileId": zod.number().int().nullish()
-}).describe('Owner AI settings. vendorKeys stores one API key per vendor; profiles\nare independent of keys and share the vendor key automatically.\n')
+  "model": zod.string().min(1).max(updateMyAiSettingsBodyProfilesItemModelMax).optional(),
+  "apiKey": zod.string().min(1).max(updateMyAiSettingsBodyProfilesItemApiKeyMax).optional(),
+  "endpointKind": zod.enum(['chat-completions', 'anthropic-messages', 'openai-responses', 'google-generate']).nullish()
+})),
+  "deletedProfileIds": zod.array(zod.number()).optional(),
+  "preferredArtPieceProfileId": zod.number().nullish(),
+  "preferredTextImproveProfileId": zod.number().nullish(),
+  "preferredAltTextProfileId": zod.number().nullish()
+}).describe('Owner AI settings as named profiles. Each profile has its own vendor,\nmodel slug, API key, and optional endpoint kind. Multiple profiles per\nvendor are supported so the same key can be reused with different models\nor endpoint formats.\n')
 
 export const UpdateMyAiSettingsResponse = zod.object({
   "availableVendors": zod.array(zod.object({
@@ -750,31 +751,32 @@ export const UpdateMyAiSettingsResponse = zod.object({
   "label": zod.string()
 })),
   "vendorKeys": zod.array(zod.object({
-  "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
+  "vendor": zod.string(),
   "vendorLabel": zod.string(),
   "hasKey": zod.boolean()
-})),
+}).describe('Per-vendor API key status returned in GET \/users\/me\/ai-settings')).describe('Per-vendor API key status (one entry per supported vendor)'),
   "profiles": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.number(),
   "vendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']),
   "vendorLabel": zod.string(),
   "profileName": zod.string(),
   "enabled": zod.boolean(),
   "configured": zod.boolean(),
   "model": zod.string().nullish(),
-  "endpointKind": aiProfileEndpointKind
+  "endpointKind": zod.enum(['chat-completions', 'anthropic-messages', 'openai-responses', 'google-generate']).nullish()
 })),
-  "preferredArtPieceProfileId": zod.number().int().nullable(),
-  "preferredTextImproveProfileId": zod.number().int().nullable(),
-  "preferredAltTextProfileId": zod.number().int().nullable()
+  "preferredArtPieceProfileId": zod.number().nullable(),
+  "preferredTextImproveProfileId": zod.number().nullable(),
+  "preferredAltTextProfileId": zod.number().nullable()
 })
 
 
 /**
- * Uses the owner's saved AI profile for the profileId selected in the
-editor. The model and API key come from the owner's Admin AI settings.
+ * Uses the owner's saved AI settings for the vendor selected in the
+editor. The request body contains editor content plus the chosen
+vendor; the model and API key come from the owner's Admin AI settings.
 
- * @summary Process editor content with the owner-selected AI vendor profile
+ * @summary Process editor content with the owner-selected AI vendor
  */
 export const processAiTextBodyContentMax = 40000;
 
@@ -782,7 +784,7 @@ export const processAiTextBodyContentMax = 40000;
 
 export const ProcessAiTextBody = zod.object({
   "content": zod.string().max(processAiTextBodyContentMax),
-  "profileId": zod.number().int(),
+  "profileId": zod.number().describe('ID of the AI vendor profile to use'),
   "mode": zod.enum(['html', 'text']).optional()
 })
 
@@ -800,7 +802,7 @@ export const ProcessAiTextResponse = zod.object({
  */
 export const DescribeImageBody = zod.object({
   "imageUrl": zod.string(),
-  "profileId": zod.number().int(),
+  "profileId": zod.number().describe('ID of the AI vendor profile to use'),
   "existingAltText": zod.string().optional().describe('Optional existing alt text to use as context for refinement')
 })
 
@@ -818,7 +820,7 @@ export const ListArtPiecesResponse = zod.object({
   "ownerUserId": zod.string(),
   "title": zod.string(),
   "prompt": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
@@ -833,7 +835,7 @@ export const ListArtPiecesResponse = zod.object({
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
@@ -863,7 +865,7 @@ export const CreateArtPieceBody = zod.object({
   "draftToken": zod.string().min(1).max(createArtPieceBodyDraftTokenMax).optional(),
   "title": zod.string().min(1).max(createArtPieceBodyTitleMax).nullish(),
   "prompt": zod.string().min(1).max(createArtPieceBodyPromptMax).nullish(),
-  "engine": zod.enum(['p5', 'c2', 'three']).nullish(),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']).nullish(),
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string().nullish(),
@@ -880,14 +882,14 @@ export const generateArtPieceBodyPromptMax = 4000;
 
 export const GenerateArtPieceBody = zod.object({
   "prompt": zod.string().min(1).max(generateArtPieceBodyPromptMax),
-  "engine": zod.enum(['p5', 'c2', 'three']),
-  "profileId": zod.number().int()
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
+  "profileId": zod.number().describe('ID of the AI vendor profile to use for generation')
 })
 
 export const GenerateArtPieceResponse = zod.object({
   "draftToken": zod.string(),
   "title": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "structuredSpec": zod.record(zod.string(), zod.unknown()).nullish(),
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
@@ -917,7 +919,7 @@ export const GetArtPieceResponse = zod.object({
   "ownerUserId": zod.string(),
   "title": zod.string(),
   "prompt": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
@@ -932,7 +934,7 @@ export const GetArtPieceResponse = zod.object({
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
@@ -950,7 +952,7 @@ export const GetArtPieceResponse = zod.object({
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
@@ -989,7 +991,7 @@ export const UpdateArtPieceResponse = zod.object({
   "ownerUserId": zod.string(),
   "title": zod.string(),
   "prompt": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "status": zod.enum(['active', 'archived']),
   "currentVersionId": zod.number().nullable(),
   "thumbnailUrl": zod.string().nullable(),
@@ -1004,7 +1006,7 @@ export const UpdateArtPieceResponse = zod.object({
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
@@ -1065,7 +1067,7 @@ export const GetEmbeddedArtPieceQueryParams = zod.object({
 export const GetEmbeddedArtPieceResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "version": zod.object({
   "id": zod.number(),
   "artPieceId": zod.number(),
@@ -1074,7 +1076,7 @@ export const GetEmbeddedArtPieceResponse = zod.object({
   "htmlCode": zod.string().nullish(),
   "cssCode": zod.string().nullish(),
   "generatedCode": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "generationVendor": zod.enum(['openrouter', 'opencode-zen', 'opencode-go', 'google', 'mistral', 'mistral-vibe', 'deepseek']).nullish(),
   "generationModel": zod.string().nullish(),
   "validationStatus": zod.enum(['validated']),
@@ -1340,6 +1342,50 @@ export const UpdateSiteSettingsResponse = zod.object({
   "ownerSocialLinks": zod.record(zod.string(), zod.string()).describe('Map of social-platform key (instagram, twitter, youtube, tiktok,\ntwitch, github, linkedin) to absolute URL, taken from the owner\nuser\'s `social_links`. Used by the sitewide footer so it does\nnot need a second round-trip or an \"owner lookup\" of its own.\nEmpty object when no owner is set or none are populated.\n'),
   "ownerWebsite": zod.string().nullish().describe('The owner user\'s `website` URL, surfaced here so the sitewide\nfooter can render a globe icon next to the social row without\nan extra round-trip.\n'),
   "allowedOrigins": zod.array(zod.string()).describe('Origins parsed from the `ALLOWED_ORIGINS` environment variable.\nUsed by the admin UI to display the exact OAuth callback URLs\nthe operator must register with each platform\'s developer console.\nEmpty array when the env var is not set.\n')
+})
+
+
+/**
+ * @summary Get CMS shell bootstrap status
+ */
+export const GetBootstrapStatusResponse = zod.object({
+  "hasOwner": zod.boolean(),
+  "isSetupComplete": zod.boolean(),
+  "requiresSetup": zod.boolean(),
+  "currentUserCanSetup": zod.boolean(),
+  "currentUserNeedsSetup": zod.boolean(),
+  "ownerAutoClaimEnabled": zod.boolean(),
+  "setupPath": zod.string(),
+  "checklist": zod.object({
+  "ownerDisplayNameReady": zod.boolean(),
+  "ownerUsernameReady": zod.boolean(),
+  "siteTitleReady": zod.boolean(),
+  "heroHeadingReady": zod.boolean(),
+  "heroSubheadingReady": zod.boolean(),
+  "aboutBodyReady": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Mark first-run CMS shell setup complete (owner only)
+ */
+export const CompleteBootstrapSetupResponse = zod.object({
+  "hasOwner": zod.boolean(),
+  "isSetupComplete": zod.boolean(),
+  "requiresSetup": zod.boolean(),
+  "currentUserCanSetup": zod.boolean(),
+  "currentUserNeedsSetup": zod.boolean(),
+  "ownerAutoClaimEnabled": zod.boolean(),
+  "setupPath": zod.string(),
+  "checklist": zod.object({
+  "ownerDisplayNameReady": zod.boolean(),
+  "ownerUsernameReady": zod.boolean(),
+  "siteTitleReady": zod.boolean(),
+  "heroHeadingReady": zod.boolean(),
+  "heroSubheadingReady": zod.boolean(),
+  "aboutBodyReady": zod.boolean()
+})
 })
 
 
@@ -2386,7 +2432,7 @@ export const GetExhibitItemsResponse = zod.object({
   "pieces": zod.array(zod.object({
   "id": zod.number(),
   "title": zod.string(),
-  "engine": zod.enum(['p5', 'c2', 'three']),
+  "engine": zod.enum(['p5', 'c2', 'three', 'svg']),
   "thumbnailUrl": zod.string().nullable(),
   "generatedCode": zod.string(),
   "htmlCode": zod.string().nullish(),
@@ -2437,3 +2483,168 @@ export const SetMediaExhibitsResponse = zod.object({
 })
 
 
+/**
+ * @summary List all soft-deleted posts, art pieces, and images
+ */
+export const GetRecycleBinResponse = zod.object({
+  "posts": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string().nullish(),
+  "content": zod.string(),
+  "contentFormat": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+})),
+  "pieces": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "engine": zod.string(),
+  "thumbnailUrl": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+})),
+  "media": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "filename": zod.string(),
+  "title": zod.string().nullish(),
+  "mimeType": zod.string(),
+  "altText": zod.string().nullish(),
+  "uploadedAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+})),
+  "exhibits": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+})),
+  "pages": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+})),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "deletedAt": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Permanently delete a selection of trashed items
+ */
+export const BulkPermanentDeleteBody = zod.object({
+  "postIds": zod.array(zod.number()).optional(),
+  "pieceIds": zod.array(zod.number()).optional(),
+  "mediaIds": zod.array(zod.number()).optional(),
+  "exhibitIds": zod.array(zod.number()).optional(),
+  "pageIds": zod.array(zod.number()).optional(),
+  "categoryIds": zod.array(zod.number()).optional()
+})
+
+
+/**
+ * @summary Restore a trashed post back to its original status
+ */
+export const RestoreTrashedPostParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Restore a trashed art piece back to active status
+ */
+export const RestoreTrashedPieceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Restore a trashed image back to the Image Library
+ */
+export const RestoreTrashedMediaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed post
+ */
+export const PermanentDeleteTrashedPostParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed art piece
+ */
+export const PermanentDeleteTrashedPieceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed image
+ */
+export const PermanentDeleteTrashedMediaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Restore a trashed exhibit
+ */
+export const RestoreTrashedExhibitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed exhibit
+ */
+export const PermanentDeleteTrashedExhibitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Restore a trashed page and re-show its nav link if applicable
+ */
+export const RestoreTrashedPageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed page
+ */
+export const PermanentDeleteTrashedPageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Restore a trashed category (restores post assignments intact)
+ */
+export const RestoreTrashedCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Permanently delete a single trashed category
+ */
+export const PermanentDeleteTrashedCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})

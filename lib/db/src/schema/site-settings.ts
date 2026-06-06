@@ -93,8 +93,8 @@ export const siteSettingsDefaults = {
   colorDestructive: "0 100% 50%",
   colorDestructiveForeground: "0 0% 100%",
 
-  logoUrl: "",
-  logoDarkUrl: "",
+  logoUrl: "/api/site-assets/logo-light",
+  logoDarkUrl: "/api/site-assets/logo-dark",
   logoLayout: "text_only",
   defaultThemeMode: "system",
 

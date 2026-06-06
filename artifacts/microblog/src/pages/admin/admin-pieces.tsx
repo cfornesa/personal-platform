@@ -27,6 +27,16 @@ import { ArtPieceRenderer } from "@/components/post/ArtPieceRenderer";
 import { ArtPieceDraftDialog } from "@/components/post/ArtPieceDraftDialog";
 import { ArtPieceGenerationDialog, type ArtPieceGenerationState } from "@/components/post/ArtPieceGenerationDialog";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -130,6 +140,26 @@ canvas { display: block; }`,
   return stopFrame;
 };`,
   },
+  svg: {
+    html: '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">\n  <circle cx="400" cy="300" r="60" fill="#e74c3c" class="pulse" />\n</svg>',
+    css: `body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+svg { display: block; width: 100%; height: 100%; }
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { r: 60; opacity: 1; }
+  50% { r: 80; opacity: 0.6; }
+}`,
+    js: `window.sketch = () => {};`,
+  },
 };
 
 export default function AdminPiecesPage() {
@@ -158,6 +188,7 @@ export default function AdminPiecesPage() {
   const [isPersistingThumbnail, setIsPersistingThumbnail] = useState(false);
   const thumbnailQueueRef = useRef<Promise<void>>(Promise.resolve());
   const thumbnailQueuedIdsRef = useRef<Set<number>>(new Set());
+  const [pieceToDelete, setPieceToDelete] = useState<{ id: number; title: string } | null>(null);
 
   const pieces = useListArtPieces();
   const filtered = useMemo(() => {
@@ -743,9 +774,7 @@ canvas { display: block; }`;
                     disabled={deletePiece.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`Delete "${piece.title}"? This cannot be undone.`)) {
-                        deletePiece.mutate({ id: piece.id });
-                      }
+                      setPieceToDelete({ id: piece.id, title: piece.title });
                     }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   >
@@ -781,6 +810,7 @@ canvas { display: block; }`;
                       <option value="p5">p5</option>
                       <option value="c2">c2</option>
                       <option value="three">Three.js</option>
+                      <option value="svg">SVG</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -896,6 +926,7 @@ canvas { display: block; }`;
                             <option value="p5">p5</option>
                             <option value="c2">c2</option>
                             <option value="three">Three.js</option>
+                            <option value="svg">SVG</option>
                           </select>
                         </div>
                         <div className="space-y-2">
@@ -1127,6 +1158,31 @@ canvas { display: block; }`;
           onRetry={() => void handleGenerate()}
         />
       ) : null}
+
+      <AlertDialog open={pieceToDelete !== null} onOpenChange={(open) => { if (!open) setPieceToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move "{pieceToDelete?.title}" to the Recycle Bin?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This piece will be moved to the Recycle Bin. You can restore it or permanently delete it from the Recycle Bin in the Admin panel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pieceToDelete) {
+                  deletePiece.mutate({ id: pieceToDelete.id });
+                  setPieceToDelete(null);
+                }
+              }}
+            >
+              Move to Recycle Bin
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ArtPieceDraftDialog
         open={draftOpen}

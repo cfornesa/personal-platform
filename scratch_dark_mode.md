@@ -1,4 +1,6 @@
 
+> **REFERENCE MATERIAL ONLY** — This file is a general CSS dark-mode reference guide, not a description of the current codebase state. It was saved here as scratch/working notes and is not kept in sync with any implementation. Do not treat it as documentation of how dark mode is implemented in this project.
+
 --- Guide for dark-mode ---
 # Dark mode
 

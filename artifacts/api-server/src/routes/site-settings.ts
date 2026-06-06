@@ -3,6 +3,7 @@ import { db, siteSettingsTable, siteSettingsDefaults, usersTable, eq, formatMysq
 import { requireAuth, requireOwner } from "../middlewares/auth";
 import { UpdateSiteSettingsBody } from "@workspace/api-zod";
 import { parseSocialLinks } from "./users";
+import { DEFAULT_SITE_ASSET_URLS } from "../lib/site-assets";
 
 const router: IRouter = Router();
 
@@ -24,7 +25,17 @@ async function loadOrSeedSettings() {
 
 function serialize(row: Awaited<ReturnType<typeof loadOrSeedSettings>>) {
   const { id: _id, updatedAt: _updatedAt, ...rest } = row;
-  return rest;
+  return {
+    ...rest,
+    logoUrl:
+      typeof rest.logoUrl === "string" && rest.logoUrl.trim().length > 0
+        ? rest.logoUrl
+        : DEFAULT_SITE_ASSET_URLS.logoLight,
+    logoDarkUrl:
+      typeof rest.logoDarkUrl === "string" && rest.logoDarkUrl.trim().length > 0
+        ? rest.logoDarkUrl
+        : DEFAULT_SITE_ASSET_URLS.logoDark,
+  };
 }
 
 /**

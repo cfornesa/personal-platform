@@ -51,7 +51,7 @@ function PostCard({ post, onClick, showDay }: { post: Post; onClick: () => void;
   const displayDate = postDisplayDate(post);
   const timeStr = format(displayDate, "h:mm a");
   const dayStr = format(displayDate, "EEE, MMM d");
-  const isEditable = !post.sourceFeedId;
+  const isEditable = true;
   const title = post.title || (post.content.replace(/<[^>]+>/g, " ").trim().slice(0, 60) || "New Post");
 
   return (

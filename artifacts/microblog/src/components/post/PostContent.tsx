@@ -21,6 +21,7 @@ type PostContentProps = {
    */
   highlightQuery?: string | null;
   postId?: number | null;
+  returnTo?: string;
 };
 
 function tokenizeQuery(q: string): string[] {
@@ -193,6 +194,11 @@ function enhanceLazyIframes(root: HTMLElement) {
     const template = wrapper.querySelector<HTMLTemplateElement>("[data-lazy-iframe-template='true']");
     const frame = template?.content.firstElementChild?.cloneNode(true);
     if (!media || !(frame instanceof HTMLIFrameElement)) return;
+    // Remove the browser's native lazy-loading: the outer IntersectionObserver already
+    // controls when this iframe enters the DOM, so the iframe should load immediately
+    // once mounted. Keeping loading="lazy" causes the browser to defer loading with a
+    // different (potentially smaller) threshold, leaving the bg-muted placeholder visible.
+    frame.removeAttribute("loading");
     media.innerHTML = "";
     media.appendChild(frame);
     wrapper.setAttribute("data-lazy-iframe-active", "true");
@@ -230,7 +236,7 @@ function enhanceLazyIframes(root: HTMLElement) {
   return () => observer.disconnect();
 }
 
-function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: number | null): string {
+function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: number | null, returnTo?: string): string {
   if (typeof DOMParser === "undefined") return html;
   // First, normalize all piece embed URLs in the raw HTML to use the canonical origin.
   // This ensures they render correctly even if the stored HTML has a different origin.
@@ -256,7 +262,7 @@ function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: nu
         buildImmersiveImageHref(src, {
           alt: image.getAttribute("alt"),
           title: image.getAttribute("title"),
-        }, canonicalOrigin, postId),
+        }, canonicalOrigin, postId, returnTo),
         "Open image in immersive view",
       ),
     );
@@ -277,7 +283,7 @@ function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: nu
       "piece",
       `piece:${meta.id}:${meta.versionId ?? ""}`,
       title,
-      buildImmersivePieceHref(meta.id, meta.versionId, meta.pieceOrigin || canonicalOrigin, postId),
+      buildImmersivePieceHref(meta.id, meta.versionId, meta.pieceOrigin || canonicalOrigin, postId, returnTo),
       "Open piece in immersive view",
     );
     frame.replaceWith(preview);
@@ -314,7 +320,7 @@ function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: nu
       "exhibit",
       `exhibit:${slug}`,
       frame.getAttribute("title")?.trim() || `Exhibit ${slug}`,
-      buildImmersiveExhibitHref(slug, exhibitOrigin, postId),
+      buildImmersiveExhibitHref(slug, exhibitOrigin, postId, returnTo),
       "Open exhibit in immersive view",
     );
     frame.replaceWith(wrapper);
@@ -332,7 +338,7 @@ const DEFAULT_PLAIN_CLASS =
   "text-base text-foreground whitespace-pre-wrap break-words leading-relaxed";
 
 const DEFAULT_HTML_CLASS =
-  "wysiwyg-rendered-content prose prose-neutral max-w-none break-words text-foreground prose-p:my-3 prose-h1:mt-7 prose-h1:mb-4 prose-h2:mt-6 prose-h2:mb-3 prose-h3:mt-5 prose-h3:mb-2 prose-h4:mt-4 prose-h4:mb-2 prose-h5:mt-4 prose-h5:mb-2 prose-h6:mt-4 prose-h6:mb-2 prose-strong:font-extrabold prose-strong:text-foreground prose-img:rounded-xl prose-img:border prose-img:border-border prose-iframe:w-full prose-iframe:rounded-xl prose-iframe:border prose-iframe:border-border";
+  "wysiwyg-rendered-content prose prose-neutral dark:prose-invert max-w-none break-words text-foreground prose-p:my-3 prose-h1:mt-7 prose-h1:mb-4 prose-h2:mt-6 prose-h2:mb-3 prose-h3:mt-5 prose-h3:mb-2 prose-h4:mt-4 prose-h4:mb-2 prose-h5:mt-4 prose-h5:mb-2 prose-h6:mt-4 prose-h6:mb-2 prose-strong:font-extrabold prose-strong:text-foreground prose-img:rounded-xl prose-img:border prose-img:border-border prose-iframe:w-full prose-iframe:rounded-xl prose-iframe:border prose-iframe:border-border";
 
 export const PostContent = memo(function PostContent({
   content,
@@ -340,6 +346,7 @@ export const PostContent = memo(function PostContent({
   className,
   highlightQuery,
   postId,
+  returnTo,
 }: PostContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canonicalOriginRef = useRef(
@@ -358,8 +365,8 @@ export const PostContent = memo(function PostContent({
     [content, contentFormat, regex],
   );
   const immersiveHtml = useMemo(
-    () => (contentFormat === "html" ? enhanceImmersiveHtml(renderedHtml, canonicalOrigin, postId) : renderedHtml),
-    [contentFormat, renderedHtml, canonicalOrigin, postId],
+    () => (contentFormat === "html" ? enhanceImmersiveHtml(renderedHtml, canonicalOrigin, postId, returnTo) : renderedHtml),
+    [contentFormat, renderedHtml, canonicalOrigin, postId, returnTo],
   );
 
   useLayoutEffect(() => {

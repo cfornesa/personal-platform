@@ -6,7 +6,10 @@ import {
   artPieceVersionsTable,
   mediaAssetsTable,
   eq,
+  and,
+  isNull,
   inArray,
+  sql,
   formatMysqlDateTime,
 } from "@workspace/db";
 import { z } from "zod/v4";
@@ -93,7 +96,7 @@ function serializeExhibit(row: Exhibit) {
 // GET /exhibits — public list with item counts.
 router.get("/exhibits", async (_req: Request, res: Response) => {
   try {
-    const rows = await db.select().from(exhibitsTable).orderBy(exhibitsTable.name);
+    const rows = await db.select().from(exhibitsTable).where(isNull(exhibitsTable.deletedAt)).orderBy(exhibitsTable.name);
     const exhibitIds = rows.map((row) => row.id);
     const [pieceCounts, imageCounts] = await Promise.all([
       countMembershipsByExhibit({ tableName: "piece_exhibits", exhibitIds }),
@@ -168,7 +171,7 @@ router.get("/exhibits/:slug", async (req: Request, res: Response) => {
     const rows = await db
       .select()
       .from(exhibitsTable)
-      .where(eq(exhibitsTable.slug, slug))
+      .where(and(eq(exhibitsTable.slug, slug), isNull(exhibitsTable.deletedAt)))
       .limit(1);
     const exhibit = rows[0];
     if (!exhibit) return res.status(404).json({ error: "Not found" });
@@ -198,7 +201,7 @@ router.patch("/exhibits/:id", requireAuth, requireOwner, async (req: Request, re
     const rows = await db
       .select()
       .from(exhibitsTable)
-      .where(eq(exhibitsTable.id, params.data.id))
+      .where(and(eq(exhibitsTable.id, params.data.id), isNull(exhibitsTable.deletedAt)))
       .limit(1);
     const exhibit = rows[0];
     if (!exhibit) return res.status(404).json({ error: "Not found" });
@@ -263,7 +266,7 @@ router.patch("/exhibits/:id", requireAuth, requireOwner, async (req: Request, re
   }
 });
 
-// DELETE /exhibits/:id — owner only.
+// DELETE /exhibits/:id — soft-delete (moves to Recycle Bin).
 router.delete("/exhibits/:id", requireAuth, requireOwner, async (req: Request, res: Response) => {
   try {
     const params = ExhibitIdParams.safeParse(req.params);
@@ -272,11 +275,11 @@ router.delete("/exhibits/:id", requireAuth, requireOwner, async (req: Request, r
     const rows = await db
       .select({ id: exhibitsTable.id })
       .from(exhibitsTable)
-      .where(eq(exhibitsTable.id, params.data.id))
+      .where(and(eq(exhibitsTable.id, params.data.id), isNull(exhibitsTable.deletedAt)))
       .limit(1);
     if (!rows[0]) return res.status(404).json({ error: "Not found" });
 
-    await db.delete(exhibitsTable).where(eq(exhibitsTable.id, params.data.id));
+    await db.update(exhibitsTable).set({ deletedAt: sql`CURRENT_TIMESTAMP(3)` }).where(eq(exhibitsTable.id, params.data.id));
     return res.status(204).send();
   } catch {
     return res.status(400).json({ error: "Invalid request" });
@@ -292,7 +295,7 @@ router.get("/exhibits/:slug/items", async (req: Request, res: Response) => {
     const exhibitRows = await db
       .select()
       .from(exhibitsTable)
-      .where(eq(exhibitsTable.slug, slug))
+      .where(and(eq(exhibitsTable.slug, slug), isNull(exhibitsTable.deletedAt)))
       .limit(1);
     const exhibit = exhibitRows[0];
     if (!exhibit) return res.status(404).json({ error: "Not found" });

@@ -58,6 +58,7 @@ export const postsTable = mysqlTable(
     featuredImageUrl: varchar("featured_image_url", { length: 2048 }),
     socialPostDrafts: text("social_post_drafts"),
     createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    deletedAt: datetime("deleted_at", { mode: "string", fsp: 3 }),
   },
   (t) => ({
     statusIdx: index("posts_status_idx").on(t.status),

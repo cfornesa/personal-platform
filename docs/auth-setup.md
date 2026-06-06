@@ -29,6 +29,7 @@ GITHUB_ID=your_github_oauth_app_client_id
 GITHUB_SECRET=your_github_oauth_app_client_secret
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+OWNER_EMAILS=owner@example.com
 DB_HOST=your_database_host
 DB_PORT=3306
 DB_NAME=your_database_name
@@ -54,6 +55,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 > Do not set `AUTH_URL`. Auth.js derives the origin from the incoming request host and derives `/api/auth` from the Express mount point, keeping local and deployed origins aligned automatically.
 
+`OWNER_EMAILS` is the first-owner allowlist for fresh databases. When no owner exists yet, the first successful sign-in whose email matches `OWNER_EMAILS` is promoted automatically and redirected into `/admin/setup`.
+
 ## Database
 
 - MySQL connection is configured through `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`, and optionally `DB_SSL`.
@@ -61,6 +64,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 - Schema is applied automatically on startup via `ensureTables()` — no manual migration step required.
 - A single canonical MySQL database can be shared by both the deployed app and a local publishing workflow.
 - Profile photos are stored locally in MySQL-backed paths: member profile-only uploads use `profile_photo_assets`, while owner and feed-source profile photos use the reusable `media_assets` Image Library path.
+- Bundled default site assets such as the favicon are seeded into MySQL-backed `site_assets` on first boot and served from DB-backed routes after seeding.
+- The shell keeps deterministic artifacts outside the DB (`node_modules`, generated API clients, build output), but mutable site state and durable identity assets are DB-first.
 
 ## OAuth Callback URLs
 
@@ -92,30 +97,45 @@ For Blogger, also register `{ALLOWED_ORIGINS}` as an authorized JavaScript origi
 
 ## First Owner Bootstrap
 
-1. Start the server with `npm run dev`.
-2. Sign in once with the account you want to own the site.
-3. List users:
+Default path for a fresh database:
+
+1. Set `OWNER_EMAILS` to the email address or addresses allowed to claim ownership.
+2. Run:
+
+```bash
+npm install
+npm run build
+npm run dev
+```
+
+3. Sign in with an allowed email.
+4. If no owner exists yet, the app promotes that account automatically.
+5. The owner is redirected to `/admin/setup` to complete:
+   - owner display name
+   - owner username
+   - site title
+   - hero heading
+   - hero subheading
+   - about body
+6. After those fields are saved, choose **Complete setup and go live** to lift the public setup gate.
+
+Existing populated sites bypass the gate automatically when the database already contains a real owner and real site content/settings.
+If you are replacing an older sibling repo, copy the full shell so the root lifecycle scripts and generated-contract workflow move together with `artifacts/` and `lib/`.
+
+Legacy recovery tools still exist if you ever need to repair a damaged bootstrap state manually:
 
 ```bash
 npm run list-users --workspace=@workspace/scripts
-```
-
-4. Promote your account:
-
-```bash
 npm run promote-owner --workspace=@workspace/scripts -- --email you@example.com
-```
-
-You can also promote by user ID:
-
-```bash
-npm run promote-owner --workspace=@workspace/scripts -- --id your-user-id
 ```
 
 ## Expected Behavior After Setup
 
+- A copied shell pointed at an existing populated database should render that existing site immediately.
+- A copied shell pointed at an empty database should show the setup gate publicly until an allowed owner completes `/admin/setup`.
+- Replacing the full shell in an older sibling repo should preserve the working site as long as the sibling repo keeps its own database and environment variables.
 - Signed-in members can comment, edit their own comments, manage their profile, and upload a profile-only photo.
-- The promoted owner can create, edit, and delete posts; manage categories, platforms, feeds, Image Library-backed profile photos, and feed-source profile photos; and access all `/admin/*` routes.
+- The auto-claimed or existing owner can create, edit, and delete posts; manage categories, platforms, feeds, Image Library-backed profile photos, and feed-source profile photos; and access all `/admin/*` routes.
 - The owner's post composer uses the rich editor with sanitized HTML storage, compact WYSIWYG controls, heading levels `H1`–`H6`, local image uploads, direct featured-image uploads, YouTube URL insertion, and owner-trusted `https:` iframe embeds.
 - The first uploaded content image becomes the featured image automatically unless the owner has manually selected a featured image; oversized uploads return a clear 413 error instead of a generic server failure.
 - Platform connections configured in `/admin/platforms` appear in the post composer's syndication target selector.

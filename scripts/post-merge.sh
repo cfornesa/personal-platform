@@ -1,21 +1,23 @@
 #!/bin/bash
 set -e
 
-# Install workspace dependencies. `npm ci` occasionally fails with ENOTEMPTY
-# when post-merge sees a partial node_modules left over from prior state, so
-# fall back to `npm install` (which reconciles in place) on that error.
-if ! npm ci --no-audit --no-fund --prefer-offline; then
-  echo "npm ci failed (likely ENOTEMPTY on stale node_modules); falling back to npm install"
-  npm install --no-audit --no-fund --prefer-offline
-fi
+# Install workspace dependencies after a task merge.
+npm ci
 
-# Reconcile the live MySQL schema with Drizzle. `--force` is required because
-# stdin is closed during post-merge runs. We don't fail the whole post-merge
-# on push errors because (a) drizzle-kit's introspection has been observed
-# to flake intermittently against the shared remote MySQL while running
-# alongside live workflows, and (b) the API server runs `ensureTables()` at
-# boot which adds any missing tables/columns required by the app.
-if ! npm run push-force --workspace=@workspace/db; then
-  echo "WARNING: drizzle-kit push-force exited non-zero. Schema sync will be"
-  echo "         retried by ensureTables() when the API server boots."
-fi
+# Schema sync intentionally NOT run here.
+#
+# The API server applies schema migrations at startup via
+# ensureTables() + ensureColumn() in artifacts/api-server/src/lib/db,
+# which is the single source of truth for schema reconciliation in this
+# project. The API server restarts immediately after every task merge,
+# so any schema change ships at that moment.
+#
+# `drizzle-kit push` was previously invoked here as a safety net but
+# repeatedly hung on the shared Hostinger MySQL host's schema-pull step
+# (it introspects every table on the database, including neighboring
+# tenants), causing post-merge timeouts that blocked merges without
+# catching anything the runtime path doesn't already handle.
+#
+# If you need an explicit one-shot push (e.g. before a deploy that
+# bypasses the API server startup path), run:
+#   npm run push-force --workspace=@workspace/db

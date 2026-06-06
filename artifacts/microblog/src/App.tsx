@@ -29,7 +29,9 @@ import AdminPageEditor from "@/pages/admin/admin-page-editor";
 import AdminAiPage from "@/pages/admin/admin-ai";
 import AdminPiecesPage from "@/pages/admin/admin-pieces";
 import AdminLibraryPage from "@/pages/admin/admin-library";
+import AdminRecycleBinPage from "@/pages/admin/admin-recycle-bin";
 import AdminPlatformsPage from "@/pages/admin/admin-platforms";
+import AdminSetupPage from "@/pages/admin/admin-setup";
 import AdminPostsPage from "@/pages/admin-posts";
 import SearchPage from "@/pages/search";
 import CategoryDetailPage from "@/pages/category-detail";
@@ -91,6 +93,7 @@ function AppShell() {
             <Route path="/" component={Home} />
             <Route path="/settings" component={SettingsPage} />
             <Route path="/admin" component={AdminRedirect} />
+            <Route path="/admin/setup" component={AdminSetupPage} />
             <Route path="/admin/site" component={AdminIndexPage} />
             <Route path="/admin/posts" component={AdminPostsPage} />
             <Route path="/admin/ai" component={AdminAiPage} />
@@ -104,6 +107,7 @@ function AppShell() {
             <Route path="/admin/pages/new" component={AdminPageEditor} />
             <Route path="/admin/pages/:id" component={AdminPageEditor} />
             <Route path="/admin/pages/:id/edit" component={AdminPageEditor} />
+            <Route path="/admin/recycle-bin" component={AdminRecycleBinPage} />
             <Route path="/admin/feeds" component={AdminFeedsPage} />
             <Route path="/admin/pending" component={AdminPendingPage} />
             <Route path="/search" component={SearchPage} />

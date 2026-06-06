@@ -73,6 +73,9 @@ function defaultHtmlForEngine(engine: ArtPieceEngine) {
   if (engine === "three") {
     return '<div id="container"></div>';
   }
+  if (engine === "svg") {
+    return '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>';
+  }
   return '<div id="canvas-container"></div>';
 }
 
@@ -85,7 +88,11 @@ export function buildArtPieceSrcDoc(
 ): string {
   const safeCss = cssCode || "";
   const fallbackHtml = defaultHtmlForEngine(engine);
-  const safeHtml = sanitizeArtPieceHtml(htmlCode, fallbackHtml);
+  // SVG bypasses the DIV/CANVAS-only sanitizer — SVG markup must be preserved as-is.
+  // The iframe sandbox handles security; this preview is admin-only.
+  const safeHtml = engine === "svg"
+    ? (htmlCode?.trim() ? htmlCode : fallbackHtml)
+    : sanitizeArtPieceHtml(htmlCode, fallbackHtml);
   const safeCode = JSON.stringify(code);
   const diagnosticsEnabled = options.diagnostics === true;
 
@@ -629,7 +636,38 @@ export function buildArtPieceSrcDoc(
         window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
       }
     `
-        : `
+        : engine === "svg"
+          ? `
+      try {
+        const codeContent = ${safeCode};
+        let sketchFactory;
+        try {
+          sketchFactory = new Function('return (' + codeContent + ')')();
+        } catch(e) {
+          new Function(codeContent)();
+          sketchFactory = window.sketch;
+        }
+        // Provide svgRoot + intercept common container IDs so AI-generated code using Three.js/P5 patterns doesn't crash
+        const _svgEl = document.querySelector('svg');
+        if (_svgEl) {
+          window.svgRoot = _svgEl;
+          const _origGetById = document.getElementById.bind(document);
+          document.getElementById = function(id) {
+            if (!_origGetById(id) && (id === 'container' || id === 'canvas-container' || id === 'sketch-container')) {
+              return _svgEl;
+            }
+            return _origGetById(id);
+          };
+        }
+        if (typeof sketchFactory === 'function') {
+          sketchFactory();
+        }
+        window.parent.postMessage({ type: 'sketch-status', valid: true }, '*');
+      } catch(err) {
+        window.dispatchEvent(new ErrorEvent('error', { message: err.message }));
+      }
+    `
+          : `
       try {
         const codeContent = ${safeCode};
         let sketchFactory;
@@ -675,7 +713,7 @@ export function buildArtPieceSrcDoc(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     ${safeCss}
-    html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; }
+    html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; ${engine === "svg" ? "background: #0a0a14 !important;" : ""} }
     #container, #canvas-container, #sketch-container { width: 100% !important; height: 100% !important; min-width: 100% !important; min-height: 100% !important; }
     canvas[data-art-piece-managed-canvas="true"], body > canvas:first-of-type { display: block !important; visibility: visible !important; opacity: 1 !important; width: 100% !important; height: 100% !important; position: static !important; inset: auto !important; z-index: auto !important; pointer-events: auto !important; }
   </style>

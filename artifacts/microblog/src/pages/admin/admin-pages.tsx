@@ -179,10 +179,10 @@ export default function AdminPagesPage() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete &ldquo;{p.title}&rdquo;?</AlertDialogTitle>
+                        <AlertDialogTitle>Move &ldquo;{p.title}&rdquo; to the Recycle Bin?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This deletes the page and removes it from the navbar.
-                          Existing /p/{p.slug} links will 404.
+                          The page will be hidden from the navbar and /p/{p.slug} will 404 until restored.
+                          You can recover it or permanently delete it from the Recycle Bin.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -191,7 +191,7 @@ export default function AdminPagesPage() {
                           onClick={() => remove.mutate({ id: p.id })}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          Delete
+                          Move to Recycle Bin
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

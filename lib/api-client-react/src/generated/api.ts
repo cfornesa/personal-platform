@@ -24,6 +24,8 @@ import type {
   ApprovePostResponse,
   ArtPiece,
   ArtPieceDetail,
+  BootstrapStatus,
+  BulkPermanentDeleteBody,
   CategoriesList,
   Category,
   CategoryWithPostCount,
@@ -87,6 +89,7 @@ import type {
   ProcessAiTextBody,
   ProcessAiTextResponse,
   PublicFeedSourcesList,
+  RecycleBinResponse,
   RefreshAllFeedSourcesParams,
   SearchPostsPage,
   SearchPostsParams,
@@ -1649,7 +1652,7 @@ export const useProcessAiText = <TError = ErrorType<void>,
     }
 
 /**
- * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor profile
  */
 export const getDescribeImageUrl = () => {
 
@@ -1706,7 +1709,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DescribeImageMutationError = ErrorType<void | DescribeImage422>
 
     /**
- * @summary Generate alt text for an image URL using the owner-selected AI vendor
+ * @summary Generate alt text for an image URL using the owner-selected AI vendor profile
  */
 export const useDescribeImage = <TError = ErrorType<void | DescribeImage422>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof describeImage>>, TError,{data: BodyType<DescribeImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2762,6 +2765,153 @@ export const useUpdateSiteSettings = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateSiteSettingsMutationOptions(options));
+    }
+
+/**
+ * @summary Get CMS shell bootstrap status
+ */
+export const getGetBootstrapStatusUrl = () => {
+
+
+
+
+  return `/api/bootstrap-status`
+}
+
+export const getBootstrapStatus = async ( options?: RequestInit): Promise<BootstrapStatus> => {
+
+  return customFetch<BootstrapStatus>(getGetBootstrapStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBootstrapStatusQueryKey = () => {
+    return [
+    `/api/bootstrap-status`
+    ] as const;
+    }
+
+
+export const getGetBootstrapStatusQueryOptions = <TData = Awaited<ReturnType<typeof getBootstrapStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBootstrapStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBootstrapStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBootstrapStatus>>> = ({ signal }) => getBootstrapStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBootstrapStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBootstrapStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getBootstrapStatus>>>
+export type GetBootstrapStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get CMS shell bootstrap status
+ */
+
+export function useGetBootstrapStatus<TData = Awaited<ReturnType<typeof getBootstrapStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBootstrapStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBootstrapStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+/**
+ * @summary Mark first-run CMS shell setup complete (owner only)
+ */
+export const getCompleteBootstrapSetupUrl = () => {
+
+
+
+
+  return `/api/bootstrap/complete`
+}
+
+export const completeBootstrapSetup = async ( options?: RequestInit): Promise<BootstrapStatus> => {
+
+  return customFetch<BootstrapStatus>(getCompleteBootstrapSetupUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCompleteBootstrapSetupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBootstrapSetup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeBootstrapSetup>>, TError,void, TContext> => {
+
+const mutationKey = ['completeBootstrapSetup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeBootstrapSetup>>, void> = () => {
+
+
+          return  completeBootstrapSetup(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteBootstrapSetupMutationResult = NonNullable<Awaited<ReturnType<typeof completeBootstrapSetup>>>
+
+    export type CompleteBootstrapSetupMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark first-run CMS shell setup complete (owner only)
+ */
+export const useCompleteBootstrapSetup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBootstrapSetup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeBootstrapSetup>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCompleteBootstrapSetupMutationOptions(options));
     }
 
 /**
@@ -6291,5 +6441,993 @@ export const useSetMediaExhibits = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSetMediaExhibitsMutationOptions(options));
+    }
+
+/**
+ * @summary List all soft-deleted posts, art pieces, and images
+ */
+export const getGetRecycleBinUrl = () => {
+
+
+
+
+  return `/api/recycle-bin`
+}
+
+export const getRecycleBin = async ( options?: RequestInit): Promise<RecycleBinResponse> => {
+
+  return customFetch<RecycleBinResponse>(getGetRecycleBinUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecycleBinQueryKey = () => {
+    return [
+    `/api/recycle-bin`
+    ] as const;
+    }
+
+
+export const getGetRecycleBinQueryOptions = <TData = Awaited<ReturnType<typeof getRecycleBin>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecycleBin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecycleBinQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecycleBin>>> = ({ signal }) => getRecycleBin({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecycleBin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRecycleBinQueryResult = NonNullable<Awaited<ReturnType<typeof getRecycleBin>>>
+export type GetRecycleBinQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all soft-deleted posts, art pieces, and images
+ */
+
+export function useGetRecycleBin<TData = Awaited<ReturnType<typeof getRecycleBin>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecycleBin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRecycleBinQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+/**
+ * @summary Permanently delete a selection of trashed items
+ */
+export const getBulkPermanentDeleteUrl = () => {
+
+
+
+
+  return `/api/recycle-bin`
+}
+
+export const bulkPermanentDelete = async (bulkPermanentDeleteBody: BulkPermanentDeleteBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getBulkPermanentDeleteUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bulkPermanentDeleteBody,)
+  }
+);}
+
+
+
+
+export const getBulkPermanentDeleteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkPermanentDelete>>, TError,{data: BodyType<BulkPermanentDeleteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkPermanentDelete>>, TError,{data: BodyType<BulkPermanentDeleteBody>}, TContext> => {
+
+const mutationKey = ['bulkPermanentDelete'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkPermanentDelete>>, {data: BodyType<BulkPermanentDeleteBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkPermanentDelete(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkPermanentDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof bulkPermanentDelete>>>
+    export type BulkPermanentDeleteMutationBody = BodyType<BulkPermanentDeleteBody>
+    export type BulkPermanentDeleteMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a selection of trashed items
+ */
+export const useBulkPermanentDelete = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkPermanentDelete>>, TError,{data: BodyType<BulkPermanentDeleteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkPermanentDelete>>,
+        TError,
+        {data: BodyType<BulkPermanentDeleteBody>},
+        TContext
+      > => {
+      return useMutation(getBulkPermanentDeleteMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed post back to its original status
+ */
+export const getRestoreTrashedPostUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/posts/${id}/restore`
+}
+
+export const restoreTrashedPost = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedPostUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedPostMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPost>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPost>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedPost>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedPost(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedPostMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedPost>>>
+
+    export type RestoreTrashedPostMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed post back to its original status
+ */
+export const useRestoreTrashedPost = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPost>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedPost>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedPostMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed art piece back to active status
+ */
+export const getRestoreTrashedPieceUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/pieces/${id}/restore`
+}
+
+export const restoreTrashedPiece = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedPieceUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedPieceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPiece>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPiece>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedPiece'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedPiece>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedPiece(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedPieceMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedPiece>>>
+
+    export type RestoreTrashedPieceMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed art piece back to active status
+ */
+export const useRestoreTrashedPiece = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPiece>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedPiece>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedPieceMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed image back to the Image Library
+ */
+export const getRestoreTrashedMediaUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/media/${id}/restore`
+}
+
+export const restoreTrashedMedia = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedMediaUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedMedia>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedMedia>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedMedia'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedMedia>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedMedia(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedMediaMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedMedia>>>
+
+    export type RestoreTrashedMediaMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed image back to the Image Library
+ */
+export const useRestoreTrashedMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedMedia>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedMedia>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedMediaMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed post
+ */
+export const getPermanentDeleteTrashedPostUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/posts/${id}`
+}
+
+export const permanentDeleteTrashedPost = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedPostUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedPostMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPost>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPost>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedPost>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedPost(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedPostMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedPost>>>
+
+    export type PermanentDeleteTrashedPostMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed post
+ */
+export const usePermanentDeleteTrashedPost = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPost>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedPost>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedPostMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed art piece
+ */
+export const getPermanentDeleteTrashedPieceUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/pieces/${id}`
+}
+
+export const permanentDeleteTrashedPiece = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedPieceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedPieceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedPiece'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedPiece(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedPieceMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>>
+
+    export type PermanentDeleteTrashedPieceMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed art piece
+ */
+export const usePermanentDeleteTrashedPiece = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedPiece>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedPieceMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed image
+ */
+export const getPermanentDeleteTrashedMediaUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/media/${id}`
+}
+
+export const permanentDeleteTrashedMedia = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedMediaUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedMedia'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedMedia(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedMediaMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>>
+
+    export type PermanentDeleteTrashedMediaMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed image
+ */
+export const usePermanentDeleteTrashedMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedMedia>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedMediaMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed exhibit
+ */
+export const getRestoreTrashedExhibitUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/exhibits/${id}/restore`
+}
+
+export const restoreTrashedExhibit = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedExhibitUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedExhibitMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedExhibit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedExhibit>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedExhibit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedExhibit>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedExhibit(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedExhibitMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedExhibit>>>
+
+    export type RestoreTrashedExhibitMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed exhibit
+ */
+export const useRestoreTrashedExhibit = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedExhibit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedExhibit>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedExhibitMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed exhibit
+ */
+export const getPermanentDeleteTrashedExhibitUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/exhibits/${id}`
+}
+
+export const permanentDeleteTrashedExhibit = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedExhibitUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedExhibitMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedExhibit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedExhibit(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedExhibitMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>>
+
+    export type PermanentDeleteTrashedExhibitMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed exhibit
+ */
+export const usePermanentDeleteTrashedExhibit = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedExhibit>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedExhibitMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed page and re-show its nav link if applicable
+ */
+export const getRestoreTrashedPageUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/pages/${id}/restore`
+}
+
+export const restoreTrashedPage = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedPageUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedPageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPage>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedPage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedPage>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedPage(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedPageMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedPage>>>
+
+    export type RestoreTrashedPageMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed page and re-show its nav link if applicable
+ */
+export const useRestoreTrashedPage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedPage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedPage>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedPageMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed page
+ */
+export const getPermanentDeleteTrashedPageUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/pages/${id}`
+}
+
+export const permanentDeleteTrashedPage = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedPageUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedPageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPage>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedPage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedPage>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedPage(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedPageMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedPage>>>
+
+    export type PermanentDeleteTrashedPageMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed page
+ */
+export const usePermanentDeleteTrashedPage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedPage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedPage>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedPageMutationOptions(options));
+    }
+
+/**
+ * @summary Restore a trashed category (restores post assignments intact)
+ */
+export const getRestoreTrashedCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/categories/${id}/restore`
+}
+
+export const restoreTrashedCategory = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRestoreTrashedCategoryUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreTrashedCategoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedCategory>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['restoreTrashedCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreTrashedCategory>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreTrashedCategory(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreTrashedCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTrashedCategory>>>
+
+    export type RestoreTrashedCategoryMutationError = ErrorType<void>
+
+    /**
+ * @summary Restore a trashed category (restores post assignments intact)
+ */
+export const useRestoreTrashedCategory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTrashedCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreTrashedCategory>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRestoreTrashedCategoryMutationOptions(options));
+    }
+
+/**
+ * @summary Permanently delete a single trashed category
+ */
+export const getPermanentDeleteTrashedCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/recycle-bin/categories/${id}`
+}
+
+export const permanentDeleteTrashedCategory = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentDeleteTrashedCategoryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentDeleteTrashedCategoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentDeleteTrashedCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentDeleteTrashedCategory(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentDeleteTrashedCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>>
+
+    export type PermanentDeleteTrashedCategoryMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete a single trashed category
+ */
+export const usePermanentDeleteTrashedCategory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentDeleteTrashedCategory>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentDeleteTrashedCategoryMutationOptions(options));
     }
 

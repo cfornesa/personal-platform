@@ -20,6 +20,7 @@ export const mediaAssetsTable = mysqlTable(
       .default(sql`CURRENT_TIMESTAMP(3)`),
     altText: varchar("alt_text", { length: 500 }),
     fileData: mediumBlob("file_data"),
+    deletedAt: datetime("deleted_at", { mode: "string", fsp: 3 }),
   },
   (t) => ({
     uploadedAtIdx: index("media_assets_uploaded_at_idx").on(t.uploadedAt),

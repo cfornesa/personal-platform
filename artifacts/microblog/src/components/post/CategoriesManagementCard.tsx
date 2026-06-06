@@ -251,13 +251,13 @@ function CategoryRow({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Delete &ldquo;{category.name}&rdquo;?
+                Move &ldquo;{category.name}&rdquo; to the Recycle Bin?
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {category.postCount === 0
                   ? "No posts use this category."
-                  : `${category.postCount} ${category.postCount === 1 ? "post" : "posts"} will lose this tag — the posts themselves stay published.`}
-                {" "}This action cannot be undone.
+                  : `${category.postCount} ${category.postCount === 1 ? "post" : "posts"} tagged with this — the tag is restored on recovery.`}
+                {" "}You can restore it or permanently delete it from the Recycle Bin.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -266,7 +266,7 @@ function CategoryRow({
                 onClick={() => remove.mutate({ id: category.id })}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete
+                Move to Recycle Bin
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

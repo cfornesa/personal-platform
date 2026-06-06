@@ -17,6 +17,7 @@ import {
   loadPublishedPageBySlug,
   buildPageAtom,
   buildPageJsonFeed,
+  loadFeedSiteMetadata,
 } from "./feeds";
 
 const router: IRouter = Router();
@@ -62,8 +63,9 @@ router.get("/feeds/atom", async (req: Request, res: Response) => {
   try {
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    res.send(buildAtom(origin, siteScope(), posts));
+    res.send(buildAtom(origin, siteScope(metadata), posts, metadata));
   } catch {
     res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -73,8 +75,9 @@ router.get("/feeds/json", async (req: Request, res: Response) => {
   try {
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    res.json(buildJsonFeed(origin, siteScope(), posts));
+    res.json(buildJsonFeed(origin, siteScope(metadata), posts, metadata));
   } catch {
     res.status(500).json({ error: "Failed to generate JSON feed" });
   }
@@ -84,8 +87,9 @@ router.get("/feeds/mf2", async (req: Request, res: Response) => {
   try {
     const origin = getOrigin(req);
     const posts = await loadPosts();
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/json; charset=utf-8");
-    res.json(buildMf2Export(origin, posts));
+    res.json(buildMf2Export(origin, posts, metadata));
   } catch {
     res.status(500).json({ error: "Failed to generate export" });
   }
@@ -97,8 +101,9 @@ router.get("/categories/:slug/feeds/atom", async (req: Request, res: Response) =
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildAtom(origin, categoryScope(cat), posts));
+    return res.send(buildAtom(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -110,8 +115,9 @@ router.get("/categories/:slug/feeds/json", async (req: Request, res: Response) =
     if (!cat) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     const posts = await loadPosts({ categoryId: cat.id });
+    const metadata = await loadFeedSiteMetadata(posts);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildJsonFeed(origin, categoryScope(cat), posts));
+    return res.json(buildJsonFeed(origin, categoryScope(cat, metadata), posts, metadata));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }
@@ -123,7 +129,7 @@ router.get("/p/:slug/feeds/atom", async (req: Request, res: Response) => {
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     res.type("application/atom+xml; charset=utf-8");
-    return res.send(buildPageAtom(origin, page));
+    return res.send(buildPageAtom(origin, page, await loadFeedSiteMetadata([])));
   } catch {
     return res.status(500).json({ error: "Failed to generate Atom feed" });
   }
@@ -135,7 +141,7 @@ router.get("/p/:slug/feeds/json", async (req: Request, res: Response) => {
     if (!page) return res.status(404).json({ error: "Not found" });
     const origin = getOrigin(req);
     res.type("application/feed+json; charset=utf-8");
-    return res.json(buildPageJsonFeed(origin, page));
+    return res.json(buildPageJsonFeed(origin, page, await loadFeedSiteMetadata([])));
   } catch {
     return res.status(500).json({ error: "Failed to generate JSON feed" });
   }

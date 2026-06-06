@@ -81,7 +81,36 @@ export default function Home() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const [scrollToId] = useState<string | null>(() => {
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("scrollTo") ||
+      (window.location.hash.startsWith("#post-") ? window.location.hash.slice(1) : null);
+  });
+
   const allLoadedPosts = data?.pages.flatMap((p) => p.posts) ?? [];
+
+  const targetPostId = scrollToId?.startsWith("post-")
+    ? parseInt(scrollToId.replace("post-", ""), 10)
+    : NaN;
+  const isTargetLoaded = !isNaN(targetPostId) && allLoadedPosts.some((p) => p.id === targetPostId);
+
+  useEffect(() => {
+    if (!scrollToId?.startsWith("post-") || isTargetLoaded || isLoading || !hasNextPage || isFetchingNextPage) return;
+    fetchNextPage();
+  }, [scrollToId, isTargetLoaded, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const hasScrolledRef = useRef(false);
+  useEffect(() => {
+    if (!scrollToId?.startsWith("post-") || !isTargetLoaded || hasScrolledRef.current) return;
+    const el = document.getElementById(scrollToId);
+    if (!el) return;
+    hasScrolledRef.current = true;
+    const scrollToEl = () => document.getElementById(scrollToId)?.scrollIntoView({ block: "start" });
+    scrollToEl();
+    const t1 = setTimeout(scrollToEl, 80);
+    const t2 = setTimeout(scrollToEl, 200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [scrollToId, isTargetLoaded]);
 
   const visiblePosts = useMemo(() => {
     const basePosts = [...allLoadedPosts];

@@ -179,7 +179,6 @@ export function PostEditor({
   if (isEditMode && !initialPost) return null;
 
   const minScheduleDate = addMinutes(new Date(), 30);
-  const isRssPost = isEditMode && !!initialPost!.sourceFeedId;
 
   type SubmitPayload = {
     title: string;
@@ -426,12 +425,7 @@ export function PostEditor({
           </div>
         </div>
 
-        {isRssPost ? (
-          <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            This is an imported RSS post and cannot be edited here.
-          </div>
-        ) : (
-          <div className="space-y-3">
+        <div className="space-y-3">
             {modeToggle}
             {schedulePicker}
             {richEditor}
@@ -465,7 +459,6 @@ export function PostEditor({
               )}
             </div>
           </div>
-        )}
       </div>
     );
   }

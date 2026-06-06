@@ -12,7 +12,7 @@ import {
   storeUploadedImage,
 } from "../lib/media";
 import { loadExhibitMembershipMap } from "../lib/exhibit-memberships";
-import { db, mediaAssetsTable, desc, eq } from "@workspace/db";
+import { db, mediaAssetsTable, desc, eq, and, isNull, sql } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -143,6 +143,7 @@ router.get(
         altText: mediaAssetsTable.altText,
       })
       .from(mediaAssetsTable)
+      .where(isNull(mediaAssetsTable.deletedAt))
       .orderBy(desc(mediaAssetsTable.uploadedAt));
     const assets = await attachMediaExhibitIds(rows);
     return res.json(assets);
@@ -227,14 +228,14 @@ router.delete(
     const [asset] = await db
       .select({ id: mediaAssetsTable.id })
       .from(mediaAssetsTable)
-      .where(eq(mediaAssetsTable.filename, fileName))
+      .where(and(eq(mediaAssetsTable.filename, fileName), isNull(mediaAssetsTable.deletedAt)))
       .limit(1);
 
     if (!asset) {
       return res.status(404).json({ error: "Media not found" });
     }
 
-    await db.delete(mediaAssetsTable).where(eq(mediaAssetsTable.url, url));
+    await db.update(mediaAssetsTable).set({ deletedAt: sql`CURRENT_TIMESTAMP(3)` }).where(eq(mediaAssetsTable.url, url));
 
     return res.status(204).end();
   },

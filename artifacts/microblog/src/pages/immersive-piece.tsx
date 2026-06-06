@@ -46,6 +46,15 @@ function useReturnToPrevious() {
   const [, setLocation] = useLocation();
   return () => {
     const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    if (returnTo && returnTo.startsWith("/")) {
+      if (returnTo.includes("#")) {
+        window.location.href = returnTo;
+      } else {
+        setLocation(returnTo);
+      }
+      return;
+    }
     const postId = params.get("post");
     if (postId && !isNaN(Number(postId))) {
       setLocation(`/posts/${postId}`);
@@ -60,7 +69,7 @@ function useReturnToPrevious() {
 }
 
 type PieceStageProps = {
-  engine: "p5" | "c2" | "three";
+  engine: "p5" | "c2" | "three" | "svg";
   code: string;
   htmlCode?: string | null;
   cssCode?: string | null;
@@ -110,8 +119,13 @@ function ImmersiveGalleryPieceStage({
     const host = createImmersiveHost(
       htmlCode,
       cssCode,
-      engine === "p5" ? '<div id="canvas-container"></div>' : '<canvas id="piece-canvas"></canvas>',
+      engine === "p5"
+        ? '<div id="canvas-container"></div>'
+        : engine === "svg"
+          ? '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>'
+          : '<canvas id="piece-canvas"></canvas>',
       runtimeSize,
+      engine,
     );
 
     let sourceCanvas: HTMLCanvasElement | null = null;
@@ -200,6 +214,147 @@ function ImmersiveGalleryPieceStage({
             host;
           p5Instance = new P5(sketchFactory, mount);
           pollForCanvas(mount, "This p5 piece did not produce a canvas for immersive mode.");
+          return;
+        }
+
+        if (engine === "svg") {
+          // Shadow DOM scopes piece CSS — prevents svg{}/body{} rules leaking to page UI.
+          // Running in parent context means rAF and @keyframes are never throttled by Chrome.
+          const shadowHost = document.createElement("div");
+          shadowHost.style.cssText = `position:fixed;left:-10000px;top:0;width:${runtimeSize.width}px;height:${runtimeSize.height}px;pointer-events:none;`;
+          const shadowRoot = shadowHost.attachShadow({ mode: "open" });
+          if (cssCode) {
+            const styleEl = document.createElement("style");
+            styleEl.textContent = cssCode;
+            shadowRoot.appendChild(styleEl);
+          }
+          const svgContainer = document.createElement("div");
+          svgContainer.style.cssText = "width:100%;height:100%;";
+          svgContainer.innerHTML = htmlCode?.trim()
+            ? htmlCode
+            : '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>';
+          shadowRoot.appendChild(svgContainer);
+          document.body.appendChild(shadowHost);
+
+          const svgEl = shadowRoot.querySelector("svg");
+          if (!svgEl) {
+            onError("This SVG piece has no <svg> element for gallery display.");
+            shadowHost.remove();
+            return;
+          }
+
+          const vb = svgEl.viewBox?.baseVal;
+          const svgNatW = (vb && vb.width > 0) ? vb.width : runtimeSize.width;
+          const svgNatH = (vb && vb.height > 0) ? vb.height : runtimeSize.height;
+          const svgAspect = svgNatW / Math.max(svgNatH, 1);
+          let canvasW = runtimeSize.width;
+          let canvasH = Math.round(canvasW / svgAspect);
+          if (canvasH < runtimeSize.height) {
+            canvasH = runtimeSize.height;
+            canvasW = Math.round(canvasH * svgAspect);
+          }
+          const svgCanvas = document.createElement("canvas");
+          svgCanvas.width = canvasW;
+          svgCanvas.height = canvasH;
+          syncCanvas(svgCanvas);
+
+          // Expose the shadow DOM SVG so window.sketch() can find it
+          (window as any).svgRoot = svgEl;
+
+          // Shim document queries so sketch code using common container IDs or
+          // document.querySelector('svg') can find the shadow DOM SVG.
+          // Mirrors the shim in piece-embed-html.ts and art-piece-runtime.ts SVG engineInit.
+          const _origGetById = document.getElementById.bind(document);
+          document.getElementById = function(id: string) {
+            const found = _origGetById(id);
+            if (!found && (id === "container" || id === "canvas-container" || id === "sketch-container")) {
+              return (window as any).svgRoot ?? null;
+            }
+            return found;
+          } as typeof document.getElementById;
+          const _origQuerySelector = document.querySelector.bind(document);
+          document.querySelector = function<E extends Element = Element>(sel: string): E | null {
+            const found = _origQuerySelector<E>(sel);
+            if (!found && sel === "svg") return ((window as any).svgRoot ?? null) as E | null;
+            return found;
+          } as typeof document.querySelector;
+
+          const sketchFactory = resolveSketchFactory(code);
+          if (typeof sketchFactory === "function") {
+            try { sketchFactory(); } catch { /* ignore */ }
+          }
+
+          let drawPending = false;
+          async function drawSvgSnapshot() {
+            if (drawPending || disposed) return;
+            drawPending = true;
+            try {
+              const svgClone = svgEl!.cloneNode(true) as SVGSVGElement;
+              // Sample current animated state — getComputedStyle sees shadow DOM CSS animations
+              const liveEls = Array.from(svgEl!.querySelectorAll("*"));
+              const cloneEls = Array.from(svgClone.querySelectorAll("*"));
+              const propertiesToSync = [
+                "transform", "transform-origin", "opacity", "fill", "stroke",
+                "stroke-width", "stroke-dasharray", "stroke-dashoffset",
+                "fill-opacity", "stroke-opacity",
+                "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height",
+                "d",
+                "stop-color", "stop-opacity", "offset",
+                "filter", "clip-path", "mask", "display", "visibility"
+              ];
+              liveEls.forEach((liveEl, i) => {
+                const cloneEl = cloneEls[i] as SVGElement | undefined;
+                if (!cloneEl) return;
+                const s = window.getComputedStyle(liveEl);
+                propertiesToSync.forEach((prop) => {
+                  const val = s.getPropertyValue(prop);
+                  if (val !== undefined && val !== null && val !== "") {
+                    // Skip copying default/unaltered values to keep styles lightweight
+                    if (prop === "transform" && (val === "none" || val === "matrix(1, 0, 0, 1, 0, 0)")) return;
+                    if (prop === "opacity" && val === "1") return;
+                    if (prop === "fill" && (val === "none" || val === "rgb(0, 0, 0)")) return;
+                    if (prop === "stroke" && val === "none") return;
+                    cloneEl.style.setProperty(prop, val);
+                  }
+                });
+              });
+              {
+                const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                // Disable CSS animations/transitions in the snapshot so @keyframes don't restart
+                // from t=0 and override the getComputedStyle inline styles we just applied above.
+                styleEl.textContent = (cssCode || "") + "\n* { animation: none !important; transition: none !important; }";
+                svgClone.insertBefore(styleEl, svgClone.firstChild);
+              }
+              const serialized = new XMLSerializer().serializeToString(svgClone);
+              const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(serialized);
+              await new Promise<void>((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  const ctx = svgCanvas.getContext("2d");
+                  if (ctx) {
+                    ctx.clearRect(0, 0, svgCanvas.width, svgCanvas.height);
+                    ctx.drawImage(img, 0, 0, svgCanvas.width, svgCanvas.height);
+                  }
+                  if (artTexture) artTexture.needsUpdate = true;
+                  resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = dataUrl;
+              });
+            } finally {
+              drawPending = false;
+            }
+          }
+
+          await drawSvgSnapshot();
+          const intervalId = window.setInterval(() => { drawSvgSnapshot().catch(() => {}); }, 100);
+          stopSourceLoop = () => {
+            window.clearInterval(intervalId);
+            document.getElementById = _origGetById as typeof document.getElementById;
+            document.querySelector = _origQuerySelector as typeof document.querySelector;
+            shadowHost.remove();
+            delete (window as any).svgRoot;
+          };
           return;
         }
 
@@ -938,12 +1093,9 @@ function ImmersiveThreePieceStage({
 }
 
 function formatEngineLabel(engine: EmbeddedArtPiece["version"]["engine"]) {
-  if (engine === "p5") {
-    return "P5.js";
-  }
-  if (engine === "c2") {
-    return "C2.js";
-  }
+  if (engine === "p5") return "P5.js";
+  if (engine === "c2") return "C2.js";
+  if (engine === "svg") return "SVG";
   return "Three.js";
 }
 

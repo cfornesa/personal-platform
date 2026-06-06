@@ -15,6 +15,7 @@ import {
   fitMultiFrameExhibitCamera,
   disposeObjectMaterial,
   createKeyboardNavigation,
+  EXHIBIT_FRAME_ASPECT,
 } from "@/lib/immersive-gallery";
 import {
   createImmersiveHost,
@@ -39,6 +40,11 @@ export type WallItem =
 function useReturnToPrevious() {
   return () => {
     const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    if (returnTo && returnTo.startsWith("/")) {
+      window.location.href = returnTo;
+      return;
+    }
     const postId = params.get("post");
     if (postId && !isNaN(Number(postId))) {
       window.location.href = `/posts/${postId}`;
@@ -56,6 +62,7 @@ function engineLabel(engine: string): string {
   if (engine === "p5") return "P5.js";
   if (engine === "c2") return "C2.js";
   if (engine === "three") return "Three.js";
+  if (engine === "svg") return "SVG";
   return engine;
 }
 
@@ -372,12 +379,17 @@ function ExhibitWallStage({
         }
       }
 
-      // P5 or C2
+      // P5, C2, or SVG
       const host = createImmersiveHost(
         item.htmlCode,
         item.cssCode,
-        item.engine === "p5" ? '<div id="canvas-container"></div>' : '<canvas id="piece-canvas"></canvas>',
+        item.engine === "p5"
+          ? '<div id="canvas-container"></div>'
+          : item.engine === "svg"
+            ? '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>'
+            : '<canvas id="piece-canvas"></canvas>',
         runtimeSize,
+        item.engine,
       );
 
       let sourceCanvas: HTMLCanvasElement | null = null;
@@ -440,6 +452,139 @@ function ExhibitWallStage({
             host;
           p5Instance = new P5(sketchFactory, mount);
           pollForCanvas(mount);
+        } else if (item.engine === "svg") {
+          if (disposed || slotStates[idx]?.token !== token) {
+            host.remove();
+            return null;
+          }
+
+          // Shadow DOM scopes piece CSS — no leakage; parent-context rAF never throttled
+          const shadowHost = document.createElement("div");
+          shadowHost.style.cssText = `position:fixed;left:-10000px;top:0;width:${runtimeSize.width}px;height:${runtimeSize.height}px;pointer-events:none;`;
+          const shadowRoot = shadowHost.attachShadow({ mode: "open" });
+          if (item.cssCode) {
+            const styleEl = document.createElement("style");
+            styleEl.textContent = item.cssCode;
+            shadowRoot.appendChild(styleEl);
+          }
+          const svgContainer = document.createElement("div");
+          svgContainer.style.cssText = "width:100%;height:100%;";
+          svgContainer.innerHTML = item.htmlCode?.trim()
+            ? item.htmlCode
+            : '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>';
+          shadowRoot.appendChild(svgContainer);
+          document.body.appendChild(shadowHost);
+
+          const svgEl = shadowRoot.querySelector("svg");
+          if (!svgEl) {
+            shadowHost.remove();
+            host.remove();
+            return null;
+          }
+
+          const svgCanvas = document.createElement("canvas");
+          svgCanvas.width = Math.round(runtimeSize.height * EXHIBIT_FRAME_ASPECT);
+          svgCanvas.height = runtimeSize.height;
+          syncCanvas(svgCanvas);
+
+          (window as any).svgRoot = svgEl;
+
+          const _origGetById = document.getElementById.bind(document);
+          document.getElementById = function(id: string) {
+            const found = _origGetById(id);
+            if (!found && (id === "container" || id === "canvas-container" || id === "sketch-container")) {
+              return (window as any).svgRoot ?? null;
+            }
+            return found;
+          } as typeof document.getElementById;
+          const _origQuerySelector = document.querySelector.bind(document);
+          document.querySelector = function<E extends Element = Element>(sel: string): E | null {
+            const found = _origQuerySelector<E>(sel);
+            if (!found && sel === "svg") return ((window as any).svgRoot ?? null) as E | null;
+            return found;
+          } as typeof document.querySelector;
+
+          const sketchFactory = resolveSketchFactory(item.generatedCode);
+          if (typeof sketchFactory === "function") {
+            try { sketchFactory(); } catch { /* ignore */ }
+          }
+
+          let drawPending = false;
+          async function drawSvgSnapshot() {
+            if (drawPending || disposed) return;
+            drawPending = true;
+            try {
+              const svgClone = svgEl!.cloneNode(true) as SVGSVGElement;
+              const liveEls = Array.from(svgEl!.querySelectorAll("*"));
+              const cloneEls = Array.from(svgClone.querySelectorAll("*"));
+              const propertiesToSync = [
+                "transform", "transform-origin", "opacity", "fill", "stroke",
+                "stroke-width", "stroke-dasharray", "stroke-dashoffset",
+                "fill-opacity", "stroke-opacity",
+                "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height",
+                "d",
+                "stop-color", "stop-opacity", "offset",
+                "filter", "clip-path", "mask", "display", "visibility"
+              ];
+              liveEls.forEach((liveEl, i) => {
+                const cloneEl = cloneEls[i] as SVGElement | undefined;
+                if (!cloneEl) return;
+                const s = window.getComputedStyle(liveEl);
+                propertiesToSync.forEach((prop) => {
+                  const val = s.getPropertyValue(prop);
+                  if (val !== undefined && val !== null && val !== "") {
+                    // Skip copying default/unaltered values to keep styles lightweight
+                    if (prop === "transform" && (val === "none" || val === "matrix(1, 0, 0, 1, 0, 0)")) return;
+                    if (prop === "opacity" && val === "1") return;
+                    if (prop === "fill" && (val === "none" || val === "rgb(0, 0, 0)")) return;
+                    if (prop === "stroke" && val === "none") return;
+                    cloneEl.style.setProperty(prop, val);
+                  }
+                });
+              });
+              {
+                const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                // Disable CSS animations/transitions in the snapshot so @keyframes don't restart
+                // from t=0 and override the getComputedStyle inline styles we just applied above.
+                styleEl.textContent = (item.cssCode || "") + "\n* { animation: none !important; transition: none !important; }";
+                svgClone.insertBefore(styleEl, svgClone.firstChild);
+              }
+              const serialized = new XMLSerializer().serializeToString(svgClone);
+              const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(serialized);
+              await new Promise<void>((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  const ctx = svgCanvas.getContext("2d");
+                  if (ctx) {
+                    ctx.clearRect(0, 0, svgCanvas.width, svgCanvas.height);
+                    const natW = img.naturalWidth  || svgEl!.viewBox?.baseVal?.width  || 800;
+                    const natH = img.naturalHeight || svgEl!.viewBox?.baseVal?.height || 600;
+                    const imgAspect = natW / Math.max(natH, 1);
+                    let dw = svgCanvas.width;
+                    let dh = dw / imgAspect;
+                    if (dh > svgCanvas.height) { dh = svgCanvas.height; dw = dh * imgAspect; }
+                    ctx.drawImage(img, (svgCanvas.width - dw) / 2, (svgCanvas.height - dh) / 2, dw, dh);
+                  }
+                  if (artTexture) artTexture.needsUpdate = true;
+                  resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = dataUrl;
+              });
+            } finally {
+              drawPending = false;
+            }
+          }
+
+          await drawSvgSnapshot();
+          const intervalId = window.setInterval(() => { drawSvgSnapshot().catch(() => {}); }, 100);
+          stopSourceLoop = () => {
+            window.clearInterval(intervalId);
+            document.getElementById = _origGetById as typeof document.getElementById;
+            document.querySelector = _origQuerySelector as typeof document.querySelector;
+            shadowHost.remove();
+            delete (window as any).svgRoot;
+          };
         } else {
           // c2
           const c2Module = await import("c2.js");

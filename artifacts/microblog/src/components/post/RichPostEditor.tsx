@@ -111,6 +111,8 @@ type RichPostEditorProps = {
    */
   onContentChange?: (html: string) => void;
   onUpload: (file: File) => Promise<string>;
+  /** Set to false to hide the internal title input (e.g. when the parent already renders its own title field). */
+  showTitle?: boolean;
 };
 
 function getEditorTextLength(html: string) {
@@ -185,6 +187,7 @@ export function RichPostEditor({
   onSubmit,
   onContentChange,
   onUpload,
+  showTitle = true,
 }: RichPostEditorProps) {
   const { toast } = useToast();
   const [title, setTitle] = useState(initialTitle);
@@ -276,7 +279,7 @@ export function RichPostEditor({
     editorProps: {
       attributes: {
         class:
-          "wysiwyg-editor-content min-h-[220px] rounded-b-2xl border border-t-0 border-border bg-background px-4 py-4 pb-16 text-base leading-relaxed focus:outline-none prose prose-neutral max-w-none prose-p:my-3 prose-h1:mt-7 prose-h1:mb-4 prose-h2:mt-6 prose-h2:mb-3 prose-h3:mt-5 prose-h3:mb-2 prose-h4:mt-4 prose-h4:mb-2 prose-h5:mt-4 prose-h5:mb-2 prose-h6:mt-4 prose-h6:mb-2 prose-strong:font-extrabold prose-strong:text-foreground prose-img:rounded-xl prose-img:border prose-img:border-border prose-iframe:w-full prose-iframe:rounded-xl prose-iframe:border prose-iframe:border-border",
+          "wysiwyg-editor-content min-h-[220px] rounded-b-2xl border border-t-0 border-border bg-background px-4 py-4 pb-16 text-base leading-relaxed focus:outline-none prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-h1:mt-7 prose-h1:mb-4 prose-h2:mt-6 prose-h2:mb-3 prose-h3:mt-5 prose-h3:mb-2 prose-h4:mt-4 prose-h4:mb-2 prose-h5:mt-4 prose-h5:mb-2 prose-h6:mt-4 prose-h6:mb-2 prose-strong:font-extrabold prose-strong:text-foreground prose-img:rounded-xl prose-img:border prose-img:border-border prose-iframe:w-full prose-iframe:rounded-xl prose-iframe:border prose-iframe:border-border",
       },
     },
     onUpdate({ editor: nextEditor }) {
@@ -762,13 +765,15 @@ export function RichPostEditor({
 
   return (
     <div className="space-y-3">
-      <input
-        type="text"
-        placeholder="Title (optional)"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="w-full border-b border-border bg-transparent text-lg font-semibold placeholder:text-muted-foreground/60 focus:outline-none pb-2"
-      />
+      {showTitle && (
+        <input
+          type="text"
+          placeholder="Title (optional)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full border-b border-border bg-transparent text-lg font-semibold placeholder:text-muted-foreground/60 focus:outline-none pb-2"
+        />
+      )}
       <div className="rounded-lg border border-border bg-muted/20 p-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Featured image</span>

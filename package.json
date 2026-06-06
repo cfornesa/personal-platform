@@ -6,13 +6,17 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:web:clean": "rm -rf artifacts/microblog/dist && npm run build --workspace=@workspace/microblog",
+    "contracts:generate": "npm run codegen --workspace=@workspace/api-spec",
+    "contracts:verify": "node scripts/verify-contracts.mjs",
+    "contracts:sync": "npm run contracts:generate && npm run contracts:verify",
     "dev": "node scripts/serve.mjs",
     "dev:hot": "node scripts/dev-hot.mjs",
     "dev:api": "npm run dev --workspace=@workspace/api-server",
     "dev:web": "npm run dev --workspace=@workspace/microblog",
+    "postinstall": "npm run contracts:sync",
     "serve": "node scripts/serve.mjs",
     "start": "npm run start --workspace=@workspace/api-server",
-    "typecheck:libs": "tsc --build",
+    "typecheck:libs": "npm run contracts:sync && tsc --build",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present"
   },
   "private": true,

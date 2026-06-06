@@ -488,6 +488,24 @@ const ENGINE_ADAPTERS: Record<ArtPieceEngine, EngineAdapter<any>> = {
     compile: compileThreeStructuredSpec,
     preflight: preflightThreeCode,
   },
+  svg: {
+    schema: structuredP5ArtPieceSpecSchema, // placeholder schema — SVG generation uses code blocks, not structured spec
+    systemPrompt: [
+      "You generate animated SVG art pieces for display as a self-contained iframe.",
+      "Return ONLY three Markdown code blocks: ```html, ```css, ```javascript. No prose, titles, or notes.",
+      "HTML block: one `<svg viewBox=\"0 0 800 600\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\">` as root. All shapes, paths, groups, and `<defs>` go inside it. No <style>, <script>, <html>, <head>, or <body> tags.",
+      "CRITICAL: Never leave SVG groups empty. If you create a group to hold dynamic content (e.g. `<g id=\"particles\"></g>`), you MUST populate it — either with inline children in the HTML block (for static elements) or by appending children in `window.sketch` (for dynamic/spawning elements). An empty placeholder group is a generation failure.",
+      "CSS block: MUST start with `svg { display: block; width: 100%; height: 100%; } body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }`. MUST add `@keyframes` animations on actual SVG elements (shapes, paths, groups by ID or class) using `animation: name duration easing infinite`. Targeting only `body` and `html` in CSS with no SVG element animations is not acceptable.",
+      "CRITICAL: CSS `@keyframes` must be `animation-iteration-count: infinite`. Use staggered `animation-delay` across elements for organic motion.",
+      "JavaScript block: REQUIRED for all prompts that involve particles, storms, explosions, swarms, or dynamic spawning. Implement using this exact pattern: `window.sketch = () => { const svg = window.svgRoot || document.querySelector('svg'); const group = svg.querySelector('#targetGroupId') || svg; const items = []; for (let i = 0; i < 60; i++) { const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); el.setAttribute('r', '3'); el.setAttribute('fill', '#ff8844'); group.appendChild(el); items.push({ el, x: Math.random()*800, y: Math.random()*600, vx: (Math.random()-.5)*4, vy: (Math.random()-.5)*4 }); } (function tick() { items.forEach(p => { p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > 800 || p.y < 0 || p.y > 600) { p.x = 400; p.y = 300; p.vx = (Math.random()-.5)*4; p.vy = (Math.random()-.5)*4; } p.el.setAttribute('cx', p.x); p.el.setAttribute('cy', p.y); }); requestAnimationFrame(tick); })(); };`",
+      "Only output `window.sketch = () => {};` when the piece uses ONLY CSS @keyframes and truly needs no JavaScript at all.",
+      "CRITICAL: The piece MUST have visible animation running from the first frame. A piece with no CSS @keyframes on SVG elements AND an empty window.sketch is a generation failure.",
+      "To create SVG elements in JavaScript, ALWAYS use `document.createElementNS('http://www.w3.org/2000/svg', tagName)`. Use `setAttribute` to set SVG attributes. The runtime provides `window.svgRoot` pointing to the SVG root. Do NOT use `document.createElement()`, `document.body.appendChild()`, `fetch`, `import`, or canvas APIs.",
+      "Keep the SVG art self-contained and visually intentional.",
+    ].join(" "),
+    compile: () => "window.sketch = () => {};",
+    preflight: preflightSvgCode,
+  },
 };
 
 function getEngineAdapter(engine: ArtPieceEngine) {
@@ -1071,6 +1089,21 @@ function preflightThreeCode(code: string) {
     throw new Error("Generated code did not define window.sketch or evaluate to a function");
   }
 
+  return validatedCode;
+}
+
+function preflightSvgCode(code: string) {
+  const validatedCode = validateArtPieceCode(code);
+  const mockWindow = createPreflightPermissiveMock();
+  try {
+    new Function("window", "document", validatedCode)(mockWindow, mockWindow);
+  } catch (err) {
+    // Runtime errors are expected in no-DOM context; syntax already checked by validateArtPieceCode
+  }
+  // window.sketch is optional for SVG (CSS @keyframes animations need no JS)
+  if (mockWindow.sketch !== undefined && typeof mockWindow.sketch !== "function") {
+    throw new Error("Generated SVG code defined window.sketch but it is not a function");
+  }
   return validatedCode;
 }
 

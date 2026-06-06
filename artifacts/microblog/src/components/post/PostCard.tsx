@@ -64,6 +64,7 @@ type DisplayPostWithFeaturedImageMeta = Post & {
 
 export function PostCard({ post, isDetail = false, highlightQuery }: PostCardProps) {
   const { currentUser, isOwner } = useCurrentUser();
+  const returnTo = isDetail ? `/posts/${post.id}` : `/?scrollTo=post-${post.id}`;
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -297,8 +298,8 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
       ? displayPost.authorName
       : null;
 
-  const canDelete = isOwnerAuthorPost || (isOwner && isFeedImportedPost);
-  const canEdit = isOwnerAuthorPost || (isOwner && isFeedImportedPost);
+  const canDelete = isOwner;
+  const canEdit = isOwner;
 
   const handleCommentClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -392,15 +393,15 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
                 </AlertDialogTrigger>
                 <AlertDialogContent onClick={(e: React.MouseEvent) => e.stopPropagation()} className="z-[100]">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+                    <AlertDialogTitle>Move this post to the Recycle Bin?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete your post and all its comments.
+                      This post will be moved to the Recycle Bin. You can restore it or permanently delete it from the Recycle Bin in the Admin panel.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Delete
+                      Move to Recycle Bin
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -478,7 +479,7 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
                   title:
                     (displayPost as DisplayPostWithFeaturedImageMeta).featuredImageTitle?.trim() ||
                     undefined,
-                })}
+                }, undefined, undefined, returnTo)}
                 label="Open featured image in immersive view"
                 className="mb-2"
               >
@@ -499,7 +500,8 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
               content={displayPost.content}
               contentFormat={displayPost.contentFormat}
               highlightQuery={highlightQuery}
-              postId={displayPost.id}
+              postId={isDetail ? displayPost.id : undefined}
+              returnTo={returnTo}
             />
           </>
         )}
@@ -597,8 +599,9 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
   if (!isVisible) {
     return (
       <div
+        id={`post-${post.id}`}
         ref={containerRef}
-        className="border-b border-border bg-card relative overflow-hidden block"
+        className="scroll-mt-16 border-b border-border bg-card relative overflow-hidden block"
         style={{ height: cardHeight ? `${cardHeight}px` : "140px" }}
       >
         <div className="flex gap-4 p-5 sm:p-6 animate-pulse opacity-20">
@@ -617,8 +620,9 @@ export function PostCard({ post, isDetail = false, highlightQuery }: PostCardPro
 
   return (
     <div
+      id={`post-${post.id}`}
       ref={containerRef}
-      className={`border-b border-border bg-card relative overflow-hidden block ${isEditing ? "" : "cursor-pointer"}`}
+      className={`scroll-mt-16 border-b border-border bg-card relative overflow-hidden block ${isEditing ? "" : "cursor-pointer"}`}
     >
       {!isEditing ? (
         <Link href={`/posts/${displayPost.id}`} className="absolute inset-0 z-0">

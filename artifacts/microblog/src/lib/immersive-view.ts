@@ -62,6 +62,7 @@ export function buildImmersiveImageHref(
   metadata: ImmersiveImageMetadata = {},
   origin = window.location.origin,
   postId?: number | null,
+  returnTo?: string,
 ) {
   const href = new URL(`/immersive/images/${encodeImmersiveImageRef(src, origin)}`, origin);
   if (metadata.alt?.trim()) {
@@ -73,7 +74,9 @@ export function buildImmersiveImageHref(
   if (metadata.caption?.trim()) {
     href.searchParams.set(IMAGE_QUERY_KEYS.caption, metadata.caption.trim());
   }
-  if (postId && Number.isFinite(postId) && postId > 0) {
+  if (returnTo && returnTo.startsWith("/")) {
+    href.searchParams.set("returnTo", returnTo);
+  } else if (postId && Number.isFinite(postId) && postId > 0) {
     href.searchParams.set("post", String(postId));
   }
   return `${href.pathname}${href.search}`;
@@ -92,20 +95,29 @@ export function buildImmersivePieceHref(
   versionId?: number | null,
   origin?: string,
   postId?: number | null,
+  returnTo?: string,
 ) {
   const base = origin || window.location.origin;
   const href = new URL(`/immersive/pieces/${id}`, base);
   if (versionId && Number.isFinite(versionId) && versionId > 0) {
     href.searchParams.set("version", String(versionId));
   }
-  if (postId && Number.isFinite(postId) && postId > 0) {
-    href.searchParams.set("post", String(postId));
-  }
   // Return a full absolute URL when an origin is explicitly provided
   // to ensure links are robust when the HTML is moved to other sites
   // (e.g. syndication, copy-paste, external embeds).
   if (origin) {
+    const isSameOrigin = typeof window !== "undefined" && href.origin === window.location.origin;
+    if (isSameOrigin && returnTo && returnTo.startsWith("/")) {
+      href.searchParams.set("returnTo", returnTo);
+    } else if (postId && Number.isFinite(postId) && postId > 0) {
+      href.searchParams.set("post", String(postId));
+    }
     return href.toString();
+  }
+  if (returnTo && returnTo.startsWith("/")) {
+    href.searchParams.set("returnTo", returnTo);
+  } else if (postId && Number.isFinite(postId) && postId > 0) {
+    href.searchParams.set("post", String(postId));
   }
   return `${href.pathname}${href.search}`;
 }
@@ -148,14 +160,22 @@ export function buildPlainImageEmbedHtml(
   return `<img src="${imageSrc}" alt="${safeAlt}" style="max-width:100%;height:auto;display:block;" />`;
 }
 
-export function buildImmersiveExhibitHref(slug: string, origin?: string, postId?: number | null): string {
+export function buildImmersiveExhibitHref(slug: string, origin?: string, postId?: number | null, returnTo?: string): string {
   const base = origin || window.location.origin;
   const href = new URL(`/immersive/exhibits/${slug}`, base);
-  if (postId && Number.isFinite(postId) && postId > 0) {
-    href.searchParams.set("post", String(postId));
-  }
   if (origin) {
+    const isSameOrigin = typeof window !== "undefined" && href.origin === window.location.origin;
+    if (isSameOrigin && returnTo && returnTo.startsWith("/")) {
+      href.searchParams.set("returnTo", returnTo);
+    } else if (postId && Number.isFinite(postId) && postId > 0) {
+      href.searchParams.set("post", String(postId));
+    }
     return href.toString();
+  }
+  if (returnTo && returnTo.startsWith("/")) {
+    href.searchParams.set("returnTo", returnTo);
+  } else if (postId && Number.isFinite(postId) && postId > 0) {
+    href.searchParams.set("post", String(postId));
   }
   return `${href.pathname}${href.search}`;
 }

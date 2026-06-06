@@ -348,13 +348,13 @@ function ExhibitRow({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Delete &ldquo;{exhibit.name}&rdquo;?
+                Move &ldquo;{exhibit.name}&rdquo; to the Recycle Bin?
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {totalItems === 0
                   ? "This exhibit has no items."
-                  : `${totalItems} ${totalItems === 1 ? "item" : "items"} will be removed from this exhibit — the artwork itself is not deleted.`}
-                {" "}This action cannot be undone.
+                  : `${totalItems} ${totalItems === 1 ? "item" : "items"} will be hidden with the exhibit — the artwork itself stays intact.`}
+                {" "}You can restore it or permanently delete it from the Recycle Bin.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -363,7 +363,7 @@ function ExhibitRow({
                 onClick={() => remove.mutate({ id: exhibit.id })}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete
+                Move to Recycle Bin
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

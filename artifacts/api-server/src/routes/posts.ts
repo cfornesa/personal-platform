@@ -119,7 +119,7 @@ router.get("/og/posts/:id", async (req: Request, res: Response) => {
   try {
     const { id } = GetPostParams.parse(req.params);
 
-    const post = await db.select().from(postsTable).where(eq(postsTable.id, id)).limit(1);
+    const post = await db.select().from(postsTable).where(and(eq(postsTable.id, id), isNull(postsTable.deletedAt))).limit(1);
     if (!post[0]) {
       return res.status(404).json({ error: "Post not found" });
     }
@@ -188,7 +188,7 @@ router.get("/posts/drafts", requireAuth, requireOwner, async (req: Request, res:
       .from(postsTable)
       .leftJoin(commentsTable, eq(commentsTable.postId, postsTable.id))
       .leftJoin(feedSourcesTable, eq(feedSourcesTable.id, postsTable.sourceFeedId))
-      .where(eq(postsTable.status, "draft"))
+      .where(and(eq(postsTable.status, "draft"), isNull(postsTable.deletedAt)))
       .groupBy(postsTable.id)
       .orderBy(desc(postsTable.createdAt));
 
@@ -236,7 +236,7 @@ router.get("/posts/user/:userId", async (req: Request, res: Response) => {
       .from(postsTable)
       .leftJoin(commentsTable, eq(commentsTable.postId, postsTable.id))
       .leftJoin(feedSourcesTable, eq(feedSourcesTable.id, postsTable.sourceFeedId))
-      .where(and(eq(postsTable.authorId, userId), eq(postsTable.status, "published")))
+      .where(and(eq(postsTable.authorId, userId), eq(postsTable.status, "published"), isNull(postsTable.deletedAt)))
       .groupBy(postsTable.id)
       .orderBy(desc(postsTable.createdAt))
       .limit(limit)
@@ -245,7 +245,7 @@ router.get("/posts/user/:userId", async (req: Request, res: Response) => {
     const totalResult = await db
       .select({ count: count() })
       .from(postsTable)
-      .where(and(eq(postsTable.authorId, userId), eq(postsTable.status, "published")));
+      .where(and(eq(postsTable.authorId, userId), eq(postsTable.status, "published"), isNull(postsTable.deletedAt)));
     const total = totalResult[0]?.count ?? 0;
 
     const withFeaturedImageMetadata = await attachFeaturedImageMetadata(posts);
@@ -309,7 +309,7 @@ router.get("/posts/search", async (req: Request, res: Response) => {
     // because Drizzle's query builder doesn't have a `MATCH ... AGAINST`
     // primitive and we want a single round-trip with the FULLTEXT
     // expression both in SELECT (for the score) and in WHERE.
-    const whereParts: string[] = ["p.status = ?"];
+    const whereParts: string[] = ["p.status = ?", "p.deleted_at IS NULL"];
     const whereParams: unknown[] = ["published"];
 
     if (search) {
@@ -517,6 +517,7 @@ router.get("/posts", async (req: Request, res: Response) => {
       }
       type Condition = Parameters<typeof and>[0];
       const calendarConditions: Condition[] = [
+        isNull(postsTable.deletedAt),
         // Owner-authored posts of any non-draft status (draft = separate endpoint)
         or(
           and(
@@ -598,7 +599,7 @@ router.get("/posts", async (req: Request, res: Response) => {
 
     // Build filter conditions — start with the mandatory status check.
     type Condition = Parameters<typeof and>[0];
-    const conditions: Condition[] = [eq(postsTable.status, "published")];
+    const conditions: Condition[] = [eq(postsTable.status, "published"), isNull(postsTable.deletedAt)];
 
     // Category filter: a slug → posts in that category; "uncategorized" → posts with no category.
     const categoryParam = typeof query.category === "string" ? query.category.trim() : "";
@@ -817,7 +818,7 @@ router.get("/posts/:id", async (req: Request, res: Response) => {
       .from(postsTable)
       .leftJoin(commentsTable, eq(commentsTable.postId, postsTable.id))
       .leftJoin(feedSourcesTable, eq(feedSourcesTable.id, postsTable.sourceFeedId))
-      .where(eq(postsTable.id, id))
+      .where(and(eq(postsTable.id, id), isNull(postsTable.deletedAt)))
       .groupBy(postsTable.id);
 
     const post = postRows[0];
@@ -1036,12 +1037,12 @@ router.patch("/posts/:id", requireAuth, requireOwner, async (req: Request, res: 
   }
 });
 
-// DELETE /posts/:id — delete owner-authored post
+// DELETE /posts/:id — soft-delete owner-authored post (moves to Recycle Bin)
 router.delete("/posts/:id", requireAuth, requireOwner, async (req: Request, res: Response) => {
   try {
     const { id } = DeletePostParams.parse(req.params);
 
-    const post = await db.select().from(postsTable).where(eq(postsTable.id, id)).limit(1);
+    const post = await db.select().from(postsTable).where(and(eq(postsTable.id, id), isNull(postsTable.deletedAt))).limit(1);
     if (!post[0]) {
       return res.status(404).json({ error: "Post not found" });
     }
@@ -1049,7 +1050,7 @@ router.delete("/posts/:id", requireAuth, requireOwner, async (req: Request, res:
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    await db.delete(postsTable).where(eq(postsTable.id, id));
+    await db.update(postsTable).set({ deletedAt: sql`CURRENT_TIMESTAMP(3)` }).where(eq(postsTable.id, id));
     return res.status(204).send();
   } catch (err) {
     return res.status(400).json({ error: "Invalid request" });

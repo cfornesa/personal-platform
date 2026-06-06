@@ -196,6 +196,8 @@ export function ImmersiveRouteShell({
   const embedContainerRef = useRef<HTMLDivElement>(null);
   const isFullscreenRef = useRef(isFullscreen);
   const [isEmbedFullscreen, setIsEmbedFullscreen] = useState(false);
+  const [isEmbedFocusMode, setIsEmbedFocusMode] = useState(false);
+  const isEmbedExpanded = isEmbedFullscreen || isEmbedFocusMode;
 
   useEffect(() => {
     isFullscreenRef.current = isFullscreen;
@@ -205,6 +207,9 @@ export function ImmersiveRouteShell({
     function onFullscreenChange() {
       const fullscreenElement = getFullscreenElement();
       setIsEmbedFullscreen(!!fullscreenElement && fullscreenElement === embedContainerRef.current);
+      if (fullscreenElement === embedContainerRef.current) {
+        setIsEmbedFocusMode(false);
+      }
 
       if (
         !isEmbedMode
@@ -219,10 +224,10 @@ export function ImmersiveRouteShell({
   }, [isEmbedMode, onToggleFullscreen]);
 
   useEffect(() => {
-    if (!isEmbedMode && !isFullscreen) return;
+    if ((!isEmbedMode && !isFullscreen) || (isEmbedMode && !isEmbedExpanded)) return;
     const snapshot = lockDocumentForImmersiveMode();
     return () => restoreImmersiveDocumentLock(snapshot);
-  }, [isEmbedMode, isFullscreen]);
+  }, [isEmbedExpanded, isEmbedMode, isFullscreen]);
 
   useEffect(() => {
     if (!isFullscreen || isEmbedMode) {
@@ -248,6 +253,30 @@ export function ImmersiveRouteShell({
     };
   }, [isFullscreen, isEmbedMode]);
 
+  useEffect(() => {
+    if (!isEmbedMode || !isEmbedExpanded) {
+      return;
+    }
+    const target = embedContainerRef.current;
+    if (!target) {
+      return;
+    }
+    const targetElement = target;
+    function onViewportChange() {
+      syncImmersiveViewportVars(targetElement);
+    }
+    syncImmersiveViewportVars(targetElement);
+    window.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("scroll", onViewportChange);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
+      clearImmersiveViewportVars(targetElement);
+    };
+  }, [isEmbedExpanded, isEmbedMode]);
+
   async function handleRouteFullscreenToggle() {
     if (isFullscreen) {
       if (getFullscreenElement()) {
@@ -272,20 +301,45 @@ export function ImmersiveRouteShell({
   }
 
   if (isEmbedMode) {
-    function handleEmbedToggle() {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        embedContainerRef.current?.requestFullscreen();
+    async function handleEmbedToggle() {
+      if (isEmbedExpanded) {
+        if (document.fullscreenElement === embedContainerRef.current) {
+          try {
+            await document.exitFullscreen();
+          } catch {
+            setIsEmbedFocusMode(false);
+          }
+          return;
+        }
+        setIsEmbedFocusMode(false);
+        return;
+      }
+
+      const target = embedContainerRef.current;
+      if (!target) {
+        return;
+      }
+
+      try {
+        await requestElementFullscreen(target);
+        setIsEmbedFocusMode(false);
+      } catch {
+        setIsEmbedFocusMode(true);
       }
     }
 
     return (
       <div
         ref={embedContainerRef}
-        className="relative h-screen w-screen overflow-hidden bg-[#050b16]"
+        data-testid={isEmbedExpanded ? "immersive-embed-expanded-root" : "immersive-embed-root"}
+        className={cn(
+          "overflow-hidden bg-[#050b16]",
+          isEmbedExpanded
+            ? "fixed inset-0 z-[120] h-[var(--immersive-viewport-height,100dvh)] w-[var(--immersive-viewport-width,100vw)] [overscroll-behavior:none] [touch-action:none]"
+            : "relative h-screen w-screen",
+        )}
       >
-        {renderScene({ fullscreen: false, isMobile: false })}
+        {renderScene({ fullscreen: isEmbedExpanded, isMobile: false })}
         <div className="pointer-events-none absolute inset-0 z-10">
           <div className="pointer-events-auto absolute bottom-4 right-4 z-20 flex items-center gap-2">
             {canonicalHref && !showEmbedFullscreenControl ? (
@@ -302,7 +356,7 @@ export function ImmersiveRouteShell({
             ) : null}
             {showEmbedFullscreenControl ? (
               <FullscreenToggleButton
-                isFullscreen={isEmbedFullscreen}
+                isFullscreen={isEmbedExpanded}
                 onToggle={handleEmbedToggle}
               />
             ) : null}

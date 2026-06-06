@@ -44,6 +44,7 @@ export type MountedGalleryShell = {
   frameMesh: any;
   layout: MountedArtworkLayout;
   profile: MountedGalleryProfile;
+  artCenterY: number;
 };
 
 export type PresentationSurface = {
@@ -72,6 +73,10 @@ export function computeMountedArtworkLayout(
     height,
     aspect: safeAspect,
   };
+}
+
+function computeMountedArtCenterY(artHeight: number): number {
+  return Math.max(WALL_CENTER.y, artHeight / 2 + EXHIBIT_FLOOR_CLEARANCE);
 }
 
 export function createMountedGalleryShell(
@@ -143,7 +148,8 @@ export function createMountedGalleryShell(
       metalness: 0,
     }),
   );
-  framePanel.position.set(WALL_CENTER.x, WALL_CENTER.y, -1.16);
+  const artCenterY = computeMountedArtCenterY(layout.height);
+  framePanel.position.set(WALL_CENTER.x, artCenterY, -1.16);
   scene.add(framePanel);
 
   const artMaterial = new THREE.MeshBasicMaterial({
@@ -153,7 +159,7 @@ export function createMountedGalleryShell(
     new THREE.PlaneGeometry(layout.width, layout.height),
     artMaterial,
   );
-  artMesh.position.copy(WALL_CENTER);
+  artMesh.position.set(WALL_CENTER.x, artCenterY, WALL_CENTER.z);
   scene.add(artMesh);
 
   const frameMesh = new THREE.Mesh(
@@ -164,7 +170,7 @@ export function createMountedGalleryShell(
       metalness: 0,
     }),
   );
-  frameMesh.position.set(WALL_CENTER.x, WALL_CENTER.y, -1.12);
+  frameMesh.position.set(WALL_CENTER.x, artCenterY, -1.12);
   scene.add(frameMesh);
 
   const shell = {
@@ -181,6 +187,7 @@ export function createMountedGalleryShell(
     frameMesh,
     layout,
     profile,
+    artCenterY,
   };
   fitMountedGalleryCamera(shell, stage);
   return shell;
@@ -192,12 +199,17 @@ export function updateMountedGalleryLayout(
 ) {
   const layout = computeMountedArtworkLayout(aspect, shell.profile);
   shell.layout = layout;
+  const artCenterY = computeMountedArtCenterY(layout.height);
+  shell.artCenterY = artCenterY;
   shell.artMesh.geometry.dispose();
   shell.artMesh.geometry = new THREE.PlaneGeometry(layout.width, layout.height);
+  shell.artMesh.position.y = artCenterY;
   shell.frameMesh.geometry.dispose();
   shell.frameMesh.geometry = new THREE.BoxGeometry(layout.width + 0.12, layout.height + 0.12, 0.03);
+  shell.frameMesh.position.y = artCenterY;
   shell.framePanel.geometry.dispose();
   shell.framePanel.geometry = new THREE.BoxGeometry(layout.width + 0.3, layout.height + 0.3, 0.05);
+  shell.framePanel.position.y = artCenterY;
 }
 
 export function fitMountedGalleryCamera(
@@ -212,6 +224,7 @@ export function fitMountedGalleryCamera(
   shell.camera.updateProjectionMatrix();
   shell.renderer.setSize(width, height, false);
 
+  const artCenterY = shell.artCenterY ?? WALL_CENTER.y;
   const targetOffset = shell.profile.targetOffset
     ? new THREE.Vector3(
         shell.profile.targetOffset.x,
@@ -219,7 +232,8 @@ export function fitMountedGalleryCamera(
         shell.profile.targetOffset.z,
       )
     : TARGET_OFFSET;
-  const target = WALL_CENTER.clone().add(targetOffset);
+  const artCenter = new THREE.Vector3(WALL_CENTER.x, artCenterY, WALL_CENTER.z);
+  const target = artCenter.clone().add(targetOffset);
   const verticalFov = THREE.MathUtils.degToRad(shell.camera.fov);
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * shell.camera.aspect);
   const distanceForHeight = (shell.layout.height / 2) / Math.tan(verticalFov / 2);
@@ -234,7 +248,7 @@ export function fitMountedGalleryCamera(
   if (resetCamera) {
     shell.camera.position.set(
       WALL_CENTER.x,
-      WALL_CENTER.y + (shell.profile.cameraYOffset ?? 0.2),
+      artCenterY + (shell.profile.cameraYOffset ?? 0.2),
       WALL_CENTER.z + distance,
     );
     shell.camera.lookAt(target);
@@ -536,6 +550,8 @@ const WALL_FRAME_SLOT_HEIGHT = 2.4;
 const WALL_LABEL_HEIGHT = WALL_FRAME_ART_WIDTH * (80 / 512);
 const WALL_LABEL_GAP = 0.08;
 const EXHIBIT_FLOOR_CLEARANCE = 0.2;
+
+export const EXHIBIT_FRAME_ASPECT = WALL_FRAME_ART_WIDTH / WALL_FRAME_ART_HEIGHT;
 
 export type ExhibitFrameSlot = {
   artMesh: any;
