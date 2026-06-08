@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPieceGalleryEmbedHtml,
+  buildImageGalleryEmbedHtml,
+  buildExhibitGalleryEmbedHtml,
   buildImmersiveImageHref,
   buildImmersivePieceHref,
   encodeImmersiveImageRef,
@@ -37,8 +39,29 @@ describe("immersive-view helpers", () => {
   });
 
   it("builds interactive embeds from the immersive route contract", () => {
-    expect(buildPieceGalleryEmbedHtml(7, 9, "Orbit Bloom")).toBe(
-      '<iframe src="http://localhost:3000/immersive/pieces/7?embed=1&version=9" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="Orbit Bloom" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>',
+    expect(buildPieceGalleryEmbedHtml(7, 9, "Orbit Bloom", "http://localhost:3000")).toBe(
+      '<creatr-art-piece piece-id="7" version="9" origin="http://localhost:3000"><iframe src="http://localhost:3000/immersive/pieces/7?embed=1&version=9" width="100%" style="width:100%;aspect-ratio:16 / 9;min-height:300px;display:block;" title="Orbit Bloom" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></creatr-art-piece><script src="http://localhost:3000/embed.js" defer></script>',
+    );
+  });
+
+  it("builds interactive image embeds with custom element wrappers", () => {
+    const encodedRef = encodeImmersiveImageRef("/media/example.jpg", "http://localhost:3000");
+    expect(
+      buildImageGalleryEmbedHtml(
+        encodedRef,
+        { title: "My Image", alt: "Alt text" },
+        "http://localhost:3000",
+      ),
+    ).toBe(
+      `<creatr-immersive-image ref="${encodedRef}" origin="http://localhost:3000"><iframe src="http://localhost:3000/immersive/images/${encodedRef}?embed=1&alt=Alt+text&title=My+Image" width="100%" style="width:100%;aspect-ratio:16 / 9;min-height:300px;display:block;" title="My Image" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></creatr-immersive-image><script src="http://localhost:3000/embed.js" defer></script>`,
+    );
+  });
+
+  it("builds interactive exhibit embeds with custom element wrappers", () => {
+    expect(
+      buildExhibitGalleryEmbedHtml("my-exhibit", "My Exhibit", "http://localhost:3000"),
+    ).toBe(
+      '<creatr-exhibit-wall slug="my-exhibit" origin="http://localhost:3000"><iframe src="http://localhost:3000/immersive/exhibits/my-exhibit?embed=1" width="100%" style="width:100%;aspect-ratio:16 / 9;min-height:300px;display:block;" title="My Exhibit" frameborder="0" loading="lazy" allowfullscreen allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></creatr-exhibit-wall><script src="http://localhost:3000/embed.js" defer></script>',
     );
   });
 });

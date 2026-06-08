@@ -1,7 +1,22 @@
+function isLocalDevHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+// Reduces same-site piece/media embed URLs to relative paths so they keep
+// working across environments (dev, staging, production). Absolute URLs on
+// any other host are left untouched — they're intentional references to
+// content hosted on a different site (e.g. a piece embed cross-posted from
+// another CreatrWeb instance), and stripping their origin would silently
+// repoint them at whatever piece happens to share that ID on this site.
 function normalizePieceEmbedSrc(src: string): string {
+  const trimmed = src.trim();
+  const isAbsolute = /^https?:\/\//i.test(trimmed);
   try {
-    const url = new URL(src, window.location.origin);
+    const url = new URL(trimmed, window.location.origin);
     if (url.pathname.startsWith("/embed/pieces/") || url.pathname.startsWith("/api/")) {
+      if (isAbsolute && !isLocalDevHost(url.hostname)) {
+        return trimmed;
+      }
       const relative = url.pathname + url.search + url.hash;
       return relative;
     }

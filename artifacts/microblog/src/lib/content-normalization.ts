@@ -1,5 +1,22 @@
 /**
+ * True for hosts that are local-development placeholders (any port). URLs on
+ * these hosts are what the canonical-origin rewrite is meant to fix — e.g. a
+ * piece embed authored against `http://localhost:4000` that needs correcting
+ * before it's published.
+ */
+function isLocalDevHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+/**
  * Normalizes a single piece embed URL to be absolute using the canonical origin.
+ *
+ * Only rewrites the origin when the source URL is relative (definitely ours)
+ * or points at a local-dev placeholder host. Absolute URLs on any other host
+ * are left untouched — they're intentional references to a piece hosted on a
+ * different site (e.g. cross-posted from another CreatrWeb instance), and
+ * rewriting them would silently break the embed. See `extractPieceEmbedMeta`'s
+ * `pieceOrigin` preservation for the same precedent.
  */
 export function normalizePieceEmbedSrc(src: string, origin = window.location.origin) {
   const trimmed = src.trim();
@@ -7,16 +24,17 @@ export function normalizePieceEmbedSrc(src: string, origin = window.location.ori
     return trimmed;
   }
 
+  const isAbsolute = trimmed.startsWith("http://") || trimmed.startsWith("https://");
+
   try {
-    const url = trimmed.startsWith("http://") || trimmed.startsWith("https://")
-      ? new URL(trimmed)
-      : new URL(trimmed, window.location.origin);
+    const url = isAbsolute ? new URL(trimmed) : new URL(trimmed, window.location.origin);
     const match = url.pathname.match(/^\/embed\/pieces\/(\d+)$/);
     if (!match) {
       return trimmed;
     }
-    // Always use the canonical origin for piece embeds to prevent
-    // local development URLs from leaking into production content.
+    if (isAbsolute && !isLocalDevHost(url.hostname)) {
+      return trimmed;
+    }
     // Preserve query parameters (e.g. ?version=...) and hash fragments.
     return `${origin}/embed/pieces/${match[1]}${url.search}${url.hash}`;
   } catch {
@@ -31,12 +49,16 @@ export function normalizePieceEmbedSrc(src: string, origin = window.location.ori
 export function normalizeExhibitEmbedSrc(src: string, origin = window.location.origin) {
   const trimmed = src.trim();
   if (!trimmed) return trimmed;
+
+  const isAbsolute = trimmed.startsWith("http://") || trimmed.startsWith("https://");
+
   try {
-    const url = trimmed.startsWith("http://") || trimmed.startsWith("https://")
-      ? new URL(trimmed)
-      : new URL(trimmed, window.location.origin);
+    const url = isAbsolute ? new URL(trimmed) : new URL(trimmed, window.location.origin);
     const match = url.pathname.match(/^\/immersive\/exhibits\/([^/]+)$/);
     if (!match) return trimmed;
+    if (isAbsolute && !isLocalDevHost(url.hostname)) {
+      return trimmed;
+    }
     return `${origin}/immersive/exhibits/${match[1]}${url.search}${url.hash}`;
   } catch {
     return trimmed;

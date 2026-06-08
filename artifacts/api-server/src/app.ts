@@ -48,6 +48,19 @@ const c2Path = fs.existsSync(path.join(nmRoot, "c2.js", "dist"))
 
 app.use("/api/runtimes/p5", express.static(p5Path));
 app.use("/api/runtimes/three", express.static(threePath));
+
+app.get("/api/runtimes/three-examples/jsm/controls/OrbitControls.js", (req, res) => {
+  const filePath = path.join(threeExamplesPath, "jsm/controls/OrbitControls.js");
+  if (!fs.existsSync(filePath)) {
+    res.status(404).send("Not found");
+    return;
+  }
+  let content = fs.readFileSync(filePath, "utf-8");
+  content = content.replace(/from\s+['"]three['"]/g, "from '/api/runtimes/three/three.module.min.js'");
+  res.setHeader("Content-Type", "application/javascript");
+  res.send(content);
+});
+
 app.use("/api/runtimes/three-examples", express.static(threeExamplesPath));
 app.use("/api/runtimes/c2", express.static(c2Path));
 

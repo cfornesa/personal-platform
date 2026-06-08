@@ -198,17 +198,28 @@ export async function loadPosts(opts: { categoryId?: number } = {}): Promise<Fee
   return hydrated as FeedPost[];
 }
 
-function normalizePieceUrlsInHtml(html: string, origin: string): string {
+const LOCAL_DEV_HOST_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
+
+export function normalizePieceUrlsInHtml(html: string, origin: string): string {
   if (!html.includes("/embed/pieces/") && !html.includes("/immersive/pieces/")) return html;
 
-  // Convert root-relative piece URLs to absolute canonical URLs
-  // Works for both src="/embed/pieces/1" and src="http://localhost:4000/embed/pieces/1"
+  // Convert root-relative or local-dev-host piece URLs to absolute canonical
+  // URLs (e.g. src="/embed/pieces/1" or src="http://localhost:4000/embed/pieces/1").
+  // Absolute URLs on any other host are left untouched — they're intentional
+  // references to a piece hosted on a different site (e.g. cross-posted from
+  // another CreatrWeb instance), and rewriting them would break the embed.
   return html.replace(
-    /src=["'](?:\/|https?:\/\/[^\/]+)?\/embed\/pieces\/(\d+)([^"']*)["']/g,
-    (_, id, query) => `src="${origin}/embed/pieces/${id}${query}"`
+    /src=["'](https?:\/\/[^\/"']+)?\/embed\/pieces\/(\d+)([^"']*)["']/g,
+    (_, host: string | undefined, id: string, query: string) => {
+      const resolvedOrigin = host && !LOCAL_DEV_HOST_PATTERN.test(host) ? host : origin;
+      return `src="${resolvedOrigin}/embed/pieces/${id}${query}"`;
+    }
   ).replace(
-    /href=["'](?:\/|https?:\/\/[^\/]+)?\/immersive\/pieces\/(\d+)([^"']*)["']/g,
-    (_, id, query) => `href="${origin}/immersive/pieces/${id}${query}"`
+    /href=["'](https?:\/\/[^\/"']+)?\/immersive\/pieces\/(\d+)([^"']*)["']/g,
+    (_, host: string | undefined, id: string, query: string) => {
+      const resolvedOrigin = host && !LOCAL_DEV_HOST_PATTERN.test(host) ? host : origin;
+      return `href="${resolvedOrigin}/immersive/pieces/${id}${query}"`;
+    }
   );
 }
 

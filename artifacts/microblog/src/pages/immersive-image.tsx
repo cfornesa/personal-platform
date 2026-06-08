@@ -174,7 +174,10 @@ export default function ImmersiveImagePage() {
   const [, params] = useRoute("/immersive/images/:encodedRef");
   const goBack = useReturnToPrevious();
   const [error, setError] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get("fullscreen") === "1";
+  });
   const encodedRef = params?.encodedRef ?? "";
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const metadata = useMemo(() => readImmersiveImageMetadata(searchParams), [searchParams]);
@@ -183,6 +186,7 @@ export default function ImmersiveImagePage() {
     [encodedRef],
   );
   const isEmbedMode = searchParams.get("embed") === "1";
+  const isCmsEmbed = searchParams.get("cms") === "1";
 
   const canonicalHref = useMemo(
     () => encodedRef ? `${window.location.origin}${buildImmersiveImageHref(imageSrc, metadata)}` : "",
@@ -195,6 +199,10 @@ export default function ImmersiveImagePage() {
   );
   const galleryEmbedCode = useMemo(
     () => encodedRef ? buildImageGalleryEmbedHtml(encodedRef, metadata) : "",
+    [encodedRef, metadata],
+  );
+  const galleryCmsEmbedCode = useMemo(
+    () => encodedRef ? buildImageGalleryEmbedHtml(encodedRef, metadata, window.location.origin, "cms") : "",
     [encodedRef, metadata],
   );
 
@@ -219,10 +227,12 @@ export default function ImmersiveImagePage() {
       isFullscreen={isFullscreen}
       onToggleFullscreen={() => setIsFullscreen((current) => !current)}
       isEmbedMode={isEmbedMode}
+      suppressFullscreenControlOnIPhone={isCmsEmbed}
       canonicalHref={canonicalHref}
       embedCodes={encodedRef ? {
         plain: { label: "Embed Piece", code: plainEmbedCode },
-        gallery: { label: "Embed Interactive", code: galleryEmbedCode },
+        gallery: { label: "Embed Interactive (Custom)", code: galleryEmbedCode },
+        galleryCms: { label: "Embed Interactive (CMS)", code: galleryCmsEmbedCode },
       } : undefined}
       metadataCard={
         <ImmersiveMetadataCard

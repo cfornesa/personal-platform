@@ -55,6 +55,53 @@ router.get("/embed/pieces/:id", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/embed/pieces/:id/data", async (req: Request, res: Response) => {
+  const params = PieceIdParams.safeParse(req.params);
+  const query = PieceEmbedQuery.safeParse(req.query);
+  if (!params.success || !query.success) {
+    return res.status(404).json({ error: "Not found" });
+  }
+
+  try {
+    const pieceRows = await db
+      .select()
+      .from(artPiecesTable)
+      .where(eq(artPiecesTable.id, params.data.id))
+      .limit(1);
+    const piece = pieceRows[0] ?? null;
+    if (!piece) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const versionId = query.data.version ?? piece.currentVersionId;
+    if (!versionId) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const versionRows = await db
+      .select()
+      .from(artPieceVersionsTable)
+      .where(eq(artPieceVersionsTable.id, versionId))
+      .limit(1);
+    const version = versionRows[0] ?? null;
+    if (!version || version.artPieceId !== piece.id) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    return res.json({
+      id: piece.id,
+      title: piece.title,
+      engine: version.engine,
+      generatedCode: version.generatedCode,
+      htmlCode: version.htmlCode,
+      cssCode: version.cssCode,
+    });
+  } catch (err) {
+    console.error("Failed to fetch piece embed data:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")

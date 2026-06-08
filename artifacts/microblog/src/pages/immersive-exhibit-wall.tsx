@@ -868,9 +868,14 @@ type ExhibitWallContentProps = {
   cols: number;
   labels: Array<{ title: string; subtitle: string } | null>;
   onBack: () => void;
-  embedCodes?: { plain: { label: string; code: string }; gallery: { label: string; code: string } };
+  embedCodes?: {
+    plain: { label: string; code: string };
+    gallery: { label: string; code: string };
+    galleryCms?: { label: string; code: string };
+  };
   isEmbedMode?: boolean;
   showEmbedFullscreenControl?: boolean;
+  suppressFullscreenControlOnIPhone?: boolean;
   staticMode?: boolean;
   canonicalHref?: string;
   renderStage?: (props: {
@@ -896,6 +901,7 @@ export function ExhibitWallContent({
   embedCodes,
   isEmbedMode,
   showEmbedFullscreenControl,
+  suppressFullscreenControlOnIPhone,
   staticMode = false,
   canonicalHref,
   renderStage = ({ items: stageItems, rows: stageRows, cols: stageCols, labels: stageLabels, staticMode: stageStaticMode }) => (
@@ -908,7 +914,10 @@ export function ExhibitWallContent({
     />
   ),
 }: ExhibitWallContentProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get("fullscreen") === "1";
+  });
   const metadataFields: Array<{ label: string; value: string }> = [];
 
   if (artistStatement) {
@@ -931,6 +940,7 @@ export function ExhibitWallContent({
       sceneHeightClassName="h-[65vh] min-h-[420px]"
       isEmbedMode={isEmbedMode}
       showEmbedFullscreenControl={showEmbedFullscreenControl}
+      suppressFullscreenControlOnIPhone={suppressFullscreenControlOnIPhone}
       canonicalHref={canonicalHref}
       embedCodes={!isEmbedMode ? embedCodes : undefined}
       renderScene={({ fullscreen }) =>
@@ -1107,11 +1117,13 @@ export default function ImmersiveExhibitWallPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const isEmbedMode = searchParams.get("embed") === "1";
   const isStaticEmbed = isEmbedMode && searchParams.get("static") === "1";
+  const isCmsEmbed = isEmbedMode && searchParams.get("cms") === "1";
 
   const origin = window.location.origin;
   const safeName = exhibitName.replace(/"/g, "&quot;");
   const plainEmbedCode = `<iframe src="${origin}/immersive/exhibits/${slug}?embed=1" width="100%" style="width:100%;aspect-ratio:16 / 9;display:block;" title="${safeName}" frameborder="0" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>`;
   const galleryEmbedCode = buildExhibitGalleryEmbedHtml(slug, exhibitName, origin);
+  const galleryCmsEmbedCode = buildExhibitGalleryEmbedHtml(slug, exhibitName, origin, "cms");
   const canonicalHref = `${origin}/immersive/exhibits/${slug}`;
 
   return (
@@ -1127,10 +1139,12 @@ export default function ImmersiveExhibitWallPage() {
       onBack={goBack}
       embedCodes={{
         plain: { label: "Embed Exhibit", code: plainEmbedCode },
-        gallery: { label: "Embed Interactive", code: galleryEmbedCode },
+        gallery: { label: "Embed Interactive (Custom)", code: galleryEmbedCode },
+        galleryCms: { label: "Embed Interactive (CMS)", code: galleryCmsEmbedCode },
       }}
       isEmbedMode={isEmbedMode}
       showEmbedFullscreenControl={!isStaticEmbed}
+      suppressFullscreenControlOnIPhone={isCmsEmbed}
       staticMode={isStaticEmbed}
       canonicalHref={canonicalHref}
     />

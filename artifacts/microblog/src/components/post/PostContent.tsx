@@ -5,6 +5,7 @@ import {
   buildImmersivePieceHref,
   buildImmersiveExhibitHref,
   extractPieceEmbedMeta,
+  INTERACTIVE_IMMERSIVE_EMBED_SANDBOX,
 } from "@/lib/immersive-view";
 import { normalizePieceEmbedUrls } from "@/lib/content-normalization";
 
@@ -136,7 +137,7 @@ function normalizePieceEmbedFrame(frame: HTMLIFrameElement, origin: string) {
   frame.setAttribute("width", "100%");
   frame.removeAttribute("height");
   frame.setAttribute("loading", "lazy");
-  frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+  frame.setAttribute("sandbox", INTERACTIVE_IMMERSIVE_EMBED_SANDBOX);
   frame.setAttribute("frameborder", "0");
   const existingStyle = frame.getAttribute("style") || "";
   const preservedStyle = existingStyle
@@ -310,7 +311,7 @@ function enhanceImmersiveHtml(html: string, canonicalOrigin: string, postId?: nu
     frame.setAttribute("width", "100%");
     frame.removeAttribute("height");
     frame.setAttribute("loading", "lazy");
-    frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    frame.setAttribute("sandbox", INTERACTIVE_IMMERSIVE_EMBED_SANDBOX);
     frame.setAttribute("frameborder", "0");
     frame.setAttribute("style", "width:100%;aspect-ratio:16 / 9;display:block;");
 

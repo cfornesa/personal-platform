@@ -449,19 +449,40 @@ describe("RichPostEditor AI action", () => {
 
   it("normalizes pasted piece embeds to the live piece URL", async () => {
     const user = userEvent.setup();
-    const promptSpy = vi
-      .spyOn(window, "prompt")
-      .mockReturnValue('<iframe src="http://localhost:4000/embed/pieces/5?version=64" width="100%"></iframe>');
     renderEditor([]);
 
     await user.click(screen.getByLabelText("Insert iframe embed"));
+    await user.type(
+      screen.getByPlaceholderText("Paste the iframe embed code here…"),
+      '<iframe src="http://localhost:4000/embed/pieces/5?version=64" width="100%"></iframe>',
+      { skipClick: true },
+    );
+    await user.click(screen.getByRole("button", { name: "Insert" }));
 
     expect(insertIframe).toHaveBeenCalledWith(
       expect.objectContaining({
-        src: "http://localhost:4000/embed/pieces/5",
+        src: "/embed/pieces/5?version=64",
       }),
     );
-    promptSpy.mockRestore();
+  });
+
+  it("preserves piece embeds pointing at a different site's origin", async () => {
+    const user = userEvent.setup();
+    renderEditor([]);
+
+    await user.click(screen.getByLabelText("Insert iframe embed"));
+    await user.type(
+      screen.getByPlaceholderText("Paste the iframe embed code here…"),
+      '<iframe src="https://chrisfornesa.com/embed/pieces/9?version=2" width="100%"></iframe>',
+      { skipClick: true },
+    );
+    await user.click(screen.getByRole("button", { name: "Insert" }));
+
+    expect(insertIframe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: "https://chrisfornesa.com/embed/pieces/9?version=2",
+      }),
+    );
   });
 
   it("shows the newsletter toggle only when Substack is selected and clears it when Substack is deselected", async () => {
